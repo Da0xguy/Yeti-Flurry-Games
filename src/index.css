@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Lilita One", "Chakra Petch", system-ui, sans-serif;
+  --font-sans: "Chakra Petch", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    scroll-behavior: smooth;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: 0.015em;
+  }
+}
+
+/* 3D Extruded Gamish Title Typography */
+.title-3d-game {
+  font-family: var(--font-display);
+  letter-spacing: 0.03em;
+  color: #f0f9ff;
+  text-shadow:
+    0 1px 0 #bae6fd,
+    0 2px 0 #38bdf8,
+    0 3px 0 #0284c7,
+    0 4px 0 #0369a1,
+    0 5px 0 #075985,
+    0 6px 0 #0c4a6e,
+    0 7px 0 #082f49,
+    0 11px 18px rgba(2, 8, 23, 0.85);
+}
+
+.title-3d-game-sm {
+  font-family: var(--font-display);
+  letter-spacing: 0.03em;
+  color: #f0f9ff;
+  text-shadow:
+    0 1px 0 #7dd3fc,
+    0 2px 0 #0284c7,
+    0 3px 0 #075985,
+    0 4px 0 #082f49,
+    0 6px 10px rgba(2, 8, 23, 0.7);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Yeti Flurry Rush",
+  "description": "A fast-paced Sui-native arcade survival mini-game starring Lofi the Yeti, featuring evolvable owned Yeti objects, WebSocket Sui Tunnel multiplayer, Move contracts, and clean water well impact.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

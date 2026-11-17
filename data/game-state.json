@@ -1,0 +1,50 @@
+{
+  "yetis": {},
+  "leaderboard": [
+    {
+      "id": "run_seed_1",
+      "playerName": "MysticetiKai",
+      "yetiName": "Snowdrift #042",
+      "yetiStage": "Apex Lofi",
+      "score": 1480,
+      "wellDrops": 38,
+      "frostGems": 44,
+      "survivalSeconds": 94,
+      "mode": "tunnel",
+      "txDigest": "0xe7278faf7b8eb2ef48a23737f0d51255290c99591f480611064ef724d6b4eed5",
+      "timestamp": "2026-11-16T14:15:00Z"
+    },
+    {
+      "id": "run_seed_2",
+      "playerName": "WalrusNora",
+      "yetiName": "Frostbite",
+      "yetiStage": "Blizzard Guardian",
+      "score": 1190,
+      "wellDrops": 31,
+      "frostGems": 35,
+      "survivalSeconds": 82,
+      "mode": "solo",
+      "txDigest": "0x510e48368951da053c918d168433f615346587ade7b6ec6eede80cbf841c3eac",
+      "timestamp": "2026-11-16T13:40:00Z"
+    },
+    {
+      "id": "run_seed_3",
+      "playerName": "SuiGlacier",
+      "yetiName": "Pebble",
+      "yetiStage": "Glacier Runner",
+      "score": 920,
+      "wellDrops": 24,
+      "frostGems": 26,
+      "survivalSeconds": 67,
+      "mode": "tunnel",
+      "txDigest": "0x4d42ef2bb087999c4915e6084d442d27a920ac94adac8f3eb7e4ca83a14da4f7",
+      "timestamp": "2026-11-16T12:10:00Z"
+    }
+  ],
+  "wellImpact": {
+    "totalDropsCollected": 2744,
+    "dropsPerWellMilestone": 1000,
+    "wellsFunded": 2,
+    "activeContributors": 148
+  }
+}
