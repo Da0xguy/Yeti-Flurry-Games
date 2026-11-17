@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" role="img" aria-labelledby="title desc">
+  <title id="title">Arcade Survival relic route</title>
+  <desc id="desc">A glowing Yeti running through icy relic gates beneath an aurora.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#081b3d"/>
+      <stop offset="1" stop-color="#123d68"/>
+    </linearGradient>
+    <linearGradient id="ice" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#b8f3ff"/>
+      <stop offset="1" stop-color="#2aa9d6"/>
+    </linearGradient>
+    <linearGradient id="path" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#2b789d"/>
+      <stop offset="1" stop-color="#071b37"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="960" height="480" fill="url(#sky)"/>
+  <path d="M0 145 Q180 70 340 142 T680 120 T960 135" fill="none" stroke="#55e8d0" stroke-opacity=".42" stroke-width="24" filter="url(#glow)"/>
+  <path d="M0 330 L180 218 290 300 430 185 580 300 750 190 960 330V480H0Z" fill="#102c50"/>
+  <path d="M275 480 Q470 285 685 480Z" fill="url(#path)" stroke="#59d9f3" stroke-opacity=".4" stroke-width="4"/>
+  <g fill="url(#ice)" stroke="#d7fbff" stroke-width="5" filter="url(#glow)">
+    <path d="M220 345V195l34-42 32 42v150Z"/>
+    <path d="M704 345V195l34-42 32 42v150Z"/>
+  </g>
+  <g fill="none" stroke="#74edff" stroke-width="8" filter="url(#glow)">
+    <path d="M237 220V145h46v75"/>
+    <path d="M721 220V145h46v75"/>
+    <path d="M237 145h530"/>
+  </g>
+  <g fill="#d9fbff" opacity=".8">
+    <circle cx="120" cy="105" r="3"/><circle cx="180" cy="180" r="4"/><circle cx="820" cy="90" r="3"/><circle cx="875" cy="220" r="4"/>
+  </g>
+  <g transform="translate(480 330)">
+    <ellipse cx="0" cy="64" rx="54" ry="12" fill="#061326" opacity=".65"/>
+    <path d="M-42 38 Q-48-38 0-58 Q48-38 42 38Z" fill="#f3fbff" stroke="#8fdcf1" stroke-width="5"/>
+    <circle cx="-16" cy="-20" r="6" fill="#071b37"/><circle cx="16" cy="-20" r="6" fill="#071b37"/>
+    <path d="M-18 2 Q0 16 18 2" fill="none" stroke="#38bdf8" stroke-width="5"/>
+    <path d="M-35-53l-20-22M35-53l20-22" stroke="#f3fbff" stroke-width="13" stroke-linecap="round"/>
+  </g>
+  <text x="34" y="60" fill="#d9fbff" font-family="sans-serif" font-size="18" font-weight="700" letter-spacing="4">RELIC RUN</text>
+</svg>

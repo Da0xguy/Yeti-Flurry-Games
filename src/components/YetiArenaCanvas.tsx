@@ -28,6 +28,7 @@ import {
   Crosshair,
   Gauge,
   ChevronLeft,
+  Menu,
 } from 'lucide-react';
 import type {
   ArenaTaskProgress,
@@ -372,6 +373,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   onShareRun,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
 
   const [gameState, setGameState] = useState<GameState>('TITLE_MENU');
   const [launcherStep, setLauncherStep] = useState<LauncherStep>('choose_game');
@@ -1411,6 +1413,12 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       }
       setGameState('PLAYING');
       gameStateRef.current = 'PLAYING';
+      const viewport = viewportRef.current;
+      if (viewport && document.fullscreenEnabled && !document.fullscreenElement) {
+        void viewport.requestFullscreen().catch(() => {
+          flashBanner('Fullscreen unavailable — continuing in windowed mode');
+        });
+      }
       if (gm === 'car_racing') {
         flashBanner('Get Ready! 3-Lap Circuit Race');
       } else if (gm === 'shooting') {
@@ -3415,9 +3423,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             <button
               type="button"
               onClick={() => openGameMapLauncher('choose_game')}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-2.5 py-1.5 text-xs font-semibold text-sky-200 hover:border-sky-400 hover:bg-sky-500/20 transition-colors whitespace-nowrap shrink-0"
             >
-              Change Game
+              <Menu className="h-3.5 w-3.5" />
+              Game Menu
             </button>
           )}
 
@@ -3470,8 +3479,23 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       </div>
 
       {/* Main 3D WebGL Game Viewport */}
-      <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-[#050E1C] shadow-2xl aspect-[16/9]">
+      <div
+        ref={viewportRef}
+        className="relative overflow-hidden rounded-2xl border border-slate-800 bg-[#050E1C] shadow-2xl aspect-[16/9]"
+      >
         <div ref={mountRef} className="w-full h-full cursor-crosshair select-none touch-none" />
+
+        {gameState === 'PLAYING' && playMode === 'solo' && (
+          <button
+            type="button"
+            onClick={() => setGameState('PAUSED')}
+            aria-label="Pause game"
+            className="absolute right-4 top-4 z-20 inline-flex items-center gap-1.5 rounded-lg border border-slate-600/80 bg-[#081322]/85 px-3 py-2 text-xs font-semibold text-slate-100 shadow-lg backdrop-blur-sm transition-colors hover:border-sky-400 hover:bg-[#0D1C30] hover:text-white"
+          >
+            <Pause className="h-3.5 w-3.5" />
+            Pause
+          </button>
+        )}
 
         {bannerMsg && gameState === 'PLAYING' && (
           <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-10 rounded-lg border border-sky-400/50 bg-[#081322]/90 px-4 py-1.5 text-xs font-semibold text-sky-200">
@@ -3622,7 +3646,33 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="grid gap-5 md:grid-cols-[1.25fr_0.75fr] items-start">
+                <div className="space-y-5">
+                  <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/70 p-2">
+                    <span className="px-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Game
+                    </span>
+                    {GAME_MODES.map((gm) => {
+                      const Icon =
+                        gm.id === 'car_racing' ? Car : gm.id === 'shooting' ? Crosshair : Snowflake;
+                      return (
+                        <button
+                          key={gm.id}
+                          type="button"
+                          onClick={() => onChangeGameMode(gm.id)}
+                          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                            selectedGameMode === gm.id
+                              ? 'bg-sky-500 text-slate-950'
+                              : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {gm.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="grid gap-5 md:grid-cols-[1.25fr_0.75fr] items-start">
                   <div className="space-y-4">
                     <div className="grid gap-3 sm:grid-cols-3">
                       {ARENA_MAPS.map((m) => {
@@ -3684,6 +3734,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                       Expanded 3D Map ({activeMap.name}): {activeMap.subtitle}. Every run rewards Glacial Drops toward community Clean Water Wells.
                     </p>
                   </div>
+                </div>
                 </div>
               )}
             </div>

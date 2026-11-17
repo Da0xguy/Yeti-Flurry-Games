@@ -5,6 +5,7 @@ import {
   ARENA_CENTER_Y,
   getMapObstacles,
   getRaceTrackWaypoints,
+  getRunnerRouteWaypoints,
 } from '../data/gameCatalog';
 
 function createMapFloorTexture(mapId: MapId, maxAnisotropy: number): THREE.CanvasTexture {
@@ -1015,6 +1016,49 @@ export function buildArcticEnvironment(
       pad.rotation.z = -Math.atan2(next.x - wp.x, next.y - wp.y);
       pad.position.set((wp.x - ARENA_CENTER_X) / 25, 0.042, (wp.y - ARENA_CENTER_Y) / 25);
       group.add(pad);
+    });
+  }
+
+  // Temple-run inspired relic gates give Survival its own forward-running route.
+  if (gameMode === 'survival') {
+    const route = getRunnerRouteWaypoints(mapId);
+    const relicMat = new THREE.MeshStandardMaterial({
+      color: mapId === 'volcanic_springs' ? '#7c2d12' : mapId === 'aurora_summit' ? '#5b21b6' : '#155e75',
+      emissive: mapId === 'volcanic_springs' ? '#ea580c' : mapId === 'aurora_summit' ? '#7c3aed' : '#0891b2',
+      emissiveIntensity: 0.42,
+      roughness: 0.42,
+      metalness: 0.3,
+    });
+    const relicGlow = new THREE.MeshBasicMaterial({
+      color: mapId === 'volcanic_springs' ? '#fb923c' : mapId === 'aurora_summit' ? '#c084fc' : '#67e8f9',
+      transparent: true,
+      opacity: 0.8,
+    });
+
+    route.forEach((point, index) => {
+      const next = route[Math.min(index + 1, route.length - 1)];
+      const yaw = Math.atan2(next.x - point.x, next.y - point.y);
+      const gate = new THREE.Group();
+      gate.position.set((point.x - ARENA_CENTER_X) / 25, 0, (point.y - ARENA_CENTER_Y) / 25);
+      gate.rotation.y = yaw;
+
+      [-1.7, 1.7].forEach((offset) => {
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 2.5, 6), relicMat);
+        pillar.position.set(offset, 1.25, 0);
+        pillar.castShadow = !isSoftwareGl;
+        gate.add(pillar);
+      });
+
+      const lintel = new THREE.Mesh(new THREE.BoxGeometry(3.75, 0.28, 0.28), relicMat);
+      lintel.position.y = 2.45;
+      lintel.castShadow = !isSoftwareGl;
+      gate.add(lintel);
+
+      const marker = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.07, 6, 16), relicGlow);
+      marker.rotation.x = Math.PI / 2;
+      marker.position.y = 1.3;
+      gate.add(marker);
+      group.add(gate);
     });
   }
 

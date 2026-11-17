@@ -1,4 +1,7 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { useDAppKit, useWalletConnection } from '@mysten/dapp-kit-react';
+import { ConnectButton } from '@mysten/dapp-kit-react/ui';
+import { Transaction } from '@mysten/sui/transactions';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import type {
   CosmeticSlot,
   GameModeId,
@@ -15,11 +18,17 @@ import { YetiArenaCanvas } from './components/YetiArenaCanvas';
 import { MyYetiView } from './components/MyYetiView';
 import { LeaderboardWellView } from './components/LeaderboardWellView';
 import { DocsAndMoveView } from './components/DocsAndMoveView';
+import { uploadPlayerProfile } from './lib/walrus';
 
 const STORAGE_ADDR_KEY = 'yeti_flurry_owner_address';
 const STORAGE_COLOR_KEY = 'yeti_flurry_colorway';
+const PLAYER_PROFILE_PACKAGE_ID = import.meta.env.VITE_PLAYER_PROFILE_PACKAGE_ID as
+  | string
+  | undefined;
 
 export default function App() {
+  const dAppKit = useDAppKit();
+  const walletConnection = useWalletConnection();
   const [activeTab, setActiveTab] = useState<NavTab>('home');
   const [autoLaunchMode, setAutoLaunchMode] = useState<'launcher' | 'choose_map' | 'tunnel' | null>(null);
   const [selectedGameMode, setSelectedGameMode] = useState<GameModeId>('survival');
@@ -37,6 +46,7 @@ export default function App() {
     activeContributors: 148,
   });
   const [toast, setToast] = useState<string | null>(null);
+  const bootstrappedWalletRef = useRef<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -44,6 +54,60 @@ export default function App() {
       setToast((prev) => (prev === msg ? null : prev));
     }, 3200);
   }, []);
+
+  useEffect(() => {
+    const walletAddress = walletConnection.account?.address;
+    if (!walletAddress || bootstrappedWalletRef.current === walletAddress) return;
+    bootstrappedWalletRef.current = walletAddress;
+
+    if (!PLAYER_PROFILE_PACKAGE_ID) {
+      showToast('Wallet connected. Set VITE_PLAYER_PROFILE_PACKAGE_ID to create your profile.');
+      return;
+    }
+
+    const createPlayerProfile = async () => {
+      try {
+        const walrus = await uploadPlayerProfile({
+          walletAddress,
+          displayName: `Yeti Player ${walletAddress.slice(0, 6)}`,
+          yetiName: yeti?.name || 'Lofi Frosty',
+          colorway: selectedColorway,
+          createdAt: new Date().toISOString(),
+          schemaVersion: 1,
+        });
+        const transaction = new Transaction();
+        transaction.moveCall({
+          target: `${PLAYER_PROFILE_PACKAGE_ID}::player_profile::create_profile`,
+          arguments: [
+            transaction.pure.string(`Yeti Player ${walletAddress.slice(0, 6)}`),
+            transaction.pure.string(yeti?.name || 'Lofi Frosty'),
+            transaction.pure.string(selectedColorway),
+            transaction.pure.string(walrus.blobId),
+            transaction.pure.string(walrus.aggregatorUrl),
+            transaction.object('0x6'),
+          ],
+        });
+        const result = await dAppKit.signAndExecuteTransaction({ transaction });
+        if ('FailedTransaction' in result && result.FailedTransaction) {
+          throw new Error(
+            result.FailedTransaction.status.error?.message || 'Profile transaction failed'
+          );
+        }
+        showToast('Player profile created on Sui and stored on Walrus');
+      } catch (error) {
+        bootstrappedWalletRef.current = null;
+        showToast(error instanceof Error ? error.message : 'Could not create player profile');
+      }
+    };
+
+    void createPlayerProfile();
+  }, [
+    dAppKit,
+    selectedColorway,
+    showToast,
+    walletConnection.account?.address,
+    yeti?.name,
+  ]);
 
   const loadGlobalState = useCallback(async () => {
     try {
@@ -246,7 +310,13 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#081322] text-slate-100 flex flex-col">
       {/* Strict 3-Zone Top Bar Contract */}
-      <header className="border-b border-slate-800/90 bg-[#0A1728]/95 backdrop-blur sticky top-0 z-30">
+      <header
+        className={`sticky top-0 z-30 border-b backdrop-blur-md ${
+          activeTab === 'home'
+            ? 'absolute inset-x-0 border-white/10 bg-transparent'
+            : 'border-slate-800/90 bg-[#0A1728]/90'
+        }`}
+      >
         <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-8 px-4 sm:px-6 py-3">
           {/* Zone 1: 3D Gamish Brand Wordmark */}
           <button
@@ -283,7 +353,8 @@ export default function App() {
           </nav>
 
           {/* Zone 3: Single Primary Action */}
-          <div className="shrink-0 hidden sm:block">
+          <div className="flex items-center gap-2 shrink-0">
+            <ConnectButton />
             <button
               type="button"
               onClick={() =>

@@ -19,7 +19,7 @@ export const WELL_RITUAL_RADIUS = 115;
 export const GAME_MODES: GameModeSpec[] = [
   {
     id: 'survival',
-    name: 'Flurry Survival',
+    name: 'Arcade Survival',
     shortLabel: 'Survival',
     subtitle: 'Central Well · Snowball Clash · Well Rituals',
     description:
@@ -29,7 +29,7 @@ export const GAME_MODES: GameModeSpec[] = [
   },
   {
     id: 'car_racing',
-    name: 'Arctic Kart Racing',
+    name: 'Snow Drifter Racing',
     shortLabel: 'Kart Race',
     subtitle: '3-Lap 3D Circuit · Drift Physics · Nitro Boost',
     description:
@@ -39,7 +39,7 @@ export const GAME_MODES: GameModeSpec[] = [
   },
   {
     id: 'shooting',
-    name: 'Frost Blaster Shooter',
+    name: 'Frost Fire',
     shortLabel: 'Shooter',
     subtitle: 'Wave Combat · Cryo Drones · Bullseye Combos',
     description:
@@ -153,19 +153,37 @@ export function getMapModeDetails(mapId: MapId, gameMode: GameModeId): {
   if (gameMode === 'car_racing') {
     if (mapId === 'volcanic_springs') {
       return {
-        tag: 'High-Grip Asphalt',
-        summary: 'Sharp corner traction, basalt canyon hairpins, and superheated turbo strips.',
+        tag: 'Canyon Buggy Run',
+        summary: 'Long off-road hairpins, basalt canyon jumps, and superheated turbo strips.',
       };
     }
     if (mapId === 'aurora_summit') {
       return {
-        tag: 'Top-Speed Circuit',
-        summary: 'Fastest straightaways (+15% speed), floating obelisk gates, and rapid nitro charge.',
+        tag: 'Summit Coast Rally',
+        summary: 'Long downhill straightaways, floating obelisk gates, and rapid nitro charge.',
       };
     }
     return {
-      tag: 'Drift Ice Track',
-      summary: 'Classic frozen lake sweepers with crisp drift slides and wide nitro chicanes.',
+      tag: 'Glacier Beach Buggy',
+      summary: 'Wide frozen-shore sweepers, snow dunes, and long drift-friendly nitro chicanes.',
+    };
+  }
+  if (gameMode === 'survival') {
+    if (mapId === 'volcanic_springs') {
+      return {
+        tag: 'Temple Run: Ember Ruins',
+        summary: 'A forward-running ruin route through fire gates, basalt pillars, and collapsing steam vents.',
+      };
+    }
+    if (mapId === 'aurora_summit') {
+      return {
+        tag: 'Temple Run: Sky Relics',
+        summary: 'Sprint between floating relic gates, crystal bridges, and low-gravity cliff turns.',
+      };
+    }
+    return {
+      tag: 'Temple Run: Glacier Relic',
+      summary: 'Run the frozen relic route through ice gates, snow ramps, and falling icicle hazards.',
     };
   }
   if (gameMode === 'shooting') {
@@ -237,6 +255,52 @@ export interface RaceWaypoint {
   hasBoostPad?: boolean;
 }
 
+export interface RunnerRouteWaypoint {
+  x: number;
+  y: number;
+  turn: 'left' | 'right' | 'straight';
+}
+
+export function getRunnerRouteWaypoints(mapId: MapId): RunnerRouteWaypoint[] {
+  const cx = ARENA_CENTER_X;
+  const cy = ARENA_CENTER_Y;
+
+  if (mapId === 'volcanic_springs') {
+    return [
+      { x: cx, y: cy + 430, turn: 'straight' },
+      { x: cx + 145, y: cy + 330, turn: 'right' },
+      { x: cx - 120, y: cy + 220, turn: 'left' },
+      { x: cx + 180, y: cy + 95, turn: 'right' },
+      { x: cx - 165, y: cy - 35, turn: 'left' },
+      { x: cx + 130, y: cy - 175, turn: 'right' },
+      { x: cx - 90, y: cy - 305, turn: 'left' },
+      { x: cx, y: cy - 430, turn: 'straight' },
+    ];
+  }
+  if (mapId === 'aurora_summit') {
+    return [
+      { x: cx, y: cy + 430, turn: 'straight' },
+      { x: cx - 170, y: cy + 320, turn: 'left' },
+      { x: cx + 150, y: cy + 205, turn: 'right' },
+      { x: cx - 190, y: cy + 75, turn: 'left' },
+      { x: cx + 170, y: cy - 60, turn: 'right' },
+      { x: cx - 135, y: cy - 195, turn: 'left' },
+      { x: cx + 100, y: cy - 315, turn: 'right' },
+      { x: cx, y: cy - 430, turn: 'straight' },
+    ];
+  }
+  return [
+    { x: cx, y: cy + 430, turn: 'straight' },
+    { x: cx + 155, y: cy + 325, turn: 'right' },
+    { x: cx - 145, y: cy + 215, turn: 'left' },
+    { x: cx + 165, y: cy + 90, turn: 'right' },
+    { x: cx - 155, y: cy - 40, turn: 'left' },
+    { x: cx + 130, y: cy - 170, turn: 'right' },
+    { x: cx - 110, y: cy - 300, turn: 'left' },
+    { x: cx, y: cy - 430, turn: 'straight' },
+  ];
+}
+
 /**
  * 8-waypoint closed circuit looping around the expanded 1500x960 arena,
  * keeping clean clearance from both the Central Well and inner obstacles.
@@ -247,40 +311,42 @@ export function getRaceTrackWaypoints(mapId: MapId): RaceWaypoint[] {
 
   if (mapId === 'volcanic_springs') {
     return [
-      { x: cx, y: cy + 345 }, // Start/Finish South Straight
-      { x: cx + 315, y: cy + 315, hasBoostPad: true },
-      { x: cx + 425, y: cy + 70 },
-      { x: cx + 355, y: cy - 250 },
-      { x: cx + 70, y: cy - 375, hasBoostPad: true },
-      { x: cx - 320, y: cy - 295 },
-      { x: cx - 425, y: cy - 30 },
-      { x: cx - 310, y: cy + 305, hasBoostPad: true },
+      { x: cx, y: cy + 500 }, // Start/Finish South Straight
+      { x: cx + 350, y: cy + 430, hasBoostPad: true },
+      { x: cx + 510, y: cy + 210 },
+      { x: cx + 485, y: cy - 115, hasBoostPad: true },
+      { x: cx + 330, y: cy - 410 },
+      { x: cx - 20, y: cy - 500, hasBoostPad: true },
+      { x: cx - 355, y: cy - 420 },
+      { x: cx - 510, y: cy - 120, hasBoostPad: true },
+      { x: cx - 470, y: cy + 210 },
+      { x: cx - 320, y: cy + 425 },
     ];
   }
 
   if (mapId === 'aurora_summit') {
     return [
-      { x: cx, y: cy + 350 },
-      { x: cx + 345, y: cy + 280, hasBoostPad: true },
-      { x: cx + 415, y: cy },
-      { x: cx + 310, y: cy - 295, hasBoostPad: true },
-      { x: cx, y: cy - 375 },
-      { x: cx - 310, y: cy - 295 },
-      { x: cx - 415, y: cy, hasBoostPad: true },
-      { x: cx - 345, y: cy + 280 },
+      { x: cx, y: cy + 500 },
+      { x: cx + 410, y: cy + 360, hasBoostPad: true },
+      { x: cx + 525, y: cy + 20 },
+      { x: cx + 390, y: cy - 350, hasBoostPad: true },
+      { x: cx + 80, y: cy - 505 },
+      { x: cx - 300, y: cy - 420, hasBoostPad: true },
+      { x: cx - 525, y: cy - 80 },
+      { x: cx - 390, y: cy + 330 },
     ];
   }
 
   // glacier_well sweeping circuit
   return [
-    { x: cx, y: cy + 345 },
-    { x: cx + 335, y: cy + 290, hasBoostPad: true },
-    { x: cx + 420, y: cy + 15 },
-    { x: cx + 330, y: cy - 285 },
-    { x: cx, y: cy - 360, hasBoostPad: true },
-    { x: cx - 330, y: cy - 285 },
-    { x: cx - 420, y: cy + 15, hasBoostPad: true },
-    { x: cx - 335, y: cy + 290 },
+    { x: cx, y: cy + 500 },
+    { x: cx + 385, y: cy + 400, hasBoostPad: true },
+    { x: cx + 525, y: cy + 30 },
+    { x: cx + 365, y: cy - 360 },
+    { x: cx, y: cy - 505, hasBoostPad: true },
+    { x: cx - 365, y: cy - 360 },
+    { x: cx - 525, y: cy + 30, hasBoostPad: true },
+    { x: cx - 385, y: cy + 400 },
   ];
 }
 
@@ -349,7 +415,7 @@ export const CAREER_QUESTS: CareerQuest[] = [
   {
     id: 'quest_snowball_ace',
     title: 'Frost Marksman',
-    description: 'Land 12 hits across Survival Snowball or Frost Blaster Shooter runs.',
+    description: 'Land 12 hits across Arcade Survival or Frost Fire runs.',
     metric: 'hitsLanded',
     target: 12,
     rewardGems: 20,

@@ -1,7 +1,23 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Pixel Forge";
+  src: url("/fonts/PixelForge.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Pixel Forge 3D";
+  src: url("/fonts/PixelForge3D.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
-  --font-display: "Lilita One", "Chakra Petch", system-ui, sans-serif;
+  --font-display: "Pixel Forge", "Chakra Petch", system-ui, sans-serif;
   --font-sans: "Chakra Petch", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
@@ -20,7 +36,7 @@
 
 /* 3D Extruded Gamish Title Typography */
 .title-3d-game {
-  font-family: var(--font-display);
+  font-family: "Pixel Forge 3D", var(--font-display);
   letter-spacing: 0.03em;
   color: #f0f9ff;
   text-shadow:
@@ -35,7 +51,7 @@
 }
 
 .title-3d-game-sm {
-  font-family: var(--font-display);
+  font-family: "Pixel Forge 3D", var(--font-display);
   letter-spacing: 0.03em;
   color: #f0f9ff;
   text-shadow:
@@ -48,6 +64,11 @@
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+:fullscreen {
+  border-radius: 0;
+  aspect-ratio: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {

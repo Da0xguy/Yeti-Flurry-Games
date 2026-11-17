@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" role="img" aria-labelledby="title desc">
+  <title id="title">Snow Drifter off-road race</title>
+  <desc id="desc">A colorful snow buggy drifting around a frozen coastal race track.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffb56b"/><stop offset=".55" stop-color="#ed6b76"/><stop offset="1" stop-color="#4f2e65"/></linearGradient>
+    <linearGradient id="sand" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f8d49b"/><stop offset="1" stop-color="#b36b70"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="960" height="480" fill="url(#sky)"/>
+  <circle cx="760" cy="112" r="58" fill="#ffe7ad" opacity=".9" filter="url(#glow)"/>
+  <path d="M0 250 Q160 170 320 255 T640 240 T960 250V480H0Z" fill="#162f54"/>
+  <path d="M0 305 Q180 255 360 326 T720 300 T960 325V480H0Z" fill="#1c83a5"/>
+  <path d="M0 370 Q180 300 350 375 T680 350 T960 370V480H0Z" fill="url(#sand)"/>
+  <path d="M80 425 Q270 260 500 390 T900 342" fill="none" stroke="#412d4e" stroke-width="68" opacity=".8"/>
+  <path d="M80 425 Q270 260 500 390 T900 342" fill="none" stroke="#f7c879" stroke-width="6" stroke-dasharray="18 20"/>
+  <g transform="translate(480 320) rotate(-8)">
+    <ellipse cx="0" cy="90" rx="135" ry="22" fill="#1b1730" opacity=".6"/>
+    <path d="M-100 35 Q-84-50-20-64H65Q108-44 116 35Z" fill="#f97316" stroke="#ffedd5" stroke-width="7"/>
+    <path d="M-66-36h126l-10 38H-75Z" fill="#47d5e8" stroke="#102b55" stroke-width="7"/>
+    <circle cx="-73" cy="50" r="26" fill="#12152b" stroke="#ffd28b" stroke-width="7"/><circle cx="78" cy="50" r="26" fill="#12152b" stroke="#ffd28b" stroke-width="7"/>
+    <path d="M-20 8h40" stroke="#fff1d2" stroke-width="7"/>
+    <path d="M-128 24l-62 28M124 15l60-30" stroke="#f9fafb" stroke-width="8" stroke-linecap="round" opacity=".85"/>
+  </g>
+  <text x="34" y="60" fill="#fff1d2" font-family="sans-serif" font-size="18" font-weight="700" letter-spacing="4">DRIFT COAST</text>
+</svg>
