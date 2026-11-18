@@ -188,11 +188,17 @@ interface Pickup {
   respawnAt?: number;
 }
 
+type DestructiblePropKind = 'ice_pillar' | 'frozen_barrel' | 'ice_crate';
+
 interface CrateProp {
   id: string;
   x: number;
   y: number;
   hp: number;
+  maxHp?: number;
+  kind?: DestructiblePropKind;
+  radius?: number;
+  hitFlashUntil?: number;
 }
 
 interface Snowball {
@@ -637,20 +643,31 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     };
   }, []);
 
-  const spawnCrate = useCallback((idx: number): CrateProp => {
+  const spawnCrate = useCallback((idx: number, mapIdOverride?: MapId): CrateProp => {
+    const activeMapId = mapIdOverride || mapIdRef.current;
     const angle = Math.random() * Math.PI * 2;
-    const dist = 145 + Math.random() * 440;
+    const maxDist = Math.max(190, Math.min(460, simRef.current.ringRadius - 90));
+    const dist = 145 + Math.random() * (maxDist - 145);
     const pos = nudgeOutsideObstacles(
       ARENA_CENTER_X + Math.cos(angle) * dist,
       ARENA_CENTER_Y + Math.sin(angle) * dist,
-      24,
-      mapIdRef.current
+      28,
+      activeMapId
     );
+    const roll = Math.random();
+    const kind: DestructiblePropKind =
+      roll < 0.42 ? 'ice_pillar' : roll < 0.8 ? 'frozen_barrel' : 'ice_crate';
+    const maxHp = kind === 'ice_pillar' ? 3 : 2;
+    const radius = kind === 'ice_pillar' ? 23 : 21;
     return {
       id: `cr_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 5)}`,
       x: pos.x,
       y: pos.y,
-      hp: 2,
+      hp: maxHp,
+      maxHp,
+      kind,
+      radius,
+      hitFlashUntil: 0,
     };
   }, []);
 
@@ -975,7 +992,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         s.karts = [];
         s.entities = [playerYeti];
         s.pickups = Array.from({ length: 16 }, (_, i) => spawnPickup(i, mapId));
-        s.crates = [];
+        s.crates = Array.from({ length: 8 }, (_, i) => spawnCrate(i, mapId));
         spawnShooterWave(1, mapId);
       } else {
         // Survival Flurry (Expanded 2400x1600 Map · 150s)
@@ -1044,7 +1061,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
         s.entities = [playerYeti, ...bots];
         s.pickups = Array.from({ length: 28 }, (_, i) => spawnPickup(i, mapId));
-        s.crates = Array.from({ length: 10 }, (_, i) => spawnCrate(i));
+        s.crates = Array.from({ length: 10 }, (_, i) => spawnCrate(i, mapId));
       }
 
       rigVersionDirtyRef.current = true;
@@ -1516,6 +1533,138 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     queueRing(player.x, player.y, trailCol, 2.8);
   }, [queueBurst, queueRing]);
 
+  const damageDestructibleProp = useCallback(
+    (
+      index: number,
+      damage: number,
+      attacker?: LocalYeti | null,
+      impactLabel?: string
+    ): boolean => {
+      const s = simRef.current;
+      const cr = s.crates[index];
+      if (!cr) return false;
+      const nowMs = Date.now();
+      const mapId = mapIdRef.current;
+      const propKind: DestructiblePropKind = cr.kind || 'ice_crate';
+
+      cr.hp -= damage;
+      cr.hitFlashUntil = nowMs + 220;
+
+      const primaryCol =
+        mapId === 'volcanic_springs'
+          ? propKind === 'ice_pillar'
+            ? '#fb923c'
+            : propKind === 'frozen_barrel'
+            ? '#f97316'
+            : '#fbbf24'
+          : mapId === 'aurora_summit'
+          ? propKind === 'ice_pillar'
+            ? '#2dd4bf'
+            : propKind === 'frozen_barrel'
+            ? '#c084fc'
+            : '#67e8f9'
+          : propKind === 'ice_pillar'
+          ? '#7dd3fc'
+          : propKind === 'frozen_barrel'
+          ? '#38bdf8'
+          : '#fde047';
+
+      const secondaryCol =
+        propKind === 'ice_pillar'
+          ? '#e0f2fe'
+          : propKind === 'frozen_barrel'
+          ? '#fde047'
+          : '#ffffff';
+
+      if (cr.hp > 0) {
+        queueBurst(cr.x, cr.y, primaryCol, 8);
+        queueBurst(cr.x, cr.y, secondaryCol, 4);
+        queueRing(cr.x, cr.y, primaryCol, 1.5);
+        if (attacker && !attacker.isBot) {
+          soundEngine.playPunch(false);
+          s.shake = Math.max(s.shake, 0.14);
+        }
+        return false;
+      }
+
+      queueBurst(cr.x, cr.y, primaryCol, propKind === 'ice_pillar' ? 18 : 15);
+      queueBurst(cr.x, cr.y, secondaryCol, 10);
+      queueRing(cr.x, cr.y, primaryCol, propKind === 'ice_pillar' ? 3.2 : 2.6);
+      queueRing(cr.x, cr.y, secondaryCol, 1.9);
+
+      const powerPool: Pickup['kind'][] =
+        propKind === 'ice_pillar'
+          ? ['shield', 'triple', 'magnet', 'boost', 'medkit', 'gem']
+          : propKind === 'frozen_barrel'
+          ? ['boost', 'shield', 'triple', 'medkit', 'magnet', 'gem']
+          : ['gem', 'shield', 'boost', 'magnet', 'triple', 'medkit'];
+      const droppedKind = powerPool[Math.floor(Math.random() * powerPool.length)];
+      s.pickups.push({
+        id: `prop_pk_${nowMs}_${Math.random().toString(36).slice(2, 6)}`,
+        kind: droppedKind,
+        x: cr.x,
+        y: cr.y,
+        bobOffset: Math.random() * Math.PI * 2,
+      });
+
+      if (propKind === 'frozen_barrel') {
+        const splashAngle = Math.random() * Math.PI * 2;
+        s.pickups.push({
+          id: `prop_drop_${nowMs}_${Math.random().toString(36).slice(2, 6)}`,
+          kind: 'drop',
+          x: cr.x + Math.cos(splashAngle) * 26,
+          y: cr.y + Math.sin(splashAngle) * 26,
+          bobOffset: Math.random() * Math.PI * 2,
+        });
+      }
+
+      s.crates.splice(index, 1);
+
+      if (attacker) {
+        const pts = propKind === 'ice_pillar' ? 75 : propKind === 'frozen_barrel' ? 65 : 55;
+        attacker.score += pts;
+        if (!attacker.isBot) {
+          s.cratesSmashed += 1;
+          s.shake = Math.max(s.shake, 0.34);
+          soundEngine.playSlam();
+          soundEngine.playPickup('gem');
+          if (gameModeRef.current === 'survival') {
+            updateTaskProgress('task_crates', s.cratesSmashed + s.beaconTicks, attacker);
+          }
+          const propName =
+            propKind === 'ice_pillar'
+              ? mapId === 'volcanic_springs'
+                ? 'Magma Pillar'
+                : mapId === 'aurora_summit'
+                ? 'Prism Pillar'
+                : 'Ice Pillar'
+              : propKind === 'frozen_barrel'
+              ? mapId === 'volcanic_springs'
+                ? 'Ember Barrel'
+                : 'Frozen Barrel'
+              : 'Supply Crate';
+          const dropLabel =
+            droppedKind === 'shield'
+              ? 'Cryo Shield'
+              : droppedKind === 'boost'
+              ? 'Turbo Surge'
+              : droppedKind === 'magnet'
+              ? 'Drop Magnet'
+              : droppedKind === 'triple'
+              ? 'Tri-Shot'
+              : droppedKind === 'medkit'
+              ? 'Medkit (+30 HP)'
+              : 'Frost Gem';
+          flashBanner(
+            `${impactLabel ? `${impactLabel}: ` : ''}${propName} Shattered! Dropped ${dropLabel}`
+          );
+        }
+      }
+      return true;
+    },
+    [flashBanner, queueBurst, queueRing, updateTaskProgress]
+  );
+
   const triggerMelee = useCallback(() => {
     if (gameStateRef.current !== 'PLAYING' || gameModeRef.current === 'car_racing') return;
     if (playModeRef.current === 'tunnel') {
@@ -1562,10 +1711,24 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       }
     }
 
+    let brokeProp = false;
+    for (let c = s.crates.length - 1; c >= 0; c--) {
+      const cr = s.crates[c];
+      const propRadius = cr.radius || 22;
+      if (
+        Math.hypot(cr.x - hitX, cr.y - hitY) < propRadius + 38 ||
+        Math.hypot(cr.x - player.x, cr.y - player.y) < propRadius + 30
+      ) {
+        hitCount += 1;
+        const destroyed = damageDestructibleProp(c, 2, player, 'Sword Smash');
+        if (destroyed) brokeProp = true;
+      }
+    }
+
     queueBurst(hitX, hitY, '#facc15', hitCount ? 14 : 6);
     queueRing(hitX, hitY, '#facc15', 2.2);
-    if (hitCount) flashBanner(`Yeti Sword Strike! ${hitCount} hit${hitCount === 1 ? '' : 's'}`);
-  }, [flashBanner, queueBurst, queueRing]);
+    if (hitCount && !brokeProp) flashBanner(`Yeti Sword Strike! ${hitCount} hit${hitCount === 1 ? '' : 's'}`);
+  }, [damageDestructibleProp, flashBanner, queueBurst, queueRing]);
 
   const triggerThrowOrFire = useCallback((aimLogicalX?: number, aimLogicalY?: number) => {
     if (gameStateRef.current !== 'PLAYING') return;
@@ -2120,6 +2283,14 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
     const crateBoxGeo = new THREE.BoxGeometry(1.0, 1.0, 1.0);
     const crateBandGeo = new THREE.BoxGeometry(1.08, 0.18, 1.08);
+    const pillarCoreGeo = new THREE.CylinderGeometry(0.35, 0.54, 1.72, 6);
+    const pillarCapGeo = new THREE.ConeGeometry(0.39, 0.54, 6);
+    const pillarBaseGeo = new THREE.CylinderGeometry(0.62, 0.68, 0.2, 6);
+    const barrelBodyGeo = new THREE.CylinderGeometry(0.45, 0.42, 1.08, 12);
+    const barrelHoopGeo = new THREE.TorusGeometry(0.45, 0.055, 8, 18);
+    barrelHoopGeo.rotateX(Math.PI / 2);
+    const barrelCoreGeo = new THREE.CylinderGeometry(0.47, 0.47, 0.22, 12);
+
     const crateMat = new THREE.MeshPhysicalMaterial({
       color: '#bae6fd',
       emissive: '#0284c7',
@@ -2131,6 +2302,29 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       color: '#f59e0b',
       metalness: 0.55,
       roughness: 0.35,
+    });
+    const pillarMat = new THREE.MeshPhysicalMaterial({
+      color: '#7dd3fc',
+      emissive: '#0284c7',
+      emissiveIntensity: 0.32,
+      roughness: 0.1,
+      metalness: 0.08,
+      clearcoat: 1.0,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const barrelMat = new THREE.MeshStandardMaterial({
+      color: '#1e3a5f',
+      emissive: '#0369a1',
+      emissiveIntensity: 0.22,
+      metalness: 0.45,
+      roughness: 0.32,
+    });
+    const barrelGlowMat = new THREE.MeshStandardMaterial({
+      color: '#38bdf8',
+      emissive: '#0ea5e9',
+      emissiveIntensity: 0.72,
+      roughness: 0.18,
     });
 
     const snowballGeo = new THREE.IcosahedronGeometry(0.26, 1);
@@ -2152,6 +2346,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         crateMat.emissive.set('#ea580c');
         crateMat.emissiveIntensity = 0.28;
         crateTrimMat.color.set('#fb923c');
+        pillarMat.color.set('#57534e');
+        pillarMat.emissive.set('#ea580c');
+        pillarMat.emissiveIntensity = 0.42;
+        barrelMat.color.set('#292524');
+        barrelMat.emissive.set('#9a3412');
+        barrelGlowMat.color.set('#fb923c');
+        barrelGlowMat.emissive.set('#f97316');
         snowballMat.color.set('#fff7ed');
         snowballMat.emissive.set('#fb923c');
         bRingMat.color.set('#fb923c');
@@ -2161,6 +2362,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         crateMat.emissive.set('#7c3aed');
         crateMat.emissiveIntensity = 0.3;
         crateTrimMat.color.set('#c084fc');
+        pillarMat.color.set('#5eead4');
+        pillarMat.emissive.set('#7c3aed');
+        pillarMat.emissiveIntensity = 0.38;
+        barrelMat.color.set('#312e81');
+        barrelMat.emissive.set('#0d9488');
+        barrelGlowMat.color.set('#c084fc');
+        barrelGlowMat.emissive.set('#a855f7');
         snowballMat.color.set('#ecfeff');
         snowballMat.emissive.set('#2dd4bf');
         bRingMat.color.set('#2dd4bf');
@@ -2170,6 +2378,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         crateMat.emissive.set('#0284c7');
         crateMat.emissiveIntensity = 0.22;
         crateTrimMat.color.set('#f59e0b');
+        pillarMat.color.set('#7dd3fc');
+        pillarMat.emissive.set('#0284c7');
+        pillarMat.emissiveIntensity = 0.32;
+        barrelMat.color.set('#1e3a5f');
+        barrelMat.emissive.set('#0369a1');
+        barrelGlowMat.color.set('#38bdf8');
+        barrelGlowMat.emissive.set('#0ea5e9');
         snowballMat.color.set('#f8fafc');
         snowballMat.emissive.set('#38bdf8');
         bRingMat.color.set('#fbbf24');
@@ -2598,6 +2813,17 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             player.vx = res.vx;
             player.vy = res.vy;
 
+            for (const cr of s.crates) {
+              const dxCr = player.x - cr.x;
+              const dyCr = player.y - cr.y;
+              const dCr = Math.hypot(dxCr, dyCr) || 0.001;
+              const minD = (cr.radius || 21) + 16;
+              if (dCr < minD) {
+                player.x = cr.x + (dxCr / dCr) * minD;
+                player.y = cr.y + (dyCr / dCr) * minD;
+              }
+            }
+
             // Collect & Magnet-pull Power-Ups + Drops
             const magnetActive = now < player.magnetUntil;
             for (let i = s.pickups.length - 1; i >= 0; i--) {
@@ -2668,6 +2894,16 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 const er = resolveArenaObstacleCollision(en.x, en.y, en.vx, en.vy, 17, mapIdRef.current);
                 en.x = er.x;
                 en.y = er.y;
+                for (const cr of s.crates) {
+                  const dxCr = en.x - cr.x;
+                  const dyCr = en.y - cr.y;
+                  const dCr = Math.hypot(dxCr, dyCr) || 0.001;
+                  const minD = (cr.radius || 21) + 17;
+                  if (dCr < minD) {
+                    en.x = cr.x + (dxCr / dCr) * minD;
+                    en.y = cr.y + (dyCr / dCr) * minD;
+                  }
+                }
 
                 en.fireCd -= dt;
                 if (en.fireCd <= 0 && distP < 560) {
@@ -2763,6 +2999,19 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               }
 
               if (!hit) {
+                for (let c = s.crates.length - 1; c >= 0; c--) {
+                  const cr = s.crates[c];
+                  const propRadius = cr.radius || 21;
+                  if (Math.hypot(cr.x - sb.x, cr.y - sb.y) < propRadius + 6) {
+                    hit = true;
+                    const attacker = sb.ownerId === 'player' ? player : null;
+                    damageDestructibleProp(c, 1, attacker);
+                    break;
+                  }
+                }
+              }
+
+              if (!hit) {
                 for (const obs of getMapObstacles(mapIdRef.current)) {
                   if (Math.hypot(obs.x - sb.x, obs.y - sb.y) < obs.radius + 5) {
                     hit = true;
@@ -2777,10 +3026,17 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               }
             }
 
+            if (s.crates.length < 7 && Math.random() < dt * 0.45) {
+              s.crates.push(spawnCrate(Math.floor(s.elapsed * 10), mapIdRef.current));
+            }
+
             if (s.shooterEnemies.length === 0) {
               s.shooterWave += 1;
               player.score += 120;
               player.hp = player.maxHp;
+              while (s.crates.length < 8) {
+                s.crates.push(spawnCrate(s.crates.length, mapIdRef.current));
+              }
               spawnShooterWave(s.shooterWave, mapIdRef.current);
               soundEngine.playLap(false);
               flashBanner(`Wave ${s.shooterWave} · Full HP Restored!`);
@@ -2811,6 +3067,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               setMinimapData({
                 dots: [
                   { x: ARENA_CENTER_X, y: ARENA_CENTER_Y, kind: 'well' },
+                  ...s.crates.map((cr) => ({ x: cr.x, y: cr.y, kind: 'crate' as const })),
                   ...s.pickups
                     .filter((pk) => pk.kind !== 'drop' && pk.kind !== 'gem')
                     .map((pk) => ({
@@ -3045,24 +3302,19 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             if (ent.dashTime > 0) {
               for (let c = s.crates.length - 1; c >= 0; c--) {
                 const cr = s.crates[c];
-                if (Math.hypot(cr.x - ent.x, cr.y - ent.y) < 38) {
-                  ent.score += 60;
-                  queueBurst(cr.x, cr.y, '#fde047', 12);
-                  queueRing(cr.x, cr.y, '#fbbf24', 2.4);
-                  const cratePool: Pickup['kind'][] = ['gem', 'shield', 'magnet', 'triple', 'medkit'];
-                  s.pickups.push({
-                    id: `cr_pk_${now}_${c}`,
-                    kind: cratePool[Math.floor(Math.random() * cratePool.length)],
-                    x: cr.x,
-                    y: cr.y,
-                    bobOffset: 0,
-                  });
-                  s.crates.splice(c, 1);
-                  if (!ent.isBot) {
-                    s.cratesSmashed += 1;
-                    soundEngine.playPickup('gem');
-                    updateTaskProgress('task_crates', s.cratesSmashed + s.beaconTicks, ent);
-                  }
+                if (Math.hypot(cr.x - ent.x, cr.y - ent.y) < (cr.radius || 21) + 20) {
+                  damageDestructibleProp(c, cr.maxHp || 3, ent, 'Frost Dash');
+                }
+              }
+            } else {
+              for (const cr of s.crates) {
+                const dxCr = ent.x - cr.x;
+                const dyCr = ent.y - cr.y;
+                const dCr = Math.hypot(dxCr, dyCr) || 0.001;
+                const minD = (cr.radius || 21) + 15;
+                if (dCr < minD) {
+                  ent.x = cr.x + (dxCr / dCr) * minD;
+                  ent.y = cr.y + (dyCr / dCr) * minD;
                 }
               }
             }
@@ -3243,31 +3495,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             if (!hit) {
               for (let c = s.crates.length - 1; c >= 0; c--) {
                 const cr = s.crates[c];
-                if (Math.hypot(cr.x - sb.x, cr.y - sb.y) < 25) {
+                if (Math.hypot(cr.x - sb.x, cr.y - sb.y) < (cr.radius || 21) + 6) {
                   hit = true;
-                  cr.hp -= 1;
-                  queueBurst(cr.x, cr.y, '#bae6fd', 7);
-                  if (cr.hp <= 0) {
-                    const shooter = s.entities.find((e) => e.id === sb.ownerId);
-                    if (shooter) {
-                      shooter.score += 55;
-                      if (!shooter.isBot) {
-                        s.cratesSmashed += 1;
-                        soundEngine.playPickup('gem');
-                        updateTaskProgress('task_crates', s.cratesSmashed + s.beaconTicks, shooter);
-                      }
-                    }
-                    queueRing(cr.x, cr.y, '#fbbf24', 2.4);
-                    const cratePool: Pickup['kind'][] = ['gem', 'shield', 'magnet', 'triple', 'medkit'];
-                    s.pickups.push({
-                      id: `cr_drop_${now}_${c}`,
-                      kind: cratePool[Math.floor(Math.random() * cratePool.length)],
-                      x: cr.x,
-                      y: cr.y,
-                      bobOffset: 0,
-                    });
-                    s.crates.splice(c, 1);
-                  }
+                  const shooter = s.entities.find((e) => e.id === sb.ownerId) || null;
+                  damageDestructibleProp(c, 1, shooter);
                   break;
                 }
               }
@@ -3370,7 +3601,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       actorsGroup.visible = showYetis;
       kartsGroup.visible = showKarts;
       shooterGroup.visible = showShooterTargets;
-      cratesGroup.visible = gm === 'survival';
+      cratesGroup.visible = gm === 'survival' || gm === 'shooting';
       hazardsGroup.visible = gm === 'survival';
       aimReticle.visible = gm === 'shooting' && gameStateRef.current === 'PLAYING';
       if (aimReticle.visible) {
@@ -3680,26 +3911,80 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         }
       }
 
-      // Sync Destructible Crates
+      // Sync Interactive Destructible Props (Ice Pillars, Frozen Barrels, Supply Crates)
       const activeCrates = tunnelSnap ? tunnelSnap.crates : s.crates;
       const seenCrateIds = new Set<string>();
       for (const cr of activeCrates) {
+        const crTyped = cr as CrateProp;
+        const kind: DestructiblePropKind = crTyped.kind || 'ice_crate';
+        const maxHp = crTyped.maxHp || 2;
         seenCrateIds.add(cr.id);
         let cGroup = crateMeshes.get(cr.id);
+        if (cGroup && cGroup.userData.kind !== kind) {
+          cratesGroup.remove(cGroup);
+          crateMeshes.delete(cr.id);
+          cGroup = undefined;
+        }
         if (!cGroup) {
           cGroup = new THREE.Group();
-          const box = new THREE.Mesh(crateBoxGeo, crateMat);
-          box.position.y = 0.5;
-          box.castShadow = !isSoftwareGl;
-          box.receiveShadow = true;
-          const band = new THREE.Mesh(crateBandGeo, crateTrimMat);
-          band.position.y = 0.5;
-          cGroup.add(box, band);
+          cGroup.userData = { kind };
+          if (kind === 'ice_pillar') {
+            const base = new THREE.Mesh(pillarBaseGeo, crateTrimMat);
+            base.position.y = 0.1;
+            base.receiveShadow = true;
+            const col = new THREE.Mesh(pillarCoreGeo, pillarMat);
+            col.position.y = 0.96;
+            col.castShadow = !isSoftwareGl;
+            col.receiveShadow = true;
+            const cap = new THREE.Mesh(pillarCapGeo, pillarMat);
+            cap.position.y = 2.08;
+            cap.castShadow = !isSoftwareGl;
+            cGroup.add(base, col, cap);
+          } else if (kind === 'frozen_barrel') {
+            const body = new THREE.Mesh(barrelBodyGeo, barrelMat);
+            body.position.y = 0.54;
+            body.castShadow = !isSoftwareGl;
+            body.receiveShadow = true;
+            const coreBand = new THREE.Mesh(barrelCoreGeo, barrelGlowMat);
+            coreBand.position.y = 0.54;
+            const hoopLow = new THREE.Mesh(barrelHoopGeo, crateTrimMat);
+            hoopLow.position.y = 0.22;
+            const hoopHigh = new THREE.Mesh(barrelHoopGeo, crateTrimMat);
+            hoopHigh.position.y = 0.86;
+            cGroup.add(body, coreBand, hoopLow, hoopHigh);
+          } else {
+            const box = new THREE.Mesh(crateBoxGeo, crateMat);
+            box.position.y = 0.5;
+            box.castShadow = !isSoftwareGl;
+            box.receiveShadow = true;
+            const band = new THREE.Mesh(crateBandGeo, crateTrimMat);
+            band.position.y = 0.5;
+            cGroup.add(box, band);
+          }
           cratesGroup.add(cGroup);
           crateMeshes.set(cr.id, cGroup);
         }
         cGroup.position.set(toWorldX(cr.x), 0, toWorldZ(cr.y));
-        cGroup.rotation.y += dt * 0.45;
+        const isHitFlashing = now < (crTyped.hitFlashUntil || 0);
+        const dmgRatio = Math.max(0, Math.min(1, cr.hp / maxHp));
+        if (kind === 'ice_crate') {
+          cGroup.rotation.y += dt * 0.45;
+        }
+        if (isHitFlashing) {
+          cGroup.rotation.z = Math.sin(elapsedTime * 55) * 0.16;
+          cGroup.rotation.x = Math.cos(elapsedTime * 48) * 0.12;
+          cGroup.scale.set(1.09, 0.88, 1.09);
+        } else {
+          const lean = cr.hp < maxHp ? 0.065 : 0;
+          cGroup.rotation.z = THREE.MathUtils.damp(cGroup.rotation.z, lean, 10, dt);
+          cGroup.rotation.x = THREE.MathUtils.damp(cGroup.rotation.x, 0, 10, dt);
+          const targetYScale = cr.hp < maxHp ? 0.86 + dmgRatio * 0.12 : 1;
+          cGroup.scale.set(
+            THREE.MathUtils.damp(cGroup.scale.x, 1, 10, dt),
+            THREE.MathUtils.damp(cGroup.scale.y, targetYScale, 10, dt),
+            THREE.MathUtils.damp(cGroup.scale.z, 1, 10, dt)
+          );
+        }
       }
       for (const [id, cg] of crateMeshes.entries()) {
         if (!seenCrateIds.has(id)) {
@@ -3901,10 +4186,24 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       window.removeEventListener('pointerup', onCanvasPointerUp);
       renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
       renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
+      crateBoxGeo.dispose();
+      crateBandGeo.dispose();
+      pillarCoreGeo.dispose();
+      pillarCapGeo.dispose();
+      pillarBaseGeo.dispose();
+      barrelBodyGeo.dispose();
+      barrelHoopGeo.dispose();
+      barrelCoreGeo.dispose();
+      crateMat.dispose();
+      crateTrimMat.dispose();
+      pillarMat.dispose();
+      barrelMat.dispose();
+      barrelGlowMat.dispose();
       envTex.dispose();
       renderer.dispose();
     };
   }, [
+    damageDestructibleProp,
     finishSoloMatch,
     flashBanner,
     queueBurst,
