@@ -204,6 +204,7 @@ interface TunnelRoom {
       inputY: number;
       dashCd: number;
       throwCd: number;
+      meleeCd: number;
       facingX: number;
       facingY: number;
       gatherAtWellUntil?: number;
@@ -335,6 +336,7 @@ function createTunnelRoom(roomId: string, mapId: MapId, mode: GameModeId = 'surv
       inputY: 0,
       dashCd: 0,
       throwCd: 1.5,
+      meleeCd: 0,
       facingX: 1,
       facingY: 0,
       angle: raceAngle,
@@ -507,6 +509,7 @@ function stepRoom(room: TunnelRoom, dt: number): void {
     if (p.eliminated) continue;
     p.dashCd = Math.max(0, p.dashCd - dt);
     p.throwCd = Math.max(0, p.throwCd - dt);
+    p.meleeCd = Math.max(0, p.meleeCd - dt);
     if (p.emote && p.emote !== 'none' && now >= (p.emoteUntil || 0)) {
       p.emote = 'none';
     }
@@ -782,6 +785,8 @@ function broadcastRoom(room: TunnelRoom): void {
       y: Math.round(p.y * 10) / 10,
       vx: Math.round(p.vx),
       vy: Math.round(p.vy),
+      facingX: Math.round(p.facingX * 100) / 100,
+      facingY: Math.round(p.facingY * 100) / 100,
       hp: p.hp,
       maxHp: p.maxHp || 100,
       score: p.score,
@@ -914,6 +919,7 @@ async function startServer() {
         inputY: 0,
         dashCd: 0,
         throwCd: 0,
+        meleeCd: 0,
         facingX: 0,
         facingY: -1,
         angle: raceAngle,
@@ -949,6 +955,18 @@ async function startServer() {
           if (room.mode === 'car_racing') {
             p.inputX = Math.max(-1, Math.min(1, Number(msg.steer ?? msg.dx) || 0));
             p.inputY = Math.max(-1, Math.min(1, Number(msg.throttle ?? -msg.dy) || 0));
+          }
+        } else if (msg.type === 'melee' && room.mode === 'survival' && p.meleeCd <= 0 && !p.eliminated) {
+          p.meleeCd = 0.55;
+          const hitX = p.x + p.facingX * 78;
+          const hitY = p.y + p.facingY * 78;
+          for (const other of room.players.values()) {
+            if (other.id === p.id || other.eliminated) continue;
+            if (Math.hypot(other.x - hitX, other.y - hitY) < 52) {
+              other.hp = Math.max(0, other.hp - 1);
+              if (other.hp === 0) other.eliminated = true;
+              p.score += other.hp === 0 ? 90 : 25;
+            }
           }
         } else if (msg.type === 'dash' && p.dashCd <= 0 && !p.eliminated) {
           if (room.mode === 'car_racing') {

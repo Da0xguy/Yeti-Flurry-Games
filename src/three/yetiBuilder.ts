@@ -18,6 +18,7 @@ export interface YetiRigParts {
   leftFootGroup: THREE.Group;
   rightFootGroup: THREE.Group;
   scarfTail?: THREE.Mesh;
+  weaponGroup?: THREE.Group;
   shieldMesh: THREE.Mesh;
   boostRing: THREE.Mesh;
   throwAnim: number;
@@ -134,6 +135,7 @@ export function buildYetiRig(options: {
   scarfId: string;
   isPlayer: boolean;
   scale?: number;
+  weapon?: 'sword' | 'blaster';
 }): YetiRigParts {
   const palette = getYetiColorway(options.colorwayId);
   const { bumpMap, roughnessMap } = getFurTextures();
@@ -555,6 +557,34 @@ export function buildYetiRig(options: {
   boostRing.visible = false;
   root.add(boostRing);
 
+  let weaponGroup: THREE.Group | undefined;
+  if (options.weapon) {
+    weaponGroup = new THREE.Group();
+    weaponGroup.position.set(0.52, 1.18, 0.18);
+    weaponGroup.rotation.z = options.weapon === 'sword' ? -0.22 : -0.55;
+    const grip = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.045, 0.055, 0.38, 8),
+      new THREE.MeshStandardMaterial({ color: '#78350f', roughness: 0.7 })
+    );
+    grip.position.y = -0.2;
+    const blade = new THREE.Mesh(
+      options.weapon === 'sword'
+        ? new THREE.BoxGeometry(0.11, 0.9, 0.055)
+        : new THREE.CylinderGeometry(0.1, 0.14, 0.62, 10),
+      new THREE.MeshStandardMaterial({
+        color: options.weapon === 'sword' ? '#e0f2fe' : '#38bdf8',
+        emissive: options.weapon === 'sword' ? '#7dd3fc' : '#0369a1',
+        emissiveIntensity: 0.45,
+        metalness: 0.65,
+        roughness: 0.2,
+      })
+    );
+    blade.position.y = options.weapon === 'sword' ? 0.35 : 0.18;
+    if (options.weapon === 'blaster') blade.rotation.z = Math.PI / 2;
+    weaponGroup.add(grip, blade);
+    root.add(weaponGroup);
+  }
+
   return {
     root,
     bodyPivot,
@@ -570,6 +600,7 @@ export function buildYetiRig(options: {
     leftFootGroup: leftLeg.footGroup,
     rightFootGroup: rightLeg.footGroup,
     scarfTail,
+    weaponGroup,
     shieldMesh,
     boostRing,
     throwAnim: 0,

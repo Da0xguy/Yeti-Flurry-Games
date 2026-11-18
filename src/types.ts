@@ -184,6 +184,8 @@ export interface TunnelPlayerSnapshot {
   y: number;
   vx: number;
   vy: number;
+  facingX?: number;
+  facingY?: number;
   hp: number;
   maxHp?: number;
   score: number;

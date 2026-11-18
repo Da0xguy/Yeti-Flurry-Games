@@ -113,6 +113,7 @@ interface FighterEntity {
   name?: string;
   stroke?: string;
   accent?: string;
+  colorway?: YetiColorId;
   speed?: number;
   aggro?: number;
   isBoss?: boolean;
@@ -321,6 +322,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
     stunnedUntil: 0,
     ropeBoostUntil: 0,
     hasHitCurrentSwing: false,
+    colorway: isPlayer ? selectedColorway : 'classic_lofi',
   });
 
   const spawnParticles = (
@@ -367,6 +369,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
     f.name = spec.name;
     f.stroke = spec.stroke;
     f.accent = spec.accent;
+    f.colorway = YETI_COLORWAYS[(boutIndex - 1) % YETI_COLORWAYS.length].id;
     f.speed = spec.speed;
     f.aggro = spec.aggro;
     f.isBoss = true;
@@ -390,6 +393,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
       f.name = boss ? `Glacier Brute Lv.${wave}` : i % 2 === 0 ? 'Frost Ninja' : 'Ember Stick';
       f.stroke = boss ? '#a855f7' : i % 2 === 0 ? '#fb7185' : '#fb923c';
       f.accent = boss ? '#fde047' : '#38bdf8';
+      f.colorway = boss ? 'golden_frost' : i % 2 === 0 ? 'aurora_violet' : 'sunset_ember';
       f.speed = boss ? 165 : 210 + Math.min(70, wave * 8);
       f.aggro = 0.6 + Math.min(0.35, wave * 0.04);
       f.aiCooldown = 0.45 + i * 0.25;
@@ -1472,10 +1476,18 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           st.waveSpawnTimer += dt;
           if (st.waveSpawnTimer > 0.95) {
             st.waveSpawnTimer = 0;
+            if (st.waveOrBout >= 6) {
+              showBanner('FROST CITADEL CLEARED!', 'The final boss is defeated!', '#facc15', 2200);
+              finishMatch(true);
+              return;
+            }
             st.waveOrBout += 1;
             st.enemies = spawnBrawlWave(st.waveOrBout);
             soundEngine.playBell(1);
-            refillPlayerFullLife(`LEVEL ${st.waveOrBout}`, 'Wave Cleared · Full HP Restored!');
+            refillPlayerFullLife(
+              `LEVEL ${st.waveOrBout}`,
+              st.waveOrBout % 3 === 0 ? 'BOSS LEVEL · Full HP Restored!' : 'Wave Cleared · Full HP Restored!'
+            );
           }
         }
 
@@ -1825,6 +1837,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           maxHp: 100,
           label: playerName,
           scale: 1.25,
+          weapon: 'sword',
         });
         if (mode !== 'stickman_run') {
           drawStickmanCharacter(ctx, {
@@ -1833,13 +1846,13 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
             facing: -1,
             pose: 'guard',
             animTime: t + 1,
-            isLofiYeti: false,
-            customStroke: '#fb923c',
-            customAccent: '#fbbf24',
+            isLofiYeti: true,
+            colorwayId: 'sunset_ember',
             hp: 100,
             maxHp: 100,
             label: mode === 'stickman_wrestling' ? 'Baron Basalt' : 'Frost Ninja',
             scale: 1.2,
+            weapon: 'sword',
           });
         }
         ctx.restore();
@@ -1860,13 +1873,13 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           animTime: st.elapsed + e.x * 0.01,
           actionProgress: e.actionDuration > 0 ? 1 - e.actionTimer / e.actionDuration : 0,
           scale: e.isBoss ? 1.24 : 1.08,
-          isLofiYeti: false,
-          customStroke: e.stroke,
-          customAccent: e.accent,
+          isLofiYeti: true,
+          colorwayId: e.colorway || 'classic_lofi',
           hp: e.hp,
           maxHp: e.maxHp,
           label: e.name,
           flashHit: e.flashTimer > 0,
+          weapon: st.mode === 'stickman_run' ? 'blaster' : 'sword',
         });
       }
 
@@ -1891,6 +1904,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         maxHp: p.maxHp,
         label: playerName,
         flashHit: p.flashTimer > 0,
+        weapon: st.mode === 'stickman_run' ? 'blaster' : 'sword',
       });
 
       for (const pr of st.projectiles) {

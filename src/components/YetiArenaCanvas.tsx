@@ -261,7 +261,7 @@ interface KartRacer {
 
 interface ShooterEnemy {
   id: string;
-  kind: 'drone' | 'bullseye' | 'yeti_rival';
+  kind: 'drone' | 'bullseye' | 'yeti_rival' | 'boss_yeti';
   x: number;
   y: number;
   vx: number;
@@ -538,6 +538,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     shooterMaxCombo: 1,
     shooterComboTimer: 0,
     shooterNovaCd: 0,
+    meleeCd: 0,
     shooterEnemies: [] as ShooterEnemy[],
     pendingBursts: [] as { x: number; z: number; color: string; count: number }[],
     pendingRings: [] as { x: number; z: number; color: string; maxScale: number }[],
@@ -730,6 +731,30 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         fireCd: 1.4 + r * 0.6,
         orbitAngle: a,
         colorway: rivalColors[(waveNum + r) % rivalColors.length],
+      });
+    }
+
+    if (waveNum % 3 === 0) {
+      const bossAngle = Math.PI * 0.75;
+      const bossPos = nudgeOutsideObstacles(
+        ARENA_CENTER_X + Math.cos(bossAngle) * 430,
+        ARENA_CENTER_Y + Math.sin(bossAngle) * 350,
+        34,
+        mapId
+      );
+      const bossHp = 18 + waveNum * 3;
+      enemies.push({
+        id: `boss_${waveNum}_${Math.random().toString(36).slice(2, 6)}`,
+        kind: 'boss_yeti',
+        x: bossPos.x,
+        y: bossPos.y,
+        vx: 0,
+        vy: 0,
+        hp: bossHp,
+        maxHp: bossHp,
+        fireCd: 1.2,
+        orbitAngle: bossAngle,
+        colorway: 'golden_frost',
       });
     }
 
@@ -1491,6 +1516,57 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     queueRing(player.x, player.y, trailCol, 2.8);
   }, [queueBurst, queueRing]);
 
+  const triggerMelee = useCallback(() => {
+    if (gameStateRef.current !== 'PLAYING' || gameModeRef.current === 'car_racing') return;
+    if (playModeRef.current === 'tunnel') {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'melee' }));
+        soundEngine.playHit();
+      }
+      return;
+    }
+
+    const s = simRef.current;
+    if (s.meleeCd > 0) return;
+    const player = s.entities.find((e) => e.id === 'player');
+    if (!player || player.eliminated) return;
+    s.meleeCd = 0.55;
+    player.throwPulse = 0.28;
+    player.facingX = player.facingX || 0;
+    player.facingY = player.facingY || -1;
+    const hitX = player.x + player.facingX * 78;
+    const hitY = player.y + player.facingY * 78;
+    let hitCount = 0;
+
+    if (gameModeRef.current === 'shooting') {
+      for (const enemy of s.shooterEnemies) {
+        if (Math.hypot(enemy.x - hitX, enemy.y - hitY) < (enemy.kind === 'boss_yeti' ? 62 : 48)) {
+          enemy.hp -= enemy.kind === 'boss_yeti' ? 2 : 3;
+          hitCount += 1;
+          if (enemy.hp <= 0) {
+            s.shooterElims += 1;
+            player.score += enemy.kind === 'boss_yeti' ? 500 : 100;
+          }
+        }
+      }
+      s.shooterEnemies = s.shooterEnemies.filter((enemy) => enemy.hp > 0);
+    } else {
+      for (const enemy of s.entities) {
+        if (enemy.id !== 'player' && !enemy.eliminated && Math.hypot(enemy.x - hitX, enemy.y - hitY) < 52) {
+          enemy.hp = Math.max(0, enemy.hp - 35);
+          enemy.hurtUntil = Date.now() + 450;
+          enemy.eliminated = enemy.hp === 0;
+          player.score += enemy.eliminated ? 90 : 25;
+          hitCount += 1;
+        }
+      }
+    }
+
+    queueBurst(hitX, hitY, '#facc15', hitCount ? 14 : 6);
+    queueRing(hitX, hitY, '#facc15', 2.2);
+    if (hitCount) flashBanner(`Yeti Sword Strike! ${hitCount} hit${hitCount === 1 ? '' : 's'}`);
+  }, [flashBanner, queueBurst, queueRing]);
+
   const triggerThrowOrFire = useCallback((aimLogicalX?: number, aimLogicalY?: number) => {
     if (gameStateRef.current !== 'PLAYING') return;
     if (gameModeRef.current === 'car_racing') return;
@@ -1734,6 +1810,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         triggerDashOrSpecial();
       } else if (e.key.toLowerCase() === 'j' || e.key === 'Enter') {
         if (gameStateRef.current === 'PLAYING') triggerThrowOrFire();
+      } else if (e.key.toLowerCase() === 'k') {
+        if (!e.repeat) triggerMelee();
       } else if (e.key === '1' || e.key.toLowerCase() === 'e') {
         if (!e.repeat) triggerEmote('wave');
       } else if (e.key === '2' || e.key.toLowerCase() === 'f') {
@@ -1757,7 +1835,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [triggerDashOrSpecial, triggerEmote, triggerThrowOrFire]);
+  }, [triggerDashOrSpecial, triggerEmote, triggerMelee, triggerThrowOrFire]);
 
   // Send Tunnel inputs at 20Hz
   useEffect(() => {
@@ -2194,6 +2272,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       // ---- 1. Advance Solo Simulation by Selected Game Mode ----
       if (gameStateRef.current === 'PLAYING' && playModeRef.current === 'solo') {
         const mapSpec = getMapSpec(mapIdRef.current);
+        s.meleeCd = Math.max(0, s.meleeCd - dt);
         s.shake = Math.max(0, s.shake - dt * 16);
 
         if (gm === 'car_racing') {
@@ -2490,12 +2569,18 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               player.vy *= 0.8;
             }
 
-            const adx = aimLogicalRef.current.x - player.x;
-            const ady = aimLogicalRef.current.y - player.y;
-            const amag = Math.hypot(adx, ady);
-            if (amag > 5) {
-              player.facingX = adx / amag;
-              player.facingY = ady / amag;
+            if (gameModeRef.current === 'shooting' || pointerDownRef.current) {
+              const adx = aimLogicalRef.current.x - player.x;
+              const ady = aimLogicalRef.current.y - player.y;
+              const amag = Math.hypot(adx, ady);
+              if (amag > 5) {
+                player.facingX = adx / amag;
+                player.facingY = ady / amag;
+              }
+            } else if (mag > 0.05) {
+              const directionMag = Math.hypot(ix, iy);
+              player.facingX = ix / directionMag;
+              player.facingY = iy / directionMag;
             }
 
             player.x = Math.max(65, Math.min(W - 65, player.x + player.vx * dt));
@@ -2567,10 +2652,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 const dxP = player.x - en.x;
                 const dyP = player.y - en.y;
                 const distP = Math.hypot(dxP, dyP) || 1;
-                const desiredDist = en.kind === 'yeti_rival' ? 240 : 185;
+                const desiredDist =
+                  en.kind === 'boss_yeti' ? 310 : en.kind === 'yeti_rival' ? 240 : 185;
                 const radialPush = distP > desiredDist ? 1 : distP < desiredDist - 55 ? -0.7 : 0;
-                const strafe = en.kind === 'yeti_rival' ? 0.65 : 0.45;
-                const spd = (en.kind === 'yeti_rival' ? 148 : 118) * mapSpec.speedMult;
+                const strafe = en.kind === 'boss_yeti' ? 0.3 : en.kind === 'yeti_rival' ? 0.65 : 0.45;
+                const spd =
+                  (en.kind === 'boss_yeti' ? 92 : en.kind === 'yeti_rival' ? 148 : 118) *
+                  mapSpec.speedMult;
                 const tx = (dxP / distP) * radialPush - (dyP / distP) * strafe;
                 const ty = (dyP / distP) * radialPush + (dxP / distP) * strafe;
                 en.vx = en.vx * 0.85 + tx * spd * 0.15;
@@ -2583,7 +2671,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
                 en.fireCd -= dt;
                 if (en.fireCd <= 0 && distP < 560) {
-                  en.fireCd = (en.kind === 'yeti_rival' ? 1.85 : 2.5) + Math.random() * 0.8;
+                  en.fireCd =
+                    (en.kind === 'boss_yeti' ? 1.05 : en.kind === 'yeti_rival' ? 1.85 : 2.5) +
+                    Math.random() * 0.8;
                   s.snowballs.push({
                     id: `eb_${now}_${en.id}`,
                     ownerId: en.id,
@@ -2622,12 +2712,21 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                       s.shooterMaxCombo = Math.max(s.shooterMaxCombo, s.shooterCombo);
                       s.shooterComboTimer = 3.6;
 
-                      const basePts = en.kind === 'bullseye' ? 110 : en.kind === 'yeti_rival' ? 95 : 75;
+                      const basePts =
+                        en.kind === 'boss_yeti'
+                          ? 650
+                          : en.kind === 'bullseye'
+                          ? 110
+                          : en.kind === 'yeti_rival'
+                          ? 95
+                          : 75;
                       player.score += basePts * s.shooterCombo;
-                      player.wellDrops += en.kind === 'yeti_rival' ? 2 : 1;
+                      player.wellDrops += en.kind === 'boss_yeti' ? 8 : en.kind === 'yeti_rival' ? 2 : 1;
                       if (en.kind === 'bullseye') player.frostGems += 1;
 
-                      soundEngine.playPickup(en.kind === 'bullseye' ? 'gem' : 'drop');
+                      soundEngine.playPickup(
+                        en.kind === 'bullseye' || en.kind === 'boss_yeti' ? 'gem' : 'drop'
+                      );
                       queueBurst(en.x, en.y, '#fbbf24', 12);
                       queueRing(en.x, en.y, '#fbbf24', 2.4);
 
@@ -3314,8 +3413,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               vy: p.vy,
               hp: p.hp,
               maxHp: p.maxHp || 100,
-              facingX: 0,
-              facingY: 1,
+              facingX: p.facingX || 0,
+              facingY: p.facingY || 1,
               hat:
                 p.id === tunnelPlayerIdRef.current && yetiPropRef.current
                   ? yetiPropRef.current.equipped.hat
@@ -3365,7 +3464,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         const seenActorIds = new Set<string>();
         for (const act of activeActors) {
           seenActorIds.add(act.id);
-          const rigKey = `${act.colorway}|${act.hat}|${act.scarf}|${act.isMe}`;
+          const rigKey = `${act.colorway}|${act.hat}|${act.scarf}|${act.isMe}|${gm}`;
           let rig = yetiRigs.get(act.id);
           if (!rig || rig.root.userData.rigKey !== rigKey) {
             if (rig) actorsGroup.remove(rig.root);
@@ -3374,6 +3473,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               hatId: act.hat,
               scarfId: act.scarf,
               isPlayer: act.isMe,
+              weapon: gm === 'shooting' ? 'blaster' : 'sword',
             });
             rig.root.userData.rigKey = rigKey;
             if (!act.isMe) {
@@ -3403,12 +3503,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           }
 
           const speed = Math.hypot(act.vx, act.vy);
-          const targetYaw =
-            gm === 'shooting' && act.isMe
-              ? Math.atan2(act.facingX, act.facingY)
-              : speed > 8
-              ? Math.atan2(act.vx, act.vy)
-              : rig.root.rotation.y;
+          const targetYaw = Math.atan2(act.facingX, act.facingY);
           let diff = targetYaw - rig.root.rotation.y;
           while (diff > Math.PI) diff -= Math.PI * 2;
           while (diff < -Math.PI) diff += Math.PI * 2;
@@ -3493,12 +3588,14 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           seenEnemyIds.add(en.id);
           let sm = shooterMeshes.get(en.id);
           if (!sm) {
-            if (en.kind === 'yeti_rival') {
+            if (en.kind === 'yeti_rival' || en.kind === 'boss_yeti') {
               sm = buildYetiRig({
                 colorwayId: en.colorway,
                 hatId: 'hat_goggles',
                 scarfId: 'scarf_crimson',
                 isPlayer: false,
+                scale: en.kind === 'boss_yeti' ? 1.45 : 1,
+                weapon: en.kind === 'boss_yeti' ? 'sword' : 'blaster',
               });
               const hpBar = buildHealthBar3D(1.2, 2.35);
               sm.root.add(hpBar.group);

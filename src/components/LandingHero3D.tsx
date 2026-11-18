@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { motion, useScroll, useSpring, useTransform } from 'motion/react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { Play, Users, ArrowRight, Sparkles, Shield, Compass, Car, Crosshair, Snowflake, Swords, Trophy, Flame } from 'lucide-react';
@@ -24,6 +25,255 @@ const GAME_CARD_ART: Record<GameModeId, string> = {
   stickman_run: '/src/assets/images/stickman_run_card.svg',
 };
 
+const GamePreviewCanvas: React.FC<{ mode: GameModeId }> = ({ mode }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const faceRef = useRef<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    const face = new Image();
+    face.src = '/src/assets/images/lofi_yeti_face_1794999269515.jpg';
+    faceRef.current = face;
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let frame = 0;
+    let start = performance.now();
+    let disposed = false;
+
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    const roundedRect = (x: number, y: number, w: number, h: number, r: number) => {
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+    };
+
+    const drawYeti = (x: number, y: number, scale: number, facing: number, accent: string, sword = false) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(facing * scale, scale);
+
+      ctx.fillStyle = 'rgba(2, 8, 23, .48)';
+      ctx.beginPath();
+      ctx.ellipse(0, 8, 24, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#e6f7ff';
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-7, -9);
+      ctx.lineTo(-14, 8);
+      ctx.moveTo(7, -9);
+      ctx.lineTo(14, 8);
+      ctx.moveTo(-8, -29);
+      ctx.lineTo(-18, -12);
+      ctx.moveTo(8, -29);
+      ctx.lineTo(18, -14);
+      ctx.stroke();
+
+      ctx.fillStyle = '#dff4ff';
+      roundedRect(-13, -58, 26, 34, 10);
+      ctx.fill();
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(0, -68, 16, 0, Math.PI * 2);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fill();
+      ctx.stroke();
+
+      if (faceRef.current?.complete) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(0, -68, 14, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(faceRef.current, -15, -83, 30, 30);
+        ctx.restore();
+      }
+
+      if (sword) {
+        ctx.strokeStyle = '#cfefff';
+        ctx.lineWidth = 4;
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.moveTo(17, -16);
+        ctx.lineTo(38, -44);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+      ctx.restore();
+    };
+
+    const drawScene = (now: number) => {
+      if (disposed) return;
+      const t = (now - start) / 1000;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      ctx.clearRect(0, 0, w, h);
+
+      const gradient = ctx.createLinearGradient(0, 0, 0, h);
+      gradient.addColorStop(0, mode === 'stickman_brawl' ? '#35151a' : '#07182d');
+      gradient.addColorStop(1, mode === 'stickman_run' ? '#12395b' : '#10284a');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, w, h);
+
+      if (mode === 'stickman_brawl' || mode === 'stickman_wrestling') {
+        ctx.fillStyle = '#07101f';
+        ctx.fillRect(0, h * 0.72, w, h * 0.28);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, h * 0.72);
+        ctx.lineTo(w, h * 0.72);
+        ctx.stroke();
+        ctx.fillStyle = '#183b5d';
+        ctx.fillRect(w * 0.18, h * 0.53, w * 0.24, 7);
+        ctx.fillRect(w * 0.58, h * 0.44, w * 0.24, 7);
+
+        const leftX = w * (0.32 + Math.sin(t * 1.7) * 0.025);
+        const rightX = w * (0.68 - Math.sin(t * 1.7) * 0.025);
+        drawYeti(leftX, h * 0.72, 1.15, 1, '#38bdf8', true);
+        drawYeti(rightX, h * 0.72, 1.05, -1, '#a78bfa', true);
+
+        const swing = (Math.sin(t * 2.1) + 1) * 0.5;
+        ctx.strokeStyle = `rgba(250, 204, 21, ${0.25 + swing * 0.5})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(w * 0.5, h * 0.58, 18 + swing * 20, 0.2, 2.2);
+        ctx.stroke();
+      } else if (mode === 'stickman_run') {
+        ctx.fillStyle = '#38bdf8';
+        ctx.globalAlpha = 0.15;
+        ctx.fillRect(0, h * 0.45, w, 2);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#112d4a';
+        ctx.fillRect(0, h * 0.78, w, h * 0.22);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(0, h * 0.78, w, 4);
+        const runnerX = w * (0.24 + ((t * 0.12) % 0.52));
+        drawYeti(runnerX, h * 0.78 - Math.abs(Math.sin(t * 5)) * 12, 1.05, 1, '#38bdf8');
+        for (let i = 0; i < 5; i++) {
+          const x = ((i * w * 0.24 - t * 38) % (w + 60) + w + 60) % (w + 60) - 30;
+          ctx.fillStyle = '#67e8f9';
+          ctx.shadowColor = '#22d3ee';
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.moveTo(x, h * 0.34);
+          ctx.lineTo(x - 6, h * 0.42);
+          ctx.lineTo(x + 6, h * 0.42);
+          ctx.closePath();
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      } else if (mode === 'car_racing') {
+        const horizon = h * 0.42;
+        ctx.fillStyle = '#9ca3af';
+        ctx.beginPath();
+        ctx.moveTo(0, horizon);
+        ctx.lineTo(w, horizon);
+        ctx.lineTo(w, h);
+        ctx.lineTo(0, h);
+        ctx.fill();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 16;
+        ctx.beginPath();
+        ctx.moveTo(w * 0.16, h);
+        ctx.quadraticCurveTo(w * 0.5, horizon * 0.8, w * 0.84, h);
+        ctx.stroke();
+        ctx.strokeStyle = '#e0f2fe';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([12, 16]);
+        ctx.beginPath();
+        ctx.moveTo(w * 0.5, h);
+        ctx.quadraticCurveTo(w * 0.5, horizon, w * 0.5, horizon);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const roadOffset = Math.sin(t * 2) * 8;
+        for (let i = 0; i < 3; i++) {
+          const y = h * (0.62 + i * 0.11);
+          ctx.fillStyle = i === 1 ? '#38bdf8' : '#a78bfa';
+          roundedRect(w * (0.48 + roadOffset / 100 + i * 0.08) - 18, y, 36, 18, 5);
+          ctx.fill();
+          ctx.fillStyle = '#e0f2fe';
+          ctx.fillRect(w * (0.48 + roadOffset / 100 + i * 0.08) - 10, y - 7, 20, 7);
+        }
+      } else if (mode === 'shooting') {
+        ctx.strokeStyle = 'rgba(56,189,248,.18)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < w; x += 24) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, h);
+          ctx.stroke();
+        }
+        drawYeti(w * 0.24, h * 0.82, 1.1, 1, '#38bdf8');
+        ctx.strokeStyle = '#67e8f9';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(w * 0.31, h * 0.62);
+        ctx.lineTo(w * 0.31 + ((t * 180) % (w * 0.55)), h * 0.44);
+        ctx.stroke();
+        ctx.fillStyle = '#fb7185';
+        for (let i = 0; i < 3; i++) {
+          const x = w * (0.62 + i * 0.1);
+          const y = h * (0.35 + Math.sin(t * 2 + i) * 0.08);
+          ctx.beginPath();
+          ctx.arc(x, y, 8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.fillStyle = '#93c5fd';
+        ctx.globalAlpha = 0.18;
+        ctx.beginPath();
+        ctx.arc(w * 0.5, h * 0.62, h * 0.32, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(w * 0.5, h * 0.62, h * 0.24 + Math.sin(t * 2) * 4, 0, Math.PI * 2);
+        ctx.stroke();
+        drawYeti(w * 0.5, h * 0.68, 1.2, 1, '#38bdf8');
+        for (let i = 0; i < 6; i++) {
+          const a = t * 0.7 + i * Math.PI / 3;
+          ctx.fillStyle = i % 2 ? '#67e8f9' : '#fbbf24';
+          ctx.beginPath();
+          ctx.arc(w * 0.5 + Math.cos(a) * h * 0.26, h * 0.62 + Math.sin(a) * h * 0.16, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      frame = requestAnimationFrame(drawScene);
+    };
+
+    resize();
+    frame = requestAnimationFrame(drawScene);
+    window.addEventListener('resize', resize);
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', resize);
+    };
+  }, [mode]);
+
+  return <canvas ref={canvasRef} className="h-40 w-full" aria-label={`Animated ${mode} gameplay preview`} />;
+};
+
 export const LandingHero3D: React.FC<LandingHero3DProps> = ({
   yeti,
   onLaunchGame,
@@ -32,7 +282,14 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
   onOpenMyYeti,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const pageRef = useRef<HTMLDivElement | null>(null);
   const [webglUnavailable, setWebglUnavailable] = useState(false);
+  const { scrollYProgress } = useScroll({ target: pageRef, offset: ['start start', 'end end'] });
+  const smoothProgress = useSpring(scrollYProgress, { stiffness: 90, damping: 24 });
+  const heroY = useTransform(smoothProgress, [0, 0.45], [0, -110]);
+  const heroScale = useTransform(smoothProgress, [0, 0.45], [1, 1.08]);
+  const heroOpacity = useTransform(smoothProgress, [0, 0.32], [1, 0.25]);
+  const selectorOpacity = useTransform(smoothProgress, [0.05, 0.2], [0, 1]);
 
   useEffect(() => {
     const container = mountRef.current;
@@ -303,11 +560,12 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
   };
 
   return (
-    <div className="space-y-16 pb-8">
+    <motion.div ref={pageRef} className="space-y-16 pb-8">
       {/* FULL-BLEED 3D HERO SECTION */}
       <section className="relative overflow-hidden min-h-[590px] lg:min-h-[650px] flex items-center border-b border-slate-800/80">
-        <div
+        <motion.div
           ref={mountRef}
+          style={{ y: heroY, scale: heroScale }}
           className="absolute inset-0 w-full h-full pointer-events-none"
           aria-hidden="true"
         />
@@ -330,18 +588,26 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
           aria-hidden="true"
         />
 
-        <div className="relative z-10 mx-auto w-full max-w-[1200px] px-4 sm:px-6 pt-24 pb-16">
+        <motion.div
+          style={{ y: heroY, opacity: heroOpacity }}
+          className="relative z-10 mx-auto w-full max-w-[1200px] px-4 sm:px-6 pt-24 pb-16"
+        >
           <div className="max-w-xl space-y-5">
-            <p className="text-xs font-semibold tracking-wider text-sky-400">
-              Lofi the Yeti · 3D Arena &amp; 2D Stickman Multi-Game Arcade on Sui
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-sky-300">
+              Lofi&apos;s frozen arcade
             </p>
 
-            <h1 className="title-3d-game text-5xl sm:text-6xl lg:text-[66px] leading-[1.02] text-balance">
+            <motion.h1
+              initial={{ opacity: 0, y: 28, filter: 'blur(10px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+              className="title-3d-game text-5xl sm:text-6xl lg:text-[66px] leading-[1.02] text-balance"
+            >
               Yeti Flurry Rush
-            </h1>
+            </motion.h1>
 
-            <p className="text-base sm:text-lg leading-relaxed text-slate-200 max-w-lg">
-              One Lofi Arcade, 6 playable games: jump into 2D Stickman Yeti Wrestling &amp; Frost Brawl as Lofi the Yeti, or go full-screen in 3D Survival, Beach-Buggy Racing, and Frost Fire Shooter.
+            <p className="max-w-sm text-lg font-medium leading-snug text-slate-100 sm:text-xl">
+              Race. Brawl. Survive the storm.
             </p>
 
             <div className="flex flex-wrap items-center gap-4 pt-2">
@@ -364,10 +630,12 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
               </button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-2 text-xs text-slate-300 tabular-nums">
-              <span>6 Arcade Games (3D + 2D)</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-2 text-xs text-slate-300 tabular-nums">
+              <span>6 games</span>
               <span aria-hidden="true">·</span>
-              <span>Lofi Stickman Figure &amp; Wrestling</span>
+              <span>3 frozen worlds</span>
+              <span aria-hidden="true">·</span>
+              <span>Live rooms</span>
               <span aria-hidden="true">·</span>
               <span>Live Mini-Map &amp; Life Bars</span>
               <span aria-hidden="true">·</span>
@@ -389,10 +657,22 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </motion.div>
+
       </section>
 
-      {/* BELOW THE FOLD: GROUP OF GAMES (2D STICKMAN SUITE + 3D ARENA SUITE) */}
+      <motion.div
+        className="mx-auto -mt-8 w-full max-w-[1200px] px-4 sm:px-6"
+        style={{ opacity: selectorOpacity }}
+      >
+        <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.28em] text-sky-300">
+          <span className="h-px flex-1 bg-gradient-to-r from-transparent to-sky-400/70" />
+          Choose your chaos
+          <span className="h-px flex-1 bg-gradient-to-l from-transparent to-sky-400/70" />
+        </div>
+      </motion.div>
+
+      {/* BELOW THE FOLD: VISUAL GAME SELECTOR */}
       <section className="mx-auto max-w-[1200px] px-4 sm:px-6 space-y-14">
         {/* SECTION 01: 2D STICKMAN & WRESTLING GAMES WITH LOFI THE YETI */}
         <div className="space-y-6">
@@ -402,7 +682,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                 01. 2D Stickman Arcade · Featuring Lofi the Yeti Figure
               </p>
               <h2 className="font-display text-3xl text-white mt-1">
-                Stickman Wrestling, Frost Brawl &amp; Glacier Run
+                Enter the 2D fight
               </h2>
             </div>
             <button
@@ -424,12 +704,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                   className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-800 bg-[#0D1C30] space-y-5 transition-transform hover:-translate-y-1 hover:border-amber-400/60"
                 >
                   <div className="relative h-40 overflow-hidden">
-                    <img
-                      src={GAME_CARD_ART[gm.id]}
-                      alt={`${gm.name} 2D stickman artwork`}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
+                    <GamePreviewCanvas mode={gm.id} />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0D1C30] via-[#0D1C30]/35 to-transparent" />
                     <div className="absolute inset-x-5 bottom-4 flex items-center justify-between gap-2">
                       <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
@@ -442,8 +717,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                   <div className="space-y-2 px-6">
                     <span className="text-xs font-semibold text-sky-400">{gm.subtitle}</span>
                     <h3 className="font-display text-xl text-white">{gm.name}</h3>
-                    <p className="text-sm leading-relaxed text-slate-400">{gm.description}</p>
-                    <p className="text-xs text-slate-300 pt-1">{gm.controlsSummary}</p>
+                    <p className="text-xs uppercase tracking-wider text-slate-300 pt-1">Fight · climb · conquer</p>
                   </div>
 
                   <button
@@ -468,7 +742,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                 02. 3D Arena Games · Pick Game Type Then Choose Map
               </p>
               <h2 className="font-display text-3xl text-white mt-1">
-                Arcade Survival, Snow Drifter Racing &amp; Frost Fire
+                Enter the 3D arena
               </h2>
             </div>
             <button
@@ -490,12 +764,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                   className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-800 bg-[#0D1C30] space-y-5 transition-transform hover:-translate-y-1 hover:border-sky-500/60"
                 >
                   <div className="relative h-40 overflow-hidden">
-                    <img
-                      src={GAME_CARD_ART[gm.id]}
-                      alt={`${gm.name} 3D game artwork`}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
+                    <GamePreviewCanvas mode={gm.id} />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0D1C30] via-[#0D1C30]/35 to-transparent" />
                     <div className="absolute inset-x-5 bottom-4 flex items-center justify-between gap-2">
                       <span className="text-[11px] font-bold uppercase tracking-wider text-sky-300">
@@ -508,8 +777,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                   <div className="space-y-2 px-6">
                     <span className="text-xs font-semibold text-sky-400">{gm.subtitle}</span>
                     <h3 className="font-display text-xl text-white">{gm.name}</h3>
-                    <p className="text-sm leading-relaxed text-slate-400">{gm.description}</p>
-                    <p className="text-xs text-slate-300 pt-1">{gm.controlsSummary}</p>
+                    <p className="text-xs uppercase tracking-wider text-slate-300 pt-1">Survive · drift · blast</p>
                   </div>
 
                   <button
@@ -536,7 +804,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                     <Compass className="h-3.5 w-3.5" style={{ color: map.accentHex }} />
                     <h4 className="font-display text-base text-white">{map.name}</h4>
                   </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">{map.description}</p>
+                  <p className="text-xs text-slate-400 leading-relaxed">{map.subtitle}</p>
                 </div>
               </div>
             ))}
@@ -544,7 +812,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
         </div>
 
         {/* SECTION 03: LOFI STICKMAN & 3D ROSTER + SUI ARCADE PROGRESSION */}
-        <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] items-center">
+        <div className="hidden grid gap-10 lg:grid-cols-[1.05fr_0.95fr] items-center">
           <div className="space-y-6">
             <div className="space-y-2">
               <p className="text-xs font-semibold text-sky-400">
@@ -669,6 +937,6 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
           </div>
         </div>
       </section>
-    </div>
+    </motion.div>
   );
 };

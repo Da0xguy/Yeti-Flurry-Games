@@ -37,6 +37,7 @@ export interface StickmanDrawOptions {
   shielded?: boolean;
   raged?: boolean;
   finisherReady?: boolean;
+  weapon?: 'sword' | 'blaster';
   hp: number;
   maxHp: number;
   label?: string;
@@ -340,6 +341,7 @@ export function drawStickmanCharacter(
     shielded = false,
     raged = false,
     finisherReady = false,
+    weapon,
     hp,
     maxHp,
     label,
@@ -659,6 +661,28 @@ export function drawStickmanCharacter(
   // Front normal stickman limbs
   drawNormalStickLimb(hipX, hipY, rightLeg.mx, rightLeg.my, rightLeg.ex, rightLeg.ey, 5.5, bodyStroke, accentColor);
   drawNormalStickLimb(shoulderX, shoulderY, rightArm.mx, rightArm.my, rightArm.ex, rightArm.ey, 5, bodyStroke, accentColor);
+
+  if (weapon) {
+    ctx.save();
+    ctx.translate(rightArm.ex, rightArm.ey);
+    ctx.rotate(weapon === 'sword' ? (pose === 'heavy' || pose === 'finisher' ? -0.75 : -0.25) : -0.45);
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, 18);
+    ctx.stroke();
+    ctx.strokeStyle = weapon === 'sword' ? '#e0f2fe' : '#38bdf8';
+    ctx.lineWidth = weapon === 'sword' ? 7 : 9;
+    ctx.shadowColor = weapon === 'sword' ? '#38bdf8' : '#0ea5e9';
+    ctx.shadowBlur = 9;
+    ctx.beginPath();
+    ctx.moveTo(0, -4);
+    ctx.lineTo(0, weapon === 'sword' ? -48 : -34);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
 
   // Strike arc effect
   if ((pose === 'jab' || pose === 'heavy' || pose === 'finisher') && actionProgress > 0.15 && actionProgress < 0.85) {
