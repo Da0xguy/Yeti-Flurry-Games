@@ -35,7 +35,7 @@ export const GAME_MODES: GameModeSpec[] = [
     description:
       'Pilot a custom 3D Lofi Snow-Kart around the grand perimeter circuit, hit boost pads, drift icy corners, and beat 3 rival Yeti racers to the checkered arch.',
     controlsSummary: 'W / Up Throttle · A / D Steer · S / Down Brake · Space Nitro Boost',
-    supportsTunnel: false,
+    supportsTunnel: true,
   },
   {
     id: 'shooting',

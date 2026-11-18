@@ -1,5 +1,46 @@
 {
-  "yetis": {},
+  "yetis": {
+    "0x753b9c200b6c10a843fab895893529249e3f3f965f0c18e2b9bb42c297467ec8": {
+      "objectId": "0x76c7175be0ef2f71f9370381f50c873feec1bbf4cd132258d285c8c24ecc2a2a",
+      "ownerAddress": "0x753b9c200b6c10a843fab895893529249e3f3f965f0c18e2b9bb42c297467ec8",
+      "authMethod": "zkLogin (Google)",
+      "name": "Lofi Frosty",
+      "stage": "Frost Cub",
+      "level": 1,
+      "xp": 0,
+      "frostGems": 75,
+      "wellDropsContributed": 0,
+      "highScore": 0,
+      "runsCompleted": 0,
+      "version": 1,
+      "colorway": "midnight_cyan",
+      "mapsPlayed": [],
+      "totalHits": 0,
+      "cratesSmashed": 0,
+      "tasksCompleted": 0,
+      "claimedQuests": [],
+      "equipped": {
+        "hat": "hat_goggles",
+        "scarf": "scarf_lofi",
+        "trail": "trail_powder"
+      },
+      "unlockedCosmetics": [
+        "hat_goggles",
+        "scarf_lofi",
+        "trail_powder"
+      ],
+      "recentPtbs": [
+        {
+          "digest": "0x2acd6b69359e799fad08d51dfa817c4deb27242c51f37596585014900a492da2",
+          "action": "yeti_core::mint_and_keep",
+          "gasSponsored": true,
+          "gasMist": 0,
+          "timestamp": "2026-11-18T09:49:11.332Z",
+          "objectId": "0x76c7175be0ef2f71f9370381f50c873feec1bbf4cd132258d285c8c24ecc2a2a"
+        }
+      ]
+    }
+  },
   "leaderboard": [
     {
       "id": "run_seed_1",
@@ -45,6 +86,6 @@
     "totalDropsCollected": 2744,
     "dropsPerWellMilestone": 1000,
     "wellsFunded": 2,
-    "activeContributors": 148
+    "activeContributors": 149
   }
 }

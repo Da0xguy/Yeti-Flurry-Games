@@ -943,7 +943,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     tunnelSnapshotRef.current = null;
   }, []);
 
-  const connectTunnel = useCallback(() => {
+  const connectTunnel = useCallback((mode: GameModeId = 'survival') => {
     disconnectTunnel();
     const pid = `p_${Math.random().toString(36).slice(2, 8)}`;
     tunnelPlayerIdRef.current = pid;
@@ -952,8 +952,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const params = new URLSearchParams({
-      room: `tunnel-${mapId}`,
+      room: `${mode === 'car_racing' ? 'tunnel-race' : 'tunnel'}-${mapId}`,
       map: mapId,
+      mode,
       playerId: pid,
       name: yeti?.name || playerName || 'Lofi Explorer',
       hat: yeti?.equipped.hat || 'hat_goggles',
@@ -971,6 +972,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         const data = JSON.parse(evt.data);
         if (data.type === 'tunnel:state' && data.snapshot) {
           const snap: TunnelRoomSnapshot = data.snapshot;
+          if (snap.mode === 'car_racing') gameModeRef.current = 'car_racing';
           tunnelSnapshotRef.current = snap;
           setTunnelPlayersCount(snap.players.filter((p) => !p.isBot).length);
 
@@ -1009,6 +1011,82 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
           const me = snap.players.find((p) => p.id === tunnelPlayerIdRef.current);
           if (me) {
+            if (snap.mode === 'car_racing') {
+              const s = simRef.current;
+              s.karts = snap.players.map((p) => ({
+                id: p.id,
+                name: p.name,
+                isBot: p.isBot,
+                x: p.x,
+                y: p.y,
+                vx: p.vx,
+                vy: p.vy,
+                angle: p.angle || 0,
+                speed: p.speed || 0,
+                steerInput: 0,
+                nitro: p.nitro || 0,
+                boostUntil: p.boostUntil || 0,
+                lap: p.lap || 1,
+                nextWp: p.nextWp || 1,
+                totalProgress: p.totalProgress || 0,
+                score: p.score,
+                colorway: p.colorway,
+                hat: p.hat,
+                scarf: p.scarf,
+                finished: p.finished || false,
+                finishTime: p.finishTime || 0,
+                dropsCollected: p.dropsCollected || 0,
+                gemsCollected: p.gemsCollected || 0,
+                aiSpeedBias: 1,
+                aiLaneOffset: 0,
+              }));
+              const playerKart = s.karts.find((k) => k.id === tunnelPlayerIdRef.current);
+              if (playerKart) {
+                const sorted = [...s.karts].sort((a, b) => b.totalProgress - a.totalProgress);
+                setHud((prev) => ({
+                  ...prev,
+                  score: playerKart.score,
+                  lap: Math.min(3, playerKart.lap),
+                  racePos: sorted.findIndex((k) => k.id === playerKart.id) + 1,
+                  speedKmh: Math.round(Math.abs(playerKart.speed) * 0.36),
+                  nitroPct: Math.round(playerKart.nitro),
+                  boostActive: Date.now() < playerKart.boostUntil,
+                  countdown: 0,
+                }));
+              }
+              if (me.finished && gameStateRef.current === 'PLAYING') {
+                const sorted = [...snap.players].sort((a, b) => {
+                  if (a.finished && b.finished) return (a.finishTime || 0) - (b.finishTime || 0);
+                  if (a.finished) return -1;
+                  if (b.finished) return 1;
+                  return (b.totalProgress || 0) - (a.totalProgress || 0);
+                });
+                const rank = sorted.findIndex((p) => p.id === me.id) + 1;
+                const runSum: RunSummary = {
+                  score: me.score + (rank === 1 ? 420 : rank === 2 ? 260 : 60),
+                  wellDrops: (me.dropsCollected || 0) + (rank === 1 ? 10 : rank === 2 ? 7 : 4),
+                  frostGems: (me.gemsCollected || 0) + (rank === 1 ? 14 : rank === 2 ? 9 : 5),
+                  knockouts: 0,
+                  survivalSeconds: Math.max(1, Math.round(me.finishTime || 1)),
+                  mode: 'tunnel',
+                  gameMode: 'car_racing',
+                  mapId: snap.mapId,
+                  hitsLanded: 0,
+                  cratesSmashed: Math.max(0, (me.lap || 1) - 1),
+                  wellBanks: 1,
+                  tasksDone: 0,
+                  rank,
+                  totalContenders: snap.players.length,
+                  xpEarned: Math.round(me.score / 5) + 30,
+                  extraStatLabel: 'Finish / Laps',
+                  extraStatValue: `#${rank} · 3/3 Laps`,
+                };
+                setSummary(runSum);
+                setClaimStatus('idle');
+                setGameState('GAME_OVER');
+                soundEngine.playRoundEnd(rank <= 2);
+              }
+            }
             const distWell = Math.hypot(me.x - ARENA_CENTER_X, me.y - ARENA_CENTER_Y);
             const blessingLeft =
               snap.blessingUntil && snap.blessingUntil > now
@@ -1032,7 +1110,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               ritualReady: blessingLeft <= 0,
             }));
 
-            if (me.eliminated && gameStateRef.current === 'PLAYING') {
+            if (snap.mode !== 'car_racing' && me.eliminated && gameStateRef.current === 'PLAYING') {
               const survived = Math.max(5, Math.round((Date.now() - tunnelStartTimeRef.current) / 1000));
               const sorted = [...snap.players].sort((a, b) => b.score - a.score);
               const rank = sorted.findIndex((p) => p.id === me.id) + 1;
@@ -1400,7 +1478,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   const startGame = useCallback(
     (selectedMode: PlayMode, gmOverride?: GameModeId) => {
       const gm = gmOverride || gameModeRef.current;
-      const effectiveMode: PlayMode = gm === 'survival' ? selectedMode : 'solo';
+      const effectiveMode: PlayMode =
+        selectedMode === 'tunnel' && (gm === 'survival' || gm === 'car_racing') ? 'tunnel' : 'solo';
       setPlayMode(effectiveMode);
       playModeRef.current = effectiveMode;
       setSummary(null);
@@ -1409,7 +1488,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         disconnectTunnel();
         initSoloMatch(gm);
       } else {
-        connectTunnel();
+        connectTunnel(gm);
       }
       setGameState('PLAYING');
       gameStateRef.current = 'PLAYING';
@@ -1484,7 +1563,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       if (k['s'] || k['arrowdown']) dy += 1;
       if (k['a'] || k['arrowleft']) dx -= 1;
       if (k['d'] || k['arrowright']) dx += 1;
-      wsRef.current.send(JSON.stringify({ type: 'input', dx, dy }));
+      if (gameModeRef.current === 'car_racing') {
+        wsRef.current.send(JSON.stringify({ type: 'input', steer: dx, throttle: -dy }));
+      } else {
+        wsRef.current.send(JSON.stringify({ type: 'input', dx, dy }));
+      }
     }, 50);
     return () => clearInterval(timer);
   }, [playMode, gameState]);
@@ -2745,7 +2828,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
       // ---- 2. Sync 3D Scene Objects with Current State ----
       const tunnelSnap =
-        gm === 'survival' && playModeRef.current === 'tunnel' ? tunnelSnapshotRef.current : null;
+        (gm === 'survival' || gm === 'car_racing') && playModeRef.current === 'tunnel'
+          ? tunnelSnapshotRef.current
+          : null;
       const ringRadiusWorld = (tunnelSnap ? tunnelSnap.ringRadius : s.ringRadius) * WORLD_SCALE;
       const myPlayerActor = tunnelSnap
         ? tunnelSnap.players.find((p) => p.id === tunnelPlayerIdRef.current)
@@ -3713,7 +3798,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                       {activeGame.supportsTunnel && (
                         <button
                           type="button"
-                          onClick={() => startGame('tunnel', 'survival')}
+                          onClick={() => startGame('tunnel', selectedGameMode)}
                           className="inline-flex items-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2.5 text-sm font-semibold text-sky-200 hover:bg-sky-500/25 transition-colors whitespace-nowrap shrink-0"
                         >
                           <Users className="h-4 w-4" />

@@ -31,6 +31,7 @@ import {
   CAREER_QUESTS,
   WELL_RITUAL_RADIUS,
   getMapObstacles,
+  getRaceTrackWaypoints,
   getMapSpec,
   resolveArenaObstacleCollision,
 } from './src/data/gameCatalog';
@@ -190,6 +191,7 @@ function triggerServerWellBlessing(durationMs = 15000, bonusDrops = 25, permDrop
 interface TunnelRoom {
   roomId: string;
   mapId: MapId;
+  mode: GameModeId;
   tick: number;
   ringRadius: number;
   timeLeft: number;
@@ -203,6 +205,19 @@ interface TunnelRoom {
       facingX: number;
       facingY: number;
       gatherAtWellUntil?: number;
+      angle?: number;
+      speed?: number;
+      lap?: number;
+      nextWp?: number;
+      totalProgress?: number;
+      nitro?: number;
+      finished?: boolean;
+      finishTime?: number;
+      dropsCollected?: number;
+      gemsCollected?: number;
+      aiSpeedBias?: number;
+      aiLaneOffset?: number;
+      boostUntilRace?: number;
     }
   >;
   pickups: TunnelPickupSnapshot[];
@@ -248,10 +263,11 @@ function spawnCrate(idPrefix: string): TunnelCrateSnapshot {
   };
 }
 
-function createTunnelRoom(roomId: string, mapId: MapId): TunnelRoom {
+function createTunnelRoom(roomId: string, mapId: MapId, mode: GameModeId = 'survival'): TunnelRoom {
   const room: TunnelRoom = {
     roomId,
     mapId,
+    mode,
     tick: 0,
     ringRadius: ARENA_INITIAL_RING_RADIUS,
     timeLeft: 75,
@@ -269,11 +285,16 @@ function createTunnelRoom(roomId: string, mapId: MapId): TunnelRoom {
 
   BOT_CONFIGS.forEach((bot, idx) => {
     const angle = (idx / 3) * Math.PI * 2;
+    const raceStart = mode === 'car_racing' ? getRaceTrackWaypoints(mapId)[0] : null;
+    const raceNext = mode === 'car_racing' ? getRaceTrackWaypoints(mapId)[1] : null;
+    const raceAngle = raceStart && raceNext
+      ? Math.atan2(raceNext.y - raceStart.y, raceNext.x - raceStart.x)
+      : 0;
     room.players.set(`bot_${idx}`, {
       id: `bot_${idx}`,
       name: bot.name,
-      x: ARENA_CENTER_X + Math.cos(angle) * 210,
-      y: ARENA_CENTER_Y + Math.sin(angle) * 165,
+      x: raceStart ? raceStart.x - Math.cos(raceAngle) * (18 + idx * 38) : ARENA_CENTER_X + Math.cos(angle) * 210,
+      y: raceStart ? raceStart.y - Math.sin(raceAngle) * (18 + idx * 38) : ARENA_CENTER_Y + Math.sin(angle) * 165,
       vx: 0,
       vy: 0,
       hp: 3,
@@ -296,6 +317,19 @@ function createTunnelRoom(roomId: string, mapId: MapId): TunnelRoom {
       throwCd: 1.5,
       facingX: 1,
       facingY: 0,
+      angle: raceAngle,
+      speed: 0,
+      lap: 1,
+      nextWp: 1,
+      totalProgress: 0,
+      nitro: 100,
+      finished: false,
+      finishTime: 0,
+      dropsCollected: 0,
+      gemsCollected: 0,
+      aiSpeedBias: 0.96 - idx * 0.05,
+      aiLaneOffset: (idx % 2 ? -1 : 1) * (32 + idx * 8),
+      boostUntilRace: 0,
     });
   });
 
@@ -306,7 +340,88 @@ const tunnelRooms = new Map<string, TunnelRoom>();
 (['glacier_well', 'volcanic_springs', 'aurora_summit'] as MapId[]).forEach((mapId) => {
   const roomId = `tunnel-${mapId}`;
   tunnelRooms.set(roomId, createTunnelRoom(roomId, mapId));
+  const raceRoomId = `tunnel-race-${mapId}`;
+  tunnelRooms.set(raceRoomId, createTunnelRoom(raceRoomId, mapId, 'car_racing'));
 });
+
+function stepRaceRoom(room: TunnelRoom, dt: number): void {
+  room.tick += 1;
+  if (room.timeLeft > 0) room.timeLeft = Math.max(0, room.timeLeft - dt);
+  const wps = getRaceTrackWaypoints(room.mapId);
+  const mapSpec = getMapSpec(room.mapId);
+
+  for (const p of room.players.values()) {
+    if (p.finished) continue;
+    let throttle = p.isBot ? 1 : p.inputY;
+    let steer = p.isBot ? 0 : p.inputX;
+
+    if (p.isBot) {
+      const wp = wps[p.nextWp ?? 1];
+      const laneOffset = p.aiLaneOffset || 0;
+      const targetX = wp.x + laneOffset * Math.cos(p.nextWp ?? 1);
+      const targetY = wp.y + laneOffset * Math.sin(p.nextWp ?? 1);
+      const desired = Math.atan2(targetY - p.y, targetX - p.x);
+      let diff = desired - (p.angle || 0);
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      steer = THREEClamp(diff * 2.1, -1, 1);
+    }
+
+    const boosting = (p.boostUntilRace || 0) > Date.now();
+    const maxSpeed = (p.isBot ? 360 * (p.aiSpeedBias || 0.92) : 385) * mapSpec.speedMult * (boosting ? 1.38 : 1);
+    p.speed = THREEClamp((p.speed || 0) + throttle * (boosting ? 720 : 460) * mapSpec.speedMult * dt, -140, maxSpeed);
+    p.speed = Math.abs(p.speed) < 2 ? 0 : p.speed;
+    p.angle = (p.angle || 0) + steer * 2.55 * THREEClamp(Math.abs(p.speed) / 90, 0.25, 1) * dt;
+    p.vx = Math.cos(p.angle) * p.speed;
+    p.vy = Math.sin(p.angle) * p.speed;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    const dxC = p.x - ARENA_CENTER_X;
+    const dyC = p.y - ARENA_CENTER_Y;
+    const distC = Math.hypot(dxC, dyC);
+    if (distC > 555) {
+      p.x = ARENA_CENTER_X + (dxC / distC) * 555;
+      p.y = ARENA_CENTER_Y + (dyC / distC) * 555;
+      p.speed *= 0.88;
+    }
+
+    const resolved = resolveArenaObstacleCollision(p.x, p.y, p.vx, p.vy, 20, room.mapId);
+    p.x = resolved.x;
+    p.y = resolved.y;
+    p.vx = resolved.vx;
+    p.vy = resolved.vy;
+
+    let nextWp = p.nextWp ?? 1;
+    const wp = wps[nextWp];
+    if (Math.hypot(p.x - wp.x, p.y - wp.y) < 118) {
+      if (wp.hasBoostPad && (p.boostUntilRace || 0) <= Date.now()) {
+        p.boostUntilRace = Date.now() + 1250;
+        p.nitro = Math.min(100, (p.nitro || 0) + 25);
+      }
+      p.nextWp = (nextWp + 1) % wps.length;
+      p.score += 35;
+      p.dropsCollected = (p.dropsCollected || 0) + 1;
+      nextWp = p.nextWp;
+      if (nextWp === 1 && (p.totalProgress || 0) > 400) {
+        p.lap = (p.lap || 1) + 1;
+        if (p.lap > 3) {
+          p.finished = true;
+          p.finishTime = 90 - room.timeLeft;
+          p.gemsCollected = (p.gemsCollected || 0) + 6;
+        }
+      }
+    }
+
+    const target = wps[p.nextWp ?? 0];
+    const distNext = Math.hypot(p.x - target.x, p.y - target.y);
+    p.totalProgress = ((p.lap || 1) - 1) * 1000 + (p.nextWp ?? 0) * 110 - distNext * 0.15;
+  }
+}
+
+function THREEClamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
 
 function stepRoom(room: TunnelRoom, dt: number): void {
   const now = Date.now();
@@ -621,6 +736,7 @@ function broadcastRoom(room: TunnelRoom): void {
   const snapshot: TunnelRoomSnapshot = {
     roomId: room.roomId,
     mapId: room.mapId,
+    mode: room.mode,
     tick: room.tick,
     ringRadius: Math.round(room.ringRadius),
     timeLeft: Math.ceil(room.timeLeft),
@@ -645,6 +761,16 @@ function broadcastRoom(room: TunnelRoom): void {
       eliminated: p.eliminated,
       emote: p.emote || 'none',
       emoteUntil: p.emoteUntil || 0,
+      angle: p.angle,
+      speed: p.speed,
+      lap: p.lap,
+      nextWp: p.nextWp,
+      totalProgress: p.totalProgress,
+      nitro: p.nitro,
+      finished: p.finished,
+      finishTime: p.finishTime,
+      dropsCollected: p.dropsCollected,
+      gemsCollected: p.gemsCollected,
     })),
     pickups: room.pickups,
     crates: room.crates,
@@ -677,7 +803,8 @@ function broadcastRoom(room: TunnelRoom): void {
 setInterval(() => {
   for (const room of tunnelRooms.values()) {
     if (room.clients.size > 0) {
-      stepRoom(room, 0.05);
+      if (room.mode === 'car_racing') stepRaceRoom(room, 0.05);
+      else stepRoom(room, 0.05);
       broadcastRoom(room);
     }
   }
@@ -699,7 +826,8 @@ async function startServer() {
     const mapId: MapId = ['glacier_well', 'volcanic_springs', 'aurora_summit'].includes(mapParam)
       ? mapParam
       : 'glacier_well';
-    const roomId = url.searchParams.get('room') || `tunnel-${mapId}`;
+    const requestedMode = url.searchParams.get('mode') === 'car_racing' ? 'car_racing' : 'survival';
+    const roomId = url.searchParams.get('room') || `${requestedMode === 'car_racing' ? 'tunnel-race' : 'tunnel'}-${mapId}`;
     const playerId = url.searchParams.get('playerId') || `p_${crypto.randomBytes(4).toString('hex')}`;
     const playerName = (url.searchParams.get('name') || 'Lofi Explorer').slice(0, 20);
     const hat = url.searchParams.get('hat') || 'hat_goggles';
@@ -708,17 +836,21 @@ async function startServer() {
 
     let room = tunnelRooms.get(roomId);
     if (!room) {
-      room = createTunnelRoom(roomId, mapId);
+      room = createTunnelRoom(roomId, mapId, requestedMode);
       tunnelRooms.set(roomId, room);
     }
 
     room.clients.set(playerId, ws);
     if (!room.players.has(playerId)) {
+      const raceWaypoints = requestedMode === 'car_racing' ? getRaceTrackWaypoints(mapId) : null;
+      const raceAngle = raceWaypoints
+        ? Math.atan2(raceWaypoints[1].y - raceWaypoints[0].y, raceWaypoints[1].x - raceWaypoints[0].x)
+        : 0;
       room.players.set(playerId, {
         id: playerId,
         name: playerName,
-        x: ARENA_W / 2,
-        y: ARENA_H / 2 + 85,
+        x: raceWaypoints ? raceWaypoints[0].x - Math.cos(raceAngle) * 55 : ARENA_W / 2,
+        y: raceWaypoints ? raceWaypoints[0].y - Math.sin(raceAngle) * 55 : ARENA_H / 2 + 85,
         vx: 0,
         vy: 0,
         hp: 3,
@@ -741,6 +873,19 @@ async function startServer() {
         throwCd: 0,
         facingX: 0,
         facingY: -1,
+        angle: raceAngle,
+        speed: 0,
+        lap: 1,
+        nextWp: 1,
+        totalProgress: 0,
+        nitro: 100,
+        finished: false,
+        finishTime: 0,
+        dropsCollected: 0,
+        gemsCollected: 0,
+        aiSpeedBias: 1,
+        aiLaneOffset: -22,
+        boostUntilRace: 0,
       });
     }
 
@@ -756,7 +901,18 @@ async function startServer() {
         if (msg.type === 'input') {
           p.inputX = Math.max(-1, Math.min(1, Number(msg.dx) || 0));
           p.inputY = Math.max(-1, Math.min(1, Number(msg.dy) || 0));
+          if (room.mode === 'car_racing') {
+            p.inputX = Math.max(-1, Math.min(1, Number(msg.steer ?? msg.dx) || 0));
+            p.inputY = Math.max(-1, Math.min(1, Number(msg.throttle ?? -msg.dy) || 0));
+          }
         } else if (msg.type === 'dash' && p.dashCd <= 0 && !p.eliminated) {
+          if (room.mode === 'car_racing') {
+            if ((p.nitro || 0) >= 25) {
+              p.nitro = (p.nitro || 0) - 25;
+              p.boostUntilRace = Date.now() + 1150;
+            }
+            return;
+          }
           const dirX = Math.abs(p.inputX) > 0.1 || Math.abs(p.inputY) > 0.1 ? p.inputX : p.facingX;
           const dirY = Math.abs(p.inputX) > 0.1 || Math.abs(p.inputY) > 0.1 ? p.inputY : p.facingY;
           const mag = Math.hypot(dirX, dirY) || 1;

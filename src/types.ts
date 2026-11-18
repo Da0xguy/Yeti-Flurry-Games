@@ -191,6 +191,16 @@ export interface TunnelPlayerSnapshot {
   eliminated: boolean;
   emote?: YetiEmoteKind;
   emoteUntil?: number;
+  angle?: number;
+  speed?: number;
+  lap?: number;
+  nextWp?: number;
+  totalProgress?: number;
+  nitro?: number;
+  finished?: boolean;
+  finishTime?: number;
+  dropsCollected?: number;
+  gemsCollected?: number;
 }
 
 export interface TunnelPickupSnapshot {
@@ -227,6 +237,7 @@ export interface TunnelBeaconSnapshot {
 export interface TunnelRoomSnapshot {
   roomId: string;
   mapId: MapId;
+  mode?: GameModeId;
   tick: number;
   ringRadius: number;
   timeLeft: number;
