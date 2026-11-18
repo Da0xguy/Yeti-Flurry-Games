@@ -418,6 +418,8 @@ export function buildArcticEnvironment(
 ): ArenaEnvironmentHandles {
   const group = new THREE.Group();
 
+  const isRacing = gameMode === 'car_racing';
+
   const skyColorHex =
     mapId === 'volcanic_springs'
       ? '#160b10'
@@ -425,49 +427,94 @@ export function buildArcticEnvironment(
       ? '#0a0f26'
       : '#071324';
 
-  // 1. Expanded Extended Terrain (nearly 3x playable area!)
-  const terrainGeo = new THREE.PlaneGeometry(240, 240, 64, 64);
+  // Precompute race curve early so racing terrain sculpts cleanly around the long Beach-Buggy track
+  const raceWaypoints = isRacing ? getRaceTrackWaypoints(mapId) : [];
+  const raceCurvePts = raceWaypoints.map(
+    (wp) => new THREE.Vector3((wp.x - ARENA_CENTER_X) / 25, 0.024, (wp.y - ARENA_CENTER_Y) / 25)
+  );
+  const raceCurve = isRacing
+    ? new THREE.CatmullRomCurve3(raceCurvePts, true, 'catmullrom', 0.5)
+    : null;
+  const sampledTrackPts = raceCurve ? raceCurve.getPoints(180) : [];
+
+  const distToTrackXZ = (wx: number, wz: number): number => {
+    let minSq = Infinity;
+    for (let i = 0; i < sampledTrackPts.length; i++) {
+      const p = sampledTrackPts[i];
+      const dx = wx - p.x;
+      const dz = wz - p.z;
+      const dSq = dx * dx + dz * dz;
+      if (dSq < minSq) minSq = dSq;
+    }
+    return Math.sqrt(minSq);
+  };
+
+  // 1. Expanded Terrain (360x360 for Arena; 460x320 sculpted Beach-Buggy landscape for Racing)
+  const terrainGeo = isRacing
+    ? new THREE.PlaneGeometry(460, 320, 92, 68)
+    : new THREE.PlaneGeometry(360, 360, 72, 72);
   terrainGeo.rotateX(-Math.PI / 2);
   const pos = terrainGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
-    const r = Math.hypot(x, z);
-    if (r > 23.0) {
-      const bank = Math.min(1, (r - 23.0) / 18.0);
-      const ridge =
-        mapId === 'volcanic_springs'
-          ? Math.abs(Math.sin(x * 0.12) * Math.cos(z * 0.12)) * 3.8 + bank * 5.2
-          : Math.sin(x * 0.11) * Math.cos(z * 0.11) * 2.6 + Math.sin(r * 0.18) * 1.1 + bank * 4.5;
-      pos.setY(i, Math.max(0.05, ridge * bank));
+    if (isRacing) {
+      const dTrack = distToTrackXZ(x, z);
+      if (dTrack < 6.4) {
+        pos.setY(i, -0.05);
+      } else {
+        const bank = Math.min(1, (dTrack - 6.4) / 14.0);
+        const dune =
+          mapId === 'volcanic_springs'
+            ? Math.abs(Math.sin(x * 0.07) * Math.cos(z * 0.07)) * 4.8 + bank * 3.8
+            : Math.sin(x * 0.065) * Math.cos(z * 0.065) * 3.2 +
+              Math.sin((x + z) * 0.09) * 1.4 +
+              bank * 2.6;
+        pos.setY(i, Math.max(-0.04, dune * bank));
+      }
     } else {
-      pos.setY(i, -0.05);
+      const r = Math.hypot(x, z);
+      if (r > 33.5) {
+        const bank = Math.min(1, (r - 33.5) / 22.0);
+        const ridge =
+          mapId === 'volcanic_springs'
+            ? Math.abs(Math.sin(x * 0.1) * Math.cos(z * 0.1)) * 4.4 + bank * 6.0
+            : Math.sin(x * 0.09) * Math.cos(z * 0.09) * 3.0 + Math.sin(r * 0.15) * 1.3 + bank * 5.2;
+        pos.setY(i, Math.max(0.05, ridge * bank));
+      } else {
+        pos.setY(i, -0.05);
+      }
     }
   }
   terrainGeo.computeVertexNormals();
 
-  const terrainColor =
-    mapId === 'volcanic_springs'
-      ? '#272026'
+  const terrainColor = isRacing
+    ? mapId === 'volcanic_springs'
+      ? '#2d1e1b'
       : mapId === 'aurora_summit'
-      ? '#94a3b8'
-      : '#cbd5e1';
+      ? '#475569'
+      : '#dbeafe'
+    : mapId === 'volcanic_springs'
+    ? '#272026'
+    : mapId === 'aurora_summit'
+    ? '#94a3b8'
+    : '#cbd5e1';
 
   const outerTerrain = new THREE.Mesh(
     terrainGeo,
     new THREE.MeshStandardMaterial({
       color: terrainColor,
-      roughness: 0.92,
+      roughness: isRacing ? 0.88 : 0.92,
       metalness: 0.04,
     })
   );
   outerTerrain.receiveShadow = true;
   group.add(outerTerrain);
 
-  // 2. Expanded Playable Arena Disc (23.5 world units radius -> 47 units diameter!)
+  // 2. Playable Arena Disc (34 world units radius -> 68 units diameter!) — hidden in Racing for open Beach-Buggy terrain
   const floorTex = createMapFloorTexture(mapId, maxAnisotropy);
   const lakeDisc = new THREE.Mesh(
-    new THREE.CircleGeometry(23.5, 72),
+    new THREE.CircleGeometry(34.0, 84),
     new THREE.MeshPhysicalMaterial({
       map: floorTex,
       roughness: mapId === 'volcanic_springs' ? 0.65 : mapId === 'aurora_summit' ? 0.14 : 0.24,
@@ -479,9 +526,10 @@ export function buildArcticEnvironment(
   lakeDisc.rotation.x = -Math.PI / 2;
   lakeDisc.position.y = 0.0;
   lakeDisc.receiveShadow = true;
+  lakeDisc.visible = !isRacing;
   group.add(lakeDisc);
 
-  // 3. Central 3D Well Landmark + Well Ritual Blessing Effect
+  // 3. Central 3D Well Landmark + Well Ritual Blessing Effect (Survival & Shooter arenas)
   const {
     wellGroup,
     waterDisc,
@@ -492,6 +540,7 @@ export function buildArcticEnvironment(
     blessingMotesMat,
     blessingGroup,
   } = buildCenterWell(mapId);
+  wellGroup.visible = !isRacing;
   group.add(wellGroup);
 
   // 3b. Unique In-Arena 3D Obstacles per Map (Glacial Icebergs / Basalt Pillars / Aurora Obelisks)
@@ -686,13 +735,14 @@ export function buildArcticEnvironment(
 
     obstaclesGroup.add(og);
   });
+  obstaclesGroup.visible = !isRacing;
   group.add(obstaclesGroup);
 
-  // 4. Instanced Perimeter Props
+  // 4. Instanced Perimeter / Trackside Props
   const dummy = new THREE.Object3D();
   const tint = new THREE.Color();
 
-  const propCount = 68;
+  const propCount = isRacing ? 140 : 96;
   const propGeo =
     mapId === 'volcanic_springs'
       ? new THREE.ConeGeometry(1.15, 4.2, 5)
@@ -718,24 +768,52 @@ export function buildArcticEnvironment(
   perimeterProps.castShadow = !isSoftwareGl;
   perimeterProps.receiveShadow = true;
 
-  for (let i = 0; i < propCount; i++) {
-    const angle = (i / propCount) * Math.PI * 2 + (i % 3) * 0.08;
-    const dist = 26.8 + (i % 4) * 3.8;
-    dummy.position.set(Math.cos(angle) * dist, 0.75, Math.sin(angle) * dist);
-    const sc = 0.95 + (i % 5) * 0.2;
-    dummy.scale.set(sc, sc * (0.95 + (i % 3) * 0.18), sc);
-    dummy.rotation.y = angle;
-    dummy.updateMatrix();
-    perimeterProps.setMatrixAt(i, dummy.matrix);
+  let placedProps = 0;
+  if (isRacing) {
+    for (let i = 0; i < 420 && placedProps < propCount; i++) {
+      const rx = ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
+      const rz = ((Math.sin(i * 78.233) * 19341.123) % 1 + 1) % 1;
+      const px = (rx - 0.5) * 168;
+      const pz = (rz - 0.5) * 108;
+      if (distToTrackXZ(px, pz) < 6.4) continue;
+      dummy.position.set(px, 0.15, pz);
+      const sc = 1.05 + (placedProps % 5) * 0.24;
+      dummy.scale.set(sc, sc * (0.95 + (placedProps % 3) * 0.2), sc);
+      dummy.rotation.y = rx * Math.PI * 2;
+      dummy.updateMatrix();
+      perimeterProps.setMatrixAt(placedProps, dummy.matrix);
 
-    if (mapId === 'volcanic_springs') {
-      tint.setHSL(0.05, 0.24, 0.16 + (i % 4) * 0.04);
-    } else if (mapId === 'aurora_summit') {
-      tint.setHSL(i % 2 === 0 ? 0.5 : 0.75, 0.65, 0.48 + (i % 3) * 0.06);
-    } else {
-      tint.setHSL(0.42 + (i % 3) * 0.03, 0.36, 0.24 + (i % 4) * 0.05);
+      if (mapId === 'volcanic_springs') {
+        tint.setHSL(0.05, 0.24, 0.16 + (placedProps % 4) * 0.04);
+      } else if (mapId === 'aurora_summit') {
+        tint.setHSL(placedProps % 2 === 0 ? 0.5 : 0.75, 0.65, 0.48 + (placedProps % 3) * 0.06);
+      } else {
+        tint.setHSL(0.42 + (placedProps % 3) * 0.03, 0.36, 0.24 + (placedProps % 4) * 0.05);
+      }
+      perimeterProps.setColorAt(placedProps, tint);
+      placedProps += 1;
     }
-    perimeterProps.setColorAt(i, tint);
+    perimeterProps.count = placedProps;
+  } else {
+    for (let i = 0; i < propCount; i++) {
+      const angle = (i / propCount) * Math.PI * 2 + (i % 3) * 0.08;
+      const dist = 37.0 + (i % 4) * 4.4;
+      dummy.position.set(Math.cos(angle) * dist, 0.75, Math.sin(angle) * dist);
+      const sc = 1.05 + (i % 5) * 0.22;
+      dummy.scale.set(sc, sc * (0.95 + (i % 3) * 0.18), sc);
+      dummy.rotation.y = angle;
+      dummy.updateMatrix();
+      perimeterProps.setMatrixAt(i, dummy.matrix);
+
+      if (mapId === 'volcanic_springs') {
+        tint.setHSL(0.05, 0.24, 0.16 + (i % 4) * 0.04);
+      } else if (mapId === 'aurora_summit') {
+        tint.setHSL(i % 2 === 0 ? 0.5 : 0.75, 0.65, 0.48 + (i % 3) * 0.06);
+      } else {
+        tint.setHSL(0.42 + (i % 3) * 0.03, 0.36, 0.24 + (i % 4) * 0.05);
+      }
+      perimeterProps.setColorAt(i, tint);
+    }
   }
   perimeterProps.instanceMatrix.needsUpdate = true;
   if (perimeterProps.instanceColor) perimeterProps.instanceColor.needsUpdate = true;
@@ -743,41 +821,43 @@ export function buildArcticEnvironment(
   group.add(perimeterProps);
 
   // 5. Instanced Rim Crystals (Cyan ice / Magma amber / Aurora violet)
-  const crystalCount = 44;
-  const crystalGeo = new THREE.ConeGeometry(0.42, 1.75, 5);
-  crystalGeo.translate(0, 0.78, 0);
-  const crystalMat = new THREE.MeshPhysicalMaterial({
-    color:
-      mapId === 'volcanic_springs'
-        ? '#fb923c'
-        : mapId === 'aurora_summit'
-        ? '#2dd4bf'
-        : '#38bdf8',
-    emissive:
-      mapId === 'volcanic_springs'
-        ? '#ea580c'
-        : mapId === 'aurora_summit'
-        ? '#7c3aed'
-        : '#0284c7',
-    emissiveIntensity: 0.55,
-    roughness: 0.14,
-    metalness: 0.12,
-    clearcoat: 1.0,
-  });
-  const crystals = new THREE.InstancedMesh(crystalGeo, crystalMat, crystalCount);
-  for (let i = 0; i < crystalCount; i++) {
-    const a = (i / crystalCount) * Math.PI * 2;
-    const r = 22.8 + (i % 3) * 0.95;
-    dummy.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
-    const sc = 0.8 + (i % 4) * 0.25;
-    dummy.scale.set(sc, sc, sc);
-    dummy.rotation.set(i % 2 ? 0.18 : -0.15, a, 0.12);
-    dummy.updateMatrix();
-    crystals.setMatrixAt(i, dummy.matrix);
+  const crystalCount = isRacing ? 0 : 64;
+  if (crystalCount > 0) {
+    const crystalGeo = new THREE.ConeGeometry(0.45, 1.85, 5);
+    crystalGeo.translate(0, 0.78, 0);
+    const crystalMat = new THREE.MeshPhysicalMaterial({
+      color:
+        mapId === 'volcanic_springs'
+          ? '#fb923c'
+          : mapId === 'aurora_summit'
+          ? '#2dd4bf'
+          : '#38bdf8',
+      emissive:
+        mapId === 'volcanic_springs'
+          ? '#ea580c'
+          : mapId === 'aurora_summit'
+          ? '#7c3aed'
+          : '#0284c7',
+      emissiveIntensity: 0.55,
+      roughness: 0.14,
+      metalness: 0.12,
+      clearcoat: 1.0,
+    });
+    const crystals = new THREE.InstancedMesh(crystalGeo, crystalMat, crystalCount);
+    for (let i = 0; i < crystalCount; i++) {
+      const a = (i / crystalCount) * Math.PI * 2;
+      const r = 33.2 + (i % 3) * 1.1;
+      dummy.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+      const sc = 0.85 + (i % 4) * 0.25;
+      dummy.scale.set(sc, sc, sc);
+      dummy.rotation.set(i % 2 ? 0.18 : -0.15, a, 0.12);
+      dummy.updateMatrix();
+      crystals.setMatrixAt(i, dummy.matrix);
+    }
+    crystals.instanceMatrix.needsUpdate = true;
+    crystals.computeBoundingSphere();
+    group.add(crystals);
   }
-  crystals.instanceMatrix.needsUpdate = true;
-  crystals.computeBoundingSphere();
-  group.add(crystals);
 
   // 5b. Aurora Borealis Sky Curtain Shaders for Aurora Summit
   const shaderMaterialsToTick: THREE.ShaderMaterial[] = [];
@@ -868,12 +948,12 @@ export function buildArcticEnvironment(
       shaderMaterialsToTick.push(mat);
     };
 
-    createAuroraCurtain(-38, 17.5, 0.08, 0.0, 84, 16);
-    createAuroraCurtain(-30, 20.5, -0.22, 2.3, 72, 14);
+    createAuroraCurtain(-56, 22.5, 0.08, 0.0, 124, 22);
+    createAuroraCurtain(-45, 25.5, -0.22, 2.3, 106, 18);
   }
 
   // 5c. Geothermal Caldera Glow Ring Shader for Volcanic Spring
-  if (mapId === 'volcanic_springs') {
+  if (mapId === 'volcanic_springs' && !isRacing) {
     const magmaRingMat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
@@ -907,40 +987,73 @@ export function buildArcticEnvironment(
       side: THREE.DoubleSide,
       depthWrite: false,
     });
-    const magmaRing = new THREE.Mesh(new THREE.PlaneGeometry(52, 52), magmaRingMat);
+    const magmaRing = new THREE.Mesh(new THREE.PlaneGeometry(76, 76), magmaRingMat);
     magmaRing.rotation.x = -Math.PI / 2;
     magmaRing.position.y = 0.018;
     group.add(magmaRing);
     shaderMaterialsToTick.push(magmaRingMat);
   }
 
-  // 5d. 3D Racing Circuit Ribbon, Start/Finish Archway & Boost Pads when gameMode === 'car_racing'
-  if (gameMode === 'car_racing') {
-    const wps = getRaceTrackWaypoints(mapId);
-    const curvePts = wps.map(
-      (wp) => new THREE.Vector3((wp.x - ARENA_CENTER_X) / 25, 0.022, (wp.y - ARENA_CENTER_Y) / 25)
-    );
-    const curve = new THREE.CatmullRomCurve3(curvePts, true, 'catmullrom', 0.5);
-    const roadSamples = 140;
-    const roadHalfW = 2.65;
+  // 5d. Long Beach-Buggy Racing Ribbon, Start/Finish Checkered Arch, 4 Checkpoint Gates & Boost Pads
+  if (isRacing && raceCurve) {
+    const wps = raceWaypoints;
+    const roadSamples = 320;
+    const roadHalfW = 3.25;
+    const curbHalfW = 3.65;
     const roadPositions: number[] = [];
     const roadUvs: number[] = [];
     const roadIndices: number[] = [];
+    const curbPositions: number[] = [];
+    const curbIndices: number[] = [];
 
     for (let i = 0; i <= roadSamples; i++) {
       const t = i / roadSamples;
-      const pt = curve.getPointAt(t);
-      const tan = curve.getTangentAt(t).normalize();
+      const pt = raceCurve.getPointAt(t);
+      const tan = raceCurve.getTangentAt(t).normalize();
       const perp = new THREE.Vector3(-tan.z, 0, tan.x);
+
       const left = pt.clone().addScaledVector(perp, roadHalfW);
       const right = pt.clone().addScaledVector(perp, -roadHalfW);
-      roadPositions.push(left.x, 0.022, left.z, right.x, 0.022, right.z);
-      roadUvs.push(0, t * 18, 1, t * 18);
+      roadPositions.push(left.x, 0.024, left.z, right.x, 0.024, right.z);
+      roadUvs.push(0, t * 44, 1, t * 44);
+
+      const cLeft = pt.clone().addScaledVector(perp, curbHalfW);
+      const cRight = pt.clone().addScaledVector(perp, -curbHalfW);
+      curbPositions.push(cLeft.x, 0.014, cLeft.z, cRight.x, 0.014, cRight.z);
+
       if (i < roadSamples) {
         const base = i * 2;
         roadIndices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+        curbIndices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
       }
     }
+
+    const curbGeo = new THREE.BufferGeometry();
+    curbGeo.setAttribute('position', new THREE.Float32BufferAttribute(curbPositions, 3));
+    curbGeo.setIndex(curbIndices);
+    curbGeo.computeVertexNormals();
+    const curbMesh = new THREE.Mesh(
+      curbGeo,
+      new THREE.MeshStandardMaterial({
+        color:
+          mapId === 'volcanic_springs'
+            ? '#ea580c'
+            : mapId === 'aurora_summit'
+            ? '#2dd4bf'
+            : '#38bdf8',
+        emissive:
+          mapId === 'volcanic_springs'
+            ? '#9a3412'
+            : mapId === 'aurora_summit'
+            ? '#0f766e'
+            : '#0369a1',
+        emissiveIntensity: 0.35,
+        roughness: 0.6,
+      })
+    );
+    curbMesh.receiveShadow = true;
+    group.add(curbMesh);
+
     const roadGeo = new THREE.BufferGeometry();
     roadGeo.setAttribute('position', new THREE.Float32BufferAttribute(roadPositions, 3));
     roadGeo.setAttribute('uv', new THREE.Float32BufferAttribute(roadUvs, 2));
@@ -956,8 +1069,8 @@ export function buildArcticEnvironment(
     roadMesh.receiveShadow = true;
     group.add(roadMesh);
 
-    // Glowing Center Track Line
-    const centerLinePts = curve.getPoints(120).map((p) => new THREE.Vector3(p.x, 0.036, p.z));
+    // Glowing Center Racing Line
+    const centerLinePts = raceCurve.getPoints(280).map((p) => new THREE.Vector3(p.x, 0.04, p.z));
     const centerLineGeo = new THREE.BufferGeometry().setFromPoints(centerLinePts);
     const centerLineMat = new THREE.LineBasicMaterial({
       color: mapId === 'volcanic_springs' ? '#fb923c' : mapId === 'aurora_summit' ? '#2dd4bf' : '#38bdf8',
@@ -966,9 +1079,22 @@ export function buildArcticEnvironment(
     });
     group.add(new THREE.LineLoop(centerLineGeo, centerLineMat));
 
-    // Start / Finish Checkered Archway at Waypoint 0
-    const startPt = curve.getPointAt(0);
-    const startTan = curve.getTangentAt(0).normalize();
+    // Checkered Start / Finish Archway at Waypoint 0
+    const checkerCanvas = document.createElement('canvas');
+    checkerCanvas.width = 256;
+    checkerCanvas.height = 64;
+    const cctx = checkerCanvas.getContext('2d')!;
+    for (let cyi = 0; cyi < 4; cyi++) {
+      for (let cxi = 0; cxi < 16; cxi++) {
+        cctx.fillStyle = (cxi + cyi) % 2 === 0 ? '#f8fafc' : '#0f172a';
+        cctx.fillRect(cxi * 16, cyi * 16, 16, 16);
+      }
+    }
+    const checkerTex = new THREE.CanvasTexture(checkerCanvas);
+    checkerTex.colorSpace = THREE.SRGBColorSpace;
+
+    const startPt = raceCurve.getPointAt(0);
+    const startTan = raceCurve.getTangentAt(0).normalize();
     const startYaw = Math.atan2(startTan.x, startTan.z);
     const gateGroup = new THREE.Group();
     gateGroup.position.set(startPt.x, 0, startPt.z);
@@ -977,45 +1103,86 @@ export function buildArcticEnvironment(
     const pillarMat = new THREE.MeshStandardMaterial({ color: '#e2e8f0', metalness: 0.65, roughness: 0.25 });
     const neonHex = mapId === 'volcanic_springs' ? '#fb923c' : '#22d3ee';
     const bannerMat = new THREE.MeshStandardMaterial({
-      color: '#0f172a',
+      map: checkerTex,
       emissive: neonHex,
-      emissiveIntensity: 0.55,
+      emissiveIntensity: 0.25,
       roughness: 0.3,
     });
-    [-2.75, 2.75].forEach((px) => {
-      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 3.6, 10), pillarMat);
-      pillar.position.set(px, 1.8, 0);
+    [-3.45, 3.45].forEach((px) => {
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 4.1, 10), pillarMat);
+      pillar.position.set(px, 2.05, 0);
       pillar.castShadow = !isSoftwareGl;
       gateGroup.add(pillar);
     });
-    const crossbar = new THREE.Mesh(new THREE.BoxGeometry(5.9, 0.62, 0.32), bannerMat);
-    crossbar.position.set(0, 3.4, 0);
+    const crossbar = new THREE.Mesh(new THREE.BoxGeometry(7.3, 0.8, 0.36), bannerMat);
+    crossbar.position.set(0, 3.85, 0);
     gateGroup.add(crossbar);
 
     const startLine = new THREE.Mesh(
-      new THREE.PlaneGeometry(5.2, 0.75),
-      new THREE.MeshBasicMaterial({ color: '#f8fafc', side: THREE.DoubleSide })
+      new THREE.PlaneGeometry(6.4, 0.95),
+      new THREE.MeshBasicMaterial({ map: checkerTex, side: THREE.DoubleSide })
     );
     startLine.rotation.x = -Math.PI / 2;
-    startLine.position.y = 0.038;
+    startLine.position.y = 0.044;
     gateGroup.add(startLine);
     group.add(gateGroup);
 
-    // Glowing Boost Pads at Waypoints flagged hasBoostPad
-    const padMat = new THREE.MeshBasicMaterial({
-      color: '#22d3ee',
+    // 4 Sequential 3D Checkpoint Arches (amber/cyan beacons along the long track)
+    const cpArchMat = new THREE.MeshStandardMaterial({
+      color: '#0f172a',
+      emissive: '#fbbf24',
+      emissiveIntensity: 0.72,
+      roughness: 0.25,
+    });
+    const cpStripMat = new THREE.MeshBasicMaterial({
+      color: '#fde047',
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.75,
     });
+
     wps.forEach((wp, idx) => {
-      if (!wp.hasBoostPad) return;
-      const next = wps[(idx + 1) % wps.length];
-      const pad = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 2.6), padMat);
-      pad.rotation.x = -Math.PI / 2;
-      pad.rotation.z = -Math.atan2(next.x - wp.x, next.y - wp.y);
-      pad.position.set((wp.x - ARENA_CENTER_X) / 25, 0.042, (wp.y - ARENA_CENTER_Y) / 25);
-      group.add(pad);
+      if (wp.isCheckpoint) {
+        const prev = wps[(idx - 1 + wps.length) % wps.length];
+        const next = wps[(idx + 1) % wps.length];
+        const yaw = Math.atan2(next.x - prev.x, next.y - prev.y);
+        const cpGate = new THREE.Group();
+        cpGate.position.set((wp.x - ARENA_CENTER_X) / 25, 0, (wp.y - ARENA_CENTER_Y) / 25);
+        cpGate.rotation.y = yaw;
+
+        [-3.45, 3.45].forEach((px) => {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 3.7, 8), cpArchMat);
+          post.position.set(px, 1.85, 0);
+          post.castShadow = !isSoftwareGl;
+          cpGate.add(post);
+        });
+        const topBeam = new THREE.Mesh(new THREE.BoxGeometry(7.1, 0.38, 0.26), cpArchMat);
+        topBeam.position.set(0, 3.55, 0);
+        cpGate.add(topBeam);
+
+        const floorStrip = new THREE.Mesh(new THREE.PlaneGeometry(6.3, 0.55), cpStripMat);
+        floorStrip.rotation.x = -Math.PI / 2;
+        floorStrip.position.y = 0.044;
+        cpGate.add(floorStrip);
+        group.add(cpGate);
+      }
+
+      if (wp.hasBoostPad) {
+        const next = wps[(idx + 1) % wps.length];
+        const pad = new THREE.Mesh(
+          new THREE.PlaneGeometry(2.5, 3.1),
+          new THREE.MeshBasicMaterial({
+            color: '#22d3ee',
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.86,
+          })
+        );
+        pad.rotation.x = -Math.PI / 2;
+        pad.rotation.z = -Math.atan2(next.x - wp.x, next.y - wp.y);
+        pad.position.set((wp.x - ARENA_CENTER_X) / 25, 0.045, (wp.y - ARENA_CENTER_Y) / 25);
+        group.add(pad);
+      }
     });
   }
 
@@ -1097,14 +1264,14 @@ export function buildArcticEnvironment(
   ringFloor.position.y = 0.032;
   group.add(ringFloor);
 
-  // 7. GPU Shader-Driven Dynamic Environmental Particle Systems (scaled to bigger arena)
-  const mainParticleCount = mapId === 'glacier_well' ? 720 : mapId === 'volcanic_springs' ? 640 : 560;
+  // 7. GPU Shader-Driven Dynamic Environmental Particle Systems (scaled to larger arena & raceway)
+  const mainParticleCount = mapId === 'glacier_well' ? 880 : mapId === 'volcanic_springs' ? 760 : 680;
   const pPos = new Float32Array(mainParticleCount * 3);
   const pSeed = new Float32Array(mainParticleCount * 3); // x: phase, y: speed, z: size/heat
   for (let i = 0; i < mainParticleCount; i++) {
-    pPos[i * 3] = (Math.random() - 0.5) * 76;
-    pPos[i * 3 + 1] = Math.random() * 17.5;
-    pPos[i * 3 + 2] = (Math.random() - 0.5) * 70;
+    pPos[i * 3] = (Math.random() - 0.5) * (isRacing ? 150 : 112);
+    pPos[i * 3 + 1] = Math.random() * 19.5;
+    pPos[i * 3 + 2] = (Math.random() - 0.5) * (isRacing ? 104 : 96);
     pSeed[i * 3] = Math.random() * Math.PI * 2;
     pSeed[i * 3 + 1] = 0.65 + Math.random() * 0.85;
     pSeed[i * 3 + 2] = Math.random();
@@ -1133,19 +1300,19 @@ export function buildArcticEnvironment(
         float val = aSeed.z;
 
         if (uMode < 0.5) {
-          float fallH = 17.5;
+          float fallH = 19.5;
           pos.y = mod(pos.y - uTime * (2.6 * spd) + phase * 2.0, fallH);
-          pos.x = mod(pos.x + uTime * (3.8 * spd) + sin(uTime * 1.6 + phase) * 1.4 + 38.0, 76.0) - 38.0;
-          pos.z = mod(pos.z + uTime * (1.1 * spd) + cos(uTime * 1.3 + phase) * 0.9 + 35.0, 70.0) - 35.0;
+          pos.x = mod(pos.x + uTime * (3.8 * spd) + sin(uTime * 1.6 + phase) * 1.4 + 56.0, 112.0) - 56.0;
+          pos.z = mod(pos.z + uTime * (1.1 * spd) + cos(uTime * 1.3 + phase) * 0.9 + 48.0, 96.0) - 48.0;
           vFlicker = 0.72 + 0.28 * sin(uTime * 3.0 + phase * 4.0);
         } else if (uMode < 1.5) {
-          float riseH = 17.5;
+          float riseH = 19.5;
           pos.y = mod(pos.y + uTime * (2.1 * spd) + phase * 1.5, riseH) + 0.15;
           pos.x += sin(uTime * 1.9 + phase + pos.y * 0.35) * (1.5 + val * 1.0);
           pos.z += cos(uTime * 1.6 + phase * 1.3 + pos.y * 0.3) * (1.3 + val * 0.9);
           vFlicker = 0.55 + 0.45 * sin(uTime * 8.5 + phase * 10.0);
         } else {
-          float driftH = 16.5;
+          float driftH = 18.5;
           pos.y = mod(pos.y + sin(uTime * 0.45 + phase) * 0.8 + uTime * 0.38 * spd, driftH) + 0.25;
           pos.x += sin(uTime * 0.7 + phase * 2.0) * 1.8;
           pos.z += cos(uTime * 0.65 + phase * 1.7) * 1.6;
@@ -1198,13 +1365,13 @@ export function buildArcticEnvironment(
 
   // Low-altitude ground blowing frost wisps for Glacier Well
   if (mapId === 'glacier_well') {
-    const gustCount = 260;
+    const gustCount = 320;
     const gPos = new Float32Array(gustCount * 3);
     const gSeed = new Float32Array(gustCount * 2);
     for (let i = 0; i < gustCount; i++) {
-      gPos[i * 3] = (Math.random() - 0.5) * 52;
+      gPos[i * 3] = (Math.random() - 0.5) * 78;
       gPos[i * 3 + 1] = 0.08 + Math.random() * 1.2;
-      gPos[i * 3 + 2] = (Math.random() - 0.5) * 48;
+      gPos[i * 3 + 2] = (Math.random() - 0.5) * 72;
       gSeed[i * 2] = Math.random() * Math.PI * 2;
       gSeed[i * 2 + 1] = 0.8 + Math.random() * 0.9;
     }
@@ -1219,10 +1386,10 @@ export function buildArcticEnvironment(
         varying float vAlpha;
         void main() {
           vec3 pos = position;
-          pos.x = mod(pos.x + uTime * (7.2 * aSeed.y) + 26.0, 52.0) - 26.0;
-          pos.z = mod(pos.z + sin(uTime * 1.8 + aSeed.x) * 1.6 + 24.0, 48.0) - 24.0;
+          pos.x = mod(pos.x + uTime * (7.2 * aSeed.y) + 39.0, 78.0) - 39.0;
+          pos.z = mod(pos.z + sin(uTime * 1.8 + aSeed.x) * 1.6 + 36.0, 72.0) - 36.0;
           pos.y += abs(sin(uTime * 2.5 + aSeed.x)) * 0.25;
-          float edgeFade = 1.0 - smoothstep(18.0, 25.0, length(pos.xz));
+          float edgeFade = 1.0 - smoothstep(26.0, 38.0, length(pos.xz));
           vAlpha = edgeFade * (0.35 + 0.35 * sin(uTime * 3.0 + aSeed.x));
           vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
           gl_PointSize = clamp(85.0 / max(1.0, -mvPosition.z), 3.0, 28.0);

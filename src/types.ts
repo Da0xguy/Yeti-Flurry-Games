@@ -178,6 +178,7 @@ export interface TunnelPlayerSnapshot {
   vx: number;
   vy: number;
   hp: number;
+  maxHp?: number;
   score: number;
   wellDrops: number;
   carriedDrops: number;
@@ -187,6 +188,8 @@ export interface TunnelPlayerSnapshot {
   colorway: YetiColorId;
   shieldUntil: number;
   boostUntil: number;
+  magnetUntil?: number;
+  tripleUntil?: number;
   dashing: boolean;
   eliminated: boolean;
   emote?: YetiEmoteKind;
@@ -195,6 +198,8 @@ export interface TunnelPlayerSnapshot {
   speed?: number;
   lap?: number;
   nextWp?: number;
+  nextCheckpoint?: number;
+  checkpointsCleared?: number;
   totalProgress?: number;
   nitro?: number;
   finished?: boolean;
@@ -205,7 +210,7 @@ export interface TunnelPlayerSnapshot {
 
 export interface TunnelPickupSnapshot {
   id: string;
-  kind: 'drop' | 'gem' | 'shield' | 'boost';
+  kind: 'drop' | 'gem' | 'shield' | 'boost' | 'magnet' | 'triple' | 'medkit';
   x: number;
   y: number;
 }

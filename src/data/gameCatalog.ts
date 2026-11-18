@@ -9,21 +9,28 @@ import type {
   YetiColorway,
 } from '../types';
 
-export const ARENA_W = 1500;
-export const ARENA_H = 960;
+export const ARENA_W = 2400;
+export const ARENA_H = 1600;
 export const ARENA_CENTER_X = ARENA_W / 2;
 export const ARENA_CENTER_Y = ARENA_H / 2;
-export const ARENA_INITIAL_RING_RADIUS = 460;
-export const WELL_RITUAL_RADIUS = 115;
+export const ARENA_INITIAL_RING_RADIUS = 740;
+export const WELL_RITUAL_RADIUS = 135;
+
+export const RACE_BOUNDS = {
+  minX: ARENA_CENTER_X - 1900,
+  maxX: ARENA_CENTER_X + 1900,
+  minY: ARENA_CENTER_Y - 1150,
+  maxY: ARENA_CENTER_Y + 1150,
+};
 
 export const GAME_MODES: GameModeSpec[] = [
   {
     id: 'survival',
     name: 'Arcade Survival',
     shortLabel: 'Survival',
-    subtitle: 'Central Well · Snowball Clash · Well Rituals',
+    subtitle: 'Central Well · Snowball Clash · Power-Ups · 2:30 Match',
     description:
-      'Roam the expanded 3D arena, collect Glacial Drops, bank them at the Central Well, trigger Well Ritual emotes, and outlast rival Yetis.',
+      'Roam the huge 3D arena, grab Glacial Drops & Power-Ups (Shield, Magnet, Turbo, Tri-Shot, Medkit), bank at the Central Well, and outlast rival Yetis.',
     controlsSummary: 'WASD / Arrows move · Space Dash · Click / J Throw · 1/E Wave · 2/F Dance',
     supportsTunnel: true,
   },
@@ -31,9 +38,9 @@ export const GAME_MODES: GameModeSpec[] = [
     id: 'car_racing',
     name: 'Snow Drifter Racing',
     shortLabel: 'Kart Race',
-    subtitle: '3-Lap 3D Circuit · Drift Physics · Nitro Boost',
+    subtitle: '3-Lap Beach Buggy Circuit · 4 Checkpoints · Track Power-Ups',
     description:
-      'Pilot a custom 3D Lofi Snow-Kart around the grand perimeter circuit, hit boost pads, drift icy corners, and beat 3 rival Yeti racers to the checkered arch.',
+      'Tear down sweeping Beach-Buggy style coastal sweepers, canyon hairpins, and alpine straightaways. Hit Checkpoints 1–4, boost pads, and track power-up orbs over 3 laps.',
     controlsSummary: 'W / Up Throttle · A / D Steer · S / Down Brake · Space Nitro Boost',
     supportsTunnel: true,
   },
@@ -41,9 +48,9 @@ export const GAME_MODES: GameModeSpec[] = [
     id: 'shooting',
     name: 'Frost Fire',
     shortLabel: 'Shooter',
-    subtitle: 'Wave Combat · Cryo Drones · Bullseye Combos',
+    subtitle: 'Wave Combat · Cryo Drones · Tri-Blaster & Frost Nova',
     description:
-      'Aim your 3D Frost Blaster across the open arena to shatter Cryo Drones, spinning Ice Bullseyes, and rival Yeti sharpshooters while building combo streaks.',
+      'Aim your 3D Frost Blaster across the vast open arena to shatter Cryo Drones, spinning Ice Bullseyes, and rival Yeti sharpshooters while grabbing combat power-ups.',
     controlsSummary: 'WASD / Arrows Strafe · Mouse Aim · Click / J Rapid Fire · Space Frost Nova',
     supportsTunnel: false,
   },
@@ -225,27 +232,33 @@ export function getMapObstacles(mapId: MapId): ArenaObstacle[] {
 
   if (mapId === 'volcanic_springs') {
     return [
-      { id: 'v1', x: cx - 235, y: cy - 165, radius: 34, kind: 'basalt_pillar', height: 2.8 },
-      { id: 'v2', x: cx + 235, y: cy - 165, radius: 34, kind: 'basalt_pillar', height: 3.1 },
-      { id: 'v3', x: cx - 245, y: cy + 165, radius: 36, kind: 'basalt_pillar', height: 2.6 },
-      { id: 'v4', x: cx + 245, y: cy + 165, radius: 36, kind: 'basalt_pillar', height: 2.9 },
-      { id: 'v5', x: cx, y: cy - 265, radius: 30, kind: 'basalt_pillar', height: 2.4 },
+      { id: 'v1', x: cx - 375, y: cy - 255, radius: 42, kind: 'basalt_pillar', height: 3.1 },
+      { id: 'v2', x: cx + 375, y: cy - 255, radius: 42, kind: 'basalt_pillar', height: 3.3 },
+      { id: 'v3', x: cx - 390, y: cy + 255, radius: 44, kind: 'basalt_pillar', height: 2.8 },
+      { id: 'v4', x: cx + 390, y: cy + 255, radius: 44, kind: 'basalt_pillar', height: 3.0 },
+      { id: 'v5', x: cx, y: cy - 420, radius: 38, kind: 'basalt_pillar', height: 2.7 },
+      { id: 'v6', x: cx - 540, y: cy + 15, radius: 38, kind: 'basalt_pillar', height: 2.9 },
+      { id: 'v7', x: cx + 540, y: cy + 15, radius: 38, kind: 'basalt_pillar', height: 2.9 },
     ];
   }
   if (mapId === 'aurora_summit') {
     return [
-      { id: 'a1', x: cx, y: cy - 245, radius: 32, kind: 'aurora_obelisk', height: 3.0 },
-      { id: 'a2', x: cx + 255, y: cy - 40, radius: 34, kind: 'aurora_obelisk', height: 2.7 },
-      { id: 'a3', x: cx - 255, y: cy - 40, radius: 34, kind: 'aurora_obelisk', height: 2.7 },
-      { id: 'a4', x: cx + 175, y: cy + 215, radius: 30, kind: 'aurora_obelisk', height: 2.5 },
-      { id: 'a5', x: cx - 175, y: cy + 215, radius: 30, kind: 'aurora_obelisk', height: 2.5 },
+      { id: 'a1', x: cx, y: cy - 395, radius: 40, kind: 'aurora_obelisk', height: 3.2 },
+      { id: 'a2', x: cx + 415, y: cy - 60, radius: 42, kind: 'aurora_obelisk', height: 2.9 },
+      { id: 'a3', x: cx - 415, y: cy - 60, radius: 42, kind: 'aurora_obelisk', height: 2.9 },
+      { id: 'a4', x: cx + 285, y: cy + 345, radius: 38, kind: 'aurora_obelisk', height: 2.7 },
+      { id: 'a5', x: cx - 285, y: cy + 345, radius: 38, kind: 'aurora_obelisk', height: 2.7 },
+      { id: 'a6', x: cx + 295, y: cy - 310, radius: 36, kind: 'aurora_obelisk', height: 2.8 },
+      { id: 'a7', x: cx - 295, y: cy - 310, radius: 36, kind: 'aurora_obelisk', height: 2.8 },
     ];
   }
   return [
-    { id: 'g1', x: cx - 245, y: cy - 145, radius: 34, kind: 'iceberg', height: 2.7 },
-    { id: 'g2', x: cx + 245, y: cy - 145, radius: 34, kind: 'iceberg', height: 2.5 },
-    { id: 'g3', x: cx - 210, y: cy + 185, radius: 32, kind: 'iceberg', height: 2.4 },
-    { id: 'g4', x: cx + 210, y: cy + 185, radius: 32, kind: 'iceberg', height: 2.8 },
+    { id: 'g1', x: cx - 390, y: cy - 235, radius: 42, kind: 'iceberg', height: 3.0 },
+    { id: 'g2', x: cx + 390, y: cy - 235, radius: 42, kind: 'iceberg', height: 2.8 },
+    { id: 'g3', x: cx - 340, y: cy + 285, radius: 40, kind: 'iceberg', height: 2.7 },
+    { id: 'g4', x: cx + 340, y: cy + 285, radius: 40, kind: 'iceberg', height: 3.1 },
+    { id: 'g5', x: cx - 545, y: cy + 20, radius: 38, kind: 'iceberg', height: 2.9 },
+    { id: 'g6', x: cx + 545, y: cy + 20, radius: 38, kind: 'iceberg', height: 2.9 },
   ];
 }
 
@@ -253,6 +266,8 @@ export interface RaceWaypoint {
   x: number;
   y: number;
   hasBoostPad?: boolean;
+  isCheckpoint?: boolean;
+  checkpointNum?: number;
 }
 
 export interface RunnerRouteWaypoint {
@@ -267,87 +282,124 @@ export function getRunnerRouteWaypoints(mapId: MapId): RunnerRouteWaypoint[] {
 
   if (mapId === 'volcanic_springs') {
     return [
-      { x: cx, y: cy + 430, turn: 'straight' },
-      { x: cx + 145, y: cy + 330, turn: 'right' },
-      { x: cx - 120, y: cy + 220, turn: 'left' },
-      { x: cx + 180, y: cy + 95, turn: 'right' },
-      { x: cx - 165, y: cy - 35, turn: 'left' },
-      { x: cx + 130, y: cy - 175, turn: 'right' },
-      { x: cx - 90, y: cy - 305, turn: 'left' },
-      { x: cx, y: cy - 430, turn: 'straight' },
+      { x: cx, y: cy + 635, turn: 'straight' },
+      { x: cx + 225, y: cy + 485, turn: 'right' },
+      { x: cx - 195, y: cy + 325, turn: 'left' },
+      { x: cx + 275, y: cy + 145, turn: 'right' },
+      { x: cx - 245, y: cy - 55, turn: 'left' },
+      { x: cx + 205, y: cy - 265, turn: 'right' },
+      { x: cx - 145, y: cy - 455, turn: 'left' },
+      { x: cx, y: cy - 635, turn: 'straight' },
     ];
   }
   if (mapId === 'aurora_summit') {
     return [
-      { x: cx, y: cy + 430, turn: 'straight' },
-      { x: cx - 170, y: cy + 320, turn: 'left' },
-      { x: cx + 150, y: cy + 205, turn: 'right' },
-      { x: cx - 190, y: cy + 75, turn: 'left' },
-      { x: cx + 170, y: cy - 60, turn: 'right' },
-      { x: cx - 135, y: cy - 195, turn: 'left' },
-      { x: cx + 100, y: cy - 315, turn: 'right' },
-      { x: cx, y: cy - 430, turn: 'straight' },
+      { x: cx, y: cy + 635, turn: 'straight' },
+      { x: cx - 255, y: cy + 475, turn: 'left' },
+      { x: cx + 230, y: cy + 305, turn: 'right' },
+      { x: cx - 285, y: cy + 115, turn: 'left' },
+      { x: cx + 255, y: cy - 95, turn: 'right' },
+      { x: cx - 210, y: cy - 295, turn: 'left' },
+      { x: cx + 155, y: cy - 465, turn: 'right' },
+      { x: cx, y: cy - 635, turn: 'straight' },
     ];
   }
   return [
-    { x: cx, y: cy + 430, turn: 'straight' },
-    { x: cx + 155, y: cy + 325, turn: 'right' },
-    { x: cx - 145, y: cy + 215, turn: 'left' },
-    { x: cx + 165, y: cy + 90, turn: 'right' },
-    { x: cx - 155, y: cy - 40, turn: 'left' },
-    { x: cx + 130, y: cy - 170, turn: 'right' },
-    { x: cx - 110, y: cy - 300, turn: 'left' },
-    { x: cx, y: cy - 430, turn: 'straight' },
+    { x: cx, y: cy + 635, turn: 'straight' },
+    { x: cx + 235, y: cy + 480, turn: 'right' },
+    { x: cx - 220, y: cy + 315, turn: 'left' },
+    { x: cx + 250, y: cy + 135, turn: 'right' },
+    { x: cx - 235, y: cy - 60, turn: 'left' },
+    { x: cx + 195, y: cy - 255, turn: 'right' },
+    { x: cx - 165, y: cy - 445, turn: 'left' },
+    { x: cx, y: cy - 635, turn: 'straight' },
   ];
 }
 
 /**
- * 8-waypoint closed circuit looping around the expanded 1500x960 arena,
- * keeping clean clearance from both the Central Well and inner obstacles.
+ * 14-waypoint long Beach-Buggy style coastal/canyon/summit racing tracks
+ * spanning ~3300x1900 logical units with S-curves, hairpins, long straights,
+ * boost strips, and 4 sequential Checkpoints per lap.
  */
 export function getRaceTrackWaypoints(mapId: MapId): RaceWaypoint[] {
   const cx = ARENA_CENTER_X;
   const cy = ARENA_CENTER_Y;
 
   if (mapId === 'volcanic_springs') {
+    // Canyon Buggy Run: technical lava switchbacks + scorching back straight
     return [
-      { x: cx, y: cy + 500 }, // Start/Finish South Straight
-      { x: cx + 350, y: cy + 430, hasBoostPad: true },
-      { x: cx + 510, y: cy + 210 },
-      { x: cx + 485, y: cy - 115, hasBoostPad: true },
-      { x: cx + 330, y: cy - 410 },
-      { x: cx - 20, y: cy - 500, hasBoostPad: true },
-      { x: cx - 355, y: cy - 420 },
-      { x: cx - 510, y: cy - 120, hasBoostPad: true },
-      { x: cx - 470, y: cy + 210 },
-      { x: cx - 320, y: cy + 425 },
+      { x: cx - 260, y: cy + 780 }, // 0: Start/Finish Grand Straight
+      { x: cx + 480, y: cy + 770, hasBoostPad: true },
+      { x: cx + 1240, y: cy + 660 },
+      { x: cx + 1560, y: cy + 250, isCheckpoint: true, checkpointNum: 1 }, // CP 1
+      { x: cx + 1220, y: cy - 180, hasBoostPad: true },
+      { x: cx + 620, y: cy - 120 },
+      { x: cx + 480, y: cy - 680, isCheckpoint: true, checkpointNum: 2 }, // CP 2
+      { x: cx + 1150, y: cy - 880, hasBoostPad: true },
+      { x: cx + 420, y: cy - 960 },
+      { x: cx - 440, y: cy - 780, isCheckpoint: true, checkpointNum: 3 }, // CP 3
+      { x: cx - 1260, y: cy - 860, hasBoostPad: true },
+      { x: cx - 1580, y: cy - 320 },
+      { x: cx - 1340, y: cy + 360, isCheckpoint: true, checkpointNum: 4 }, // CP 4
+      { x: cx - 860, y: cy + 730, hasBoostPad: true },
     ];
   }
 
   if (mapId === 'aurora_summit') {
+    // Summit Coast Rally: sweeping figure-ridge chicanes & high-speed straightaways
     return [
-      { x: cx, y: cy + 500 },
-      { x: cx + 410, y: cy + 360, hasBoostPad: true },
-      { x: cx + 525, y: cy + 20 },
-      { x: cx + 390, y: cy - 350, hasBoostPad: true },
-      { x: cx + 80, y: cy - 505 },
-      { x: cx - 300, y: cy - 420, hasBoostPad: true },
-      { x: cx - 525, y: cy - 80 },
-      { x: cx - 390, y: cy + 330 },
+      { x: cx - 180, y: cy + 800 }, // 0: Start/Finish
+      { x: cx + 650, y: cy + 790, hasBoostPad: true },
+      { x: cx + 1460, y: cy + 560 },
+      { x: cx + 1540, y: cy - 90, isCheckpoint: true, checkpointNum: 1 }, // CP 1
+      { x: cx + 980, y: cy - 520, hasBoostPad: true },
+      { x: cx + 320, y: cy - 320 },
+      { x: cx - 180, y: cy - 780, isCheckpoint: true, checkpointNum: 2 }, // CP 2
+      { x: cx - 840, y: cy - 920, hasBoostPad: true },
+      { x: cx - 1480, y: cy - 580 },
+      { x: cx - 1560, y: cy + 80, isCheckpoint: true, checkpointNum: 3 }, // CP 3
+      { x: cx - 980, y: cy + 280 },
+      { x: cx - 1220, y: cy + 720, hasBoostPad: true },
+      { x: cx - 720, y: cy + 840, isCheckpoint: true, checkpointNum: 4 }, // CP 4
+      { x: cx - 420, y: cy + 810 },
     ];
   }
 
-  // glacier_well sweeping circuit
+  // Glacier Beach Buggy: wide coastal sweepers, bay hairpin & frozen causeway
   return [
-    { x: cx, y: cy + 500 },
-    { x: cx + 385, y: cy + 400, hasBoostPad: true },
-    { x: cx + 525, y: cy + 30 },
-    { x: cx + 365, y: cy - 360 },
-    { x: cx, y: cy - 505, hasBoostPad: true },
-    { x: cx - 365, y: cy - 360 },
-    { x: cx - 525, y: cy + 30, hasBoostPad: true },
-    { x: cx - 385, y: cy + 400 },
+    { x: cx - 220, y: cy + 790 }, // 0: Start/Finish Coastal Causeway
+    { x: cx + 560, y: cy + 790, hasBoostPad: true },
+    { x: cx + 1350, y: cy + 640 },
+    { x: cx + 1620, y: cy + 160, isCheckpoint: true, checkpointNum: 1 }, // CP 1: East Lagoon
+    { x: cx + 1360, y: cy - 460, hasBoostPad: true },
+    { x: cx + 760, y: cy - 820 },
+    { x: cx + 120, y: cy - 420, isCheckpoint: true, checkpointNum: 2 }, // CP 2: Mid Chicane
+    { x: cx - 460, y: cy - 860, hasBoostPad: true },
+    { x: cx - 1220, y: cy - 790 },
+    { x: cx - 1600, y: cy - 260, isCheckpoint: true, checkpointNum: 3 }, // CP 3: West Cove
+    { x: cx - 1340, y: cy + 220 },
+    { x: cx - 1460, y: cy + 680, hasBoostPad: true },
+    { x: cx - 960, y: cy + 840, isCheckpoint: true, checkpointNum: 4 }, // CP 4: South Boardwalk
+    { x: cx - 580, y: cy + 800 },
   ];
+}
+
+export function getDistanceToRaceTrack(x: number, y: number, mapId: MapId): number {
+  const wps = getRaceTrackWaypoints(mapId);
+  let minDistSq = Infinity;
+  for (let i = 0; i < wps.length; i++) {
+    const a = wps[i];
+    const b = wps[(i + 1) % wps.length];
+    const abx = b.x - a.x;
+    const aby = b.y - a.y;
+    const abLenSq = abx * abx + aby * aby || 1;
+    const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (y - a.y) * aby) / abLenSq));
+    const px = a.x + abx * t;
+    const py = a.y + aby * t;
+    const dSq = (x - px) * (x - px) + (y - py) * (y - py);
+    if (dSq < minDistSq) minDistSq = dSq;
+  }
+  return Math.sqrt(minDistSq);
 }
 
 export function resolveArenaObstacleCollision(

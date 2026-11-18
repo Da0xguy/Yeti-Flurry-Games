@@ -29,7 +29,9 @@ import {
   ARENA_INITIAL_RING_RADIUS,
   ARENA_W,
   CAREER_QUESTS,
+  RACE_BOUNDS,
   WELL_RITUAL_RADIUS,
+  getDistanceToRaceTrack,
   getMapObstacles,
   getRaceTrackWaypoints,
   getMapSpec,
@@ -209,6 +211,8 @@ interface TunnelRoom {
       speed?: number;
       lap?: number;
       nextWp?: number;
+      nextCheckpoint?: number;
+      checkpointsCleared?: number;
       totalProgress?: number;
       nitro?: number;
       finished?: boolean;
@@ -218,6 +222,8 @@ interface TunnelRoom {
       aiSpeedBias?: number;
       aiLaneOffset?: number;
       boostUntilRace?: number;
+      magnetUntil?: number;
+      tripleUntil?: number;
     }
   >;
   pickups: TunnelPickupSnapshot[];
@@ -239,11 +245,18 @@ const BOT_CONFIGS: { name: string; colorway: YetiColorId; hat: string; scarf: st
 
 function spawnPickup(idPrefix: string, mapId: MapId): TunnelPickupSnapshot {
   const angle = Math.random() * Math.PI * 2;
-  const dist = 85 + Math.random() * 340;
+  const dist = 110 + Math.random() * 540;
   const roll = Math.random();
-  const gemThreshold = mapId === 'aurora_summit' ? 0.9 : 0.85;
-  const kind =
-    roll < 0.5 ? 'drop' : roll < gemThreshold ? 'gem' : roll < 0.93 ? 'shield' : 'boost';
+  const gemThreshold = mapId === 'aurora_summit' ? 0.72 : 0.68;
+  let kind: TunnelPickupSnapshot['kind'] = 'drop';
+  if (roll < 0.42) kind = 'drop';
+  else if (roll < gemThreshold) kind = 'gem';
+  else if (roll < 0.78) kind = 'shield';
+  else if (roll < 0.85) kind = 'boost';
+  else if (roll < 0.91) kind = 'magnet';
+  else if (roll < 0.96) kind = 'triple';
+  else kind = 'medkit';
+
   return {
     id: `${idPrefix}_${crypto.randomBytes(3).toString('hex')}`,
     kind,
@@ -254,7 +267,7 @@ function spawnPickup(idPrefix: string, mapId: MapId): TunnelPickupSnapshot {
 
 function spawnCrate(idPrefix: string): TunnelCrateSnapshot {
   const angle = Math.random() * Math.PI * 2;
-  const dist = 120 + Math.random() * 265;
+  const dist = 150 + Math.random() * 460;
   return {
     id: `cr_${idPrefix}_${crypto.randomBytes(2).toString('hex')}`,
     x: ARENA_CENTER_X + Math.cos(angle) * dist,
@@ -264,19 +277,23 @@ function spawnCrate(idPrefix: string): TunnelCrateSnapshot {
 }
 
 function createTunnelRoom(roomId: string, mapId: MapId, mode: GameModeId = 'survival'): TunnelRoom {
+  const duration = mode === 'car_racing' ? 180 : 150;
   const room: TunnelRoom = {
     roomId,
     mapId,
     mode,
     tick: 0,
     ringRadius: ARENA_INITIAL_RING_RADIUS,
-    timeLeft: 75,
+    timeLeft: duration,
     players: new Map(),
-    pickups: Array.from({ length: 22 }, (_, i) => spawnPickup(`init_${i}`, mapId)),
-    crates: Array.from({ length: 7 }, (_, i) => spawnCrate(`init_${i}`)),
+    pickups:
+      mode === 'car_racing'
+        ? []
+        : Array.from({ length: 30 }, (_, i) => spawnPickup(`init_${i}`, mapId)),
+    crates: mode === 'car_racing' ? [] : Array.from({ length: 10 }, (_, i) => spawnCrate(`init_${i}`)),
     snowballs: [],
-    beacon: { active: false, x: ARENA_CENTER_X, y: ARENA_CENTER_Y, radius: 64, timeLeft: 0 },
-    nextBeaconIn: 8,
+    beacon: { active: false, x: ARENA_CENTER_X, y: ARENA_CENTER_Y, radius: 78, timeLeft: 0 },
+    nextBeaconIn: 10,
     blessingUntil: 0,
     blessingKind: 'none',
     ritualCooldownUntil: 0,
@@ -293,11 +310,12 @@ function createTunnelRoom(roomId: string, mapId: MapId, mode: GameModeId = 'surv
     room.players.set(`bot_${idx}`, {
       id: `bot_${idx}`,
       name: bot.name,
-      x: raceStart ? raceStart.x - Math.cos(raceAngle) * (18 + idx * 38) : ARENA_CENTER_X + Math.cos(angle) * 210,
-      y: raceStart ? raceStart.y - Math.sin(raceAngle) * (18 + idx * 38) : ARENA_CENTER_Y + Math.sin(angle) * 165,
+      x: raceStart ? raceStart.x - Math.cos(raceAngle) * (24 + idx * 42) : ARENA_CENTER_X + Math.cos(angle) * 320,
+      y: raceStart ? raceStart.y - Math.sin(raceAngle) * (24 + idx * 42) : ARENA_CENTER_Y + Math.sin(angle) * 240,
       vx: 0,
       vy: 0,
-      hp: 3,
+      hp: 100,
+      maxHp: 100,
       score: 0,
       wellDrops: 0,
       carriedDrops: 0,
@@ -307,6 +325,8 @@ function createTunnelRoom(roomId: string, mapId: MapId, mode: GameModeId = 'surv
       colorway: bot.colorway,
       shieldUntil: 0,
       boostUntil: 0,
+      magnetUntil: 0,
+      tripleUntil: 0,
       dashing: false,
       eliminated: false,
       emote: 'none',
@@ -321,6 +341,8 @@ function createTunnelRoom(roomId: string, mapId: MapId, mode: GameModeId = 'surv
       speed: 0,
       lap: 1,
       nextWp: 1,
+      nextCheckpoint: 1,
+      checkpointsCleared: 0,
       totalProgress: 0,
       nitro: 100,
       finished: false,
@@ -368,46 +390,42 @@ function stepRaceRoom(room: TunnelRoom, dt: number): void {
     }
 
     const boosting = (p.boostUntilRace || 0) > Date.now();
-    const maxSpeed = (p.isBot ? 360 * (p.aiSpeedBias || 0.92) : 385) * mapSpec.speedMult * (boosting ? 1.38 : 1);
-    p.speed = THREEClamp((p.speed || 0) + throttle * (boosting ? 720 : 460) * mapSpec.speedMult * dt, -140, maxSpeed);
+    const offRoad = getDistanceToRaceTrack(p.x, p.y, room.mapId) > 105;
+    const offRoadMult = offRoad && !boosting ? 0.84 : 1.0;
+    const maxSpeed = (p.isBot ? 415 * (p.aiSpeedBias || 0.92) : 450) * mapSpec.speedMult * (boosting ? 1.38 : 1) * offRoadMult;
+    p.speed = THREEClamp((p.speed || 0) + throttle * (boosting ? 780 : 520) * mapSpec.speedMult * dt, -160, maxSpeed);
     p.speed = Math.abs(p.speed) < 2 ? 0 : p.speed;
     p.angle = (p.angle || 0) + steer * 2.55 * THREEClamp(Math.abs(p.speed) / 90, 0.25, 1) * dt;
     p.vx = Math.cos(p.angle) * p.speed;
     p.vy = Math.sin(p.angle) * p.speed;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-
-    const dxC = p.x - ARENA_CENTER_X;
-    const dyC = p.y - ARENA_CENTER_Y;
-    const distC = Math.hypot(dxC, dyC);
-    if (distC > 555) {
-      p.x = ARENA_CENTER_X + (dxC / distC) * 555;
-      p.y = ARENA_CENTER_Y + (dyC / distC) * 555;
-      p.speed *= 0.88;
-    }
-
-    const resolved = resolveArenaObstacleCollision(p.x, p.y, p.vx, p.vy, 20, room.mapId);
-    p.x = resolved.x;
-    p.y = resolved.y;
-    p.vx = resolved.vx;
-    p.vy = resolved.vy;
+    p.x = THREEClamp(p.x + p.vx * dt, RACE_BOUNDS.minX, RACE_BOUNDS.maxX);
+    p.y = THREEClamp(p.y + p.vy * dt, RACE_BOUNDS.minY, RACE_BOUNDS.maxY);
 
     let nextWp = p.nextWp ?? 1;
     const wp = wps[nextWp];
-    if (Math.hypot(p.x - wp.x, p.y - wp.y) < 118) {
+    if (Math.hypot(p.x - wp.x, p.y - wp.y) < 135) {
       if (wp.hasBoostPad && (p.boostUntilRace || 0) <= Date.now()) {
-        p.boostUntilRace = Date.now() + 1250;
+        p.boostUntilRace = Date.now() + 1350;
         p.nitro = Math.min(100, (p.nitro || 0) + 25);
+      }
+      if (wp.isCheckpoint && wp.checkpointNum) {
+        if (wp.checkpointNum >= (p.nextCheckpoint || 1)) {
+          p.checkpointsCleared = Math.max(p.checkpointsCleared || 0, wp.checkpointNum);
+          p.nextCheckpoint = wp.checkpointNum + 1;
+          p.score += 75;
+        }
       }
       p.nextWp = (nextWp + 1) % wps.length;
       p.score += 35;
       p.dropsCollected = (p.dropsCollected || 0) + 1;
       nextWp = p.nextWp;
-      if (nextWp === 1 && (p.totalProgress || 0) > 400) {
+      if (nextWp === 1 && (p.checkpointsCleared || 0) >= 4) {
         p.lap = (p.lap || 1) + 1;
+        p.checkpointsCleared = 0;
+        p.nextCheckpoint = 1;
         if (p.lap > 3) {
           p.finished = true;
-          p.finishTime = 90 - room.timeLeft;
+          p.finishTime = 180 - room.timeLeft;
           p.gemsCollected = (p.gemsCollected || 0) + 6;
         }
       }
@@ -415,7 +433,8 @@ function stepRaceRoom(room: TunnelRoom, dt: number): void {
 
     const target = wps[p.nextWp ?? 0];
     const distNext = Math.hypot(p.x - target.x, p.y - target.y);
-    p.totalProgress = ((p.lap || 1) - 1) * 1000 + (p.nextWp ?? 0) * 110 - distNext * 0.15;
+    const wpIdxAdj = (p.nextWp ?? 0) === 0 ? wps.length : (p.nextWp ?? 0);
+    p.totalProgress = ((p.lap || 1) - 1) * 3000 + wpIdxAdj * 180 - distNext * 0.12;
   }
 }
 
@@ -428,22 +447,23 @@ function stepRoom(room: TunnelRoom, dt: number): void {
   const mapSpec = getMapSpec(room.mapId);
   room.tick += 1;
   room.timeLeft = Math.max(0, room.timeLeft - dt);
-  room.ringRadius = Math.max(165, ARENA_INITIAL_RING_RADIUS - (75 - room.timeLeft) * 3.7);
+  room.ringRadius = Math.max(210, ARENA_INITIAL_RING_RADIUS - (150 - room.timeLeft) * 3.4);
 
   if (room.timeLeft <= 0) {
-    room.timeLeft = 75;
+    room.timeLeft = 150;
     room.ringRadius = ARENA_INITIAL_RING_RADIUS;
-    room.crates = Array.from({ length: 7 }, (_, i) => spawnCrate(`rst_${i}`));
+    room.crates = Array.from({ length: 10 }, (_, i) => spawnCrate(`rst_${i}`));
     room.beacon.active = false;
-    room.nextBeaconIn = 8;
+    room.nextBeaconIn = 10;
     let idx = 0;
     for (const p of room.players.values()) {
       const angle = (idx / Math.max(1, room.players.size)) * Math.PI * 2;
-      p.x = ARENA_CENTER_X + Math.cos(angle) * 210;
-      p.y = ARENA_CENTER_Y + Math.sin(angle) * 165;
+      p.x = ARENA_CENTER_X + Math.cos(angle) * 320;
+      p.y = ARENA_CENTER_Y + Math.sin(angle) * 240;
       p.vx = 0;
       p.vy = 0;
-      p.hp = 3;
+      p.hp = 100;
+      p.maxHp = 100;
       p.score = 0;
       p.wellDrops = 0;
       p.carriedDrops = 0;
@@ -454,10 +474,10 @@ function stepRoom(room: TunnelRoom, dt: number): void {
     }
   }
 
-  while (room.pickups.length < 22) {
+  while (room.pickups.length < 30) {
     room.pickups.push(spawnPickup(`p_${room.tick}`, room.mapId));
   }
-  while (room.crates.length < 7) {
+  while (room.crates.length < 10) {
     room.crates.push(spawnCrate(`c_${room.tick}`));
   }
 
@@ -594,11 +614,11 @@ function stepRoom(room: TunnelRoom, dt: number): void {
 
     // Central Well Deposit (bank 2+ carried drops for bonus & heal)
     const distFromCenter = Math.hypot(p.x - ARENA_W / 2, p.y - ARENA_H / 2);
-    if (distFromCenter < 60 && p.carriedDrops >= 2) {
+    if (distFromCenter < 75 && p.carriedDrops >= 2) {
       p.score += p.carriedDrops * 25;
       p.wellDrops += p.carriedDrops;
       p.carriedDrops = 0;
-      p.hp = Math.min(3, p.hp + 1);
+      p.hp = Math.min(100, p.hp + 25);
     }
 
     // Beacon capture tick
@@ -612,16 +632,22 @@ function stepRoom(room: TunnelRoom, dt: number): void {
     // Ring damage check
     if (distFromCenter > room.ringRadius && room.tick % 20 === 0) {
       if (now >= p.shieldUntil) {
-        p.hp = Math.max(0, p.hp - 1);
+        p.hp = Math.max(0, p.hp - 15);
         if (p.hp === 0) p.eliminated = true;
       }
     }
 
-    // Collect pickups (2x Well Drops during active Well Blessing!)
+    // Collect pickups (with magnet pull if magnetUntil active)
     const dropMult = now < room.blessingUntil ? 2 : 1;
+    const hasMagnet = now < (p.magnetUntil || 0);
     for (let i = room.pickups.length - 1; i >= 0; i--) {
       const pk = room.pickups[i];
-      if (Math.hypot(pk.x - p.x, pk.y - p.y) < 26) {
+      const distPk = Math.hypot(pk.x - p.x, pk.y - p.y);
+      if (hasMagnet && distPk < 240 && distPk > 24 && (pk.kind === 'drop' || pk.kind === 'gem')) {
+        pk.x += ((p.x - pk.x) / distPk) * 320 * dt;
+        pk.y += ((p.y - pk.y) / distPk) * 320 * dt;
+      }
+      if (Math.hypot(pk.x - p.x, pk.y - p.y) < 30) {
         if (pk.kind === 'drop') {
           p.score += 15 * dropMult;
           p.wellDrops += dropMult;
@@ -629,10 +655,19 @@ function stepRoom(room: TunnelRoom, dt: number): void {
         } else if (pk.kind === 'gem') {
           p.score += 30;
         } else if (pk.kind === 'shield') {
-          p.shieldUntil = now + 7000;
+          p.shieldUntil = now + 9000;
           p.score += 20;
         } else if (pk.kind === 'boost') {
-          p.boostUntil = now + 6000;
+          p.boostUntil = now + 7000;
+          p.score += 20;
+        } else if (pk.kind === 'magnet') {
+          p.magnetUntil = now + 10000;
+          p.score += 25;
+        } else if (pk.kind === 'triple') {
+          p.tripleUntil = now + 10000;
+          p.score += 25;
+        } else if (pk.kind === 'medkit') {
+          p.hp = Math.min(100, p.hp + 30);
           p.score += 20;
         }
         room.pickups.splice(i, 1);
@@ -660,7 +695,7 @@ function stepRoom(room: TunnelRoom, dt: number): void {
       for (const participant of ritualGroup) {
         participant.wellDrops += 2;
         participant.score += 65;
-        participant.hp = Math.min(3, participant.hp + 1);
+        participant.hp = Math.min(100, participant.hp + 25);
       }
       triggerServerWellBlessing(15000, 25, 3);
     }
@@ -684,7 +719,7 @@ function stepRoom(room: TunnelRoom, dt: number): void {
         if (now >= p.shieldUntil) {
           p.vx += sb.vx * 0.75;
           p.vy += sb.vy * 0.75;
-          p.hp = Math.max(0, p.hp - 1);
+          p.hp = Math.max(0, p.hp - 20);
           if (p.hp === 0) p.eliminated = true;
           const shooter = room.players.get(sb.ownerId);
           if (shooter) shooter.score += 45;
@@ -748,6 +783,7 @@ function broadcastRoom(room: TunnelRoom): void {
       vx: Math.round(p.vx),
       vy: Math.round(p.vy),
       hp: p.hp,
+      maxHp: p.maxHp || 100,
       score: p.score,
       wellDrops: p.wellDrops,
       carriedDrops: p.carriedDrops,
@@ -757,6 +793,8 @@ function broadcastRoom(room: TunnelRoom): void {
       colorway: p.colorway,
       shieldUntil: p.shieldUntil,
       boostUntil: p.boostUntil,
+      magnetUntil: p.magnetUntil || 0,
+      tripleUntil: p.tripleUntil || 0,
       dashing: p.dashing,
       eliminated: p.eliminated,
       emote: p.emote || 'none',
@@ -765,6 +803,8 @@ function broadcastRoom(room: TunnelRoom): void {
       speed: p.speed,
       lap: p.lap,
       nextWp: p.nextWp,
+      nextCheckpoint: p.nextCheckpoint,
+      checkpointsCleared: p.checkpointsCleared,
       totalProgress: p.totalProgress,
       nitro: p.nitro,
       finished: p.finished,
@@ -853,7 +893,8 @@ async function startServer() {
         y: raceWaypoints ? raceWaypoints[0].y - Math.sin(raceAngle) * 55 : ARENA_H / 2 + 85,
         vx: 0,
         vy: 0,
-        hp: 3,
+        hp: 100,
+        maxHp: 100,
         score: 0,
         wellDrops: 0,
         carriedDrops: 0,
@@ -863,6 +904,8 @@ async function startServer() {
         colorway,
         shieldUntil: 0,
         boostUntil: 0,
+        magnetUntil: 0,
+        tripleUntil: 0,
         dashing: false,
         eliminated: false,
         emote: 'none',
@@ -877,6 +920,8 @@ async function startServer() {
         speed: 0,
         lap: 1,
         nextWp: 1,
+        nextCheckpoint: 1,
+        checkpointsCleared: 0,
         totalProgress: 0,
         nitro: 100,
         finished: false,
@@ -916,25 +961,29 @@ async function startServer() {
           const dirX = Math.abs(p.inputX) > 0.1 || Math.abs(p.inputY) > 0.1 ? p.inputX : p.facingX;
           const dirY = Math.abs(p.inputX) > 0.1 || Math.abs(p.inputY) > 0.1 ? p.inputY : p.facingY;
           const mag = Math.hypot(dirX, dirY) || 1;
-          p.vx = (dirX / mag) * 450;
-          p.vy = (dirY / mag) * 450;
-          p.dashCd = 1.5;
+          p.vx = (dirX / mag) * 480;
+          p.vy = (dirY / mag) * 480;
+          p.dashCd = 1.4;
         } else if (msg.type === 'throw' && p.throwCd <= 0 && !p.eliminated) {
           const tx = Number(msg.aimX) || p.facingX;
           const ty = Number(msg.aimY) || p.facingY;
-          const mag = Math.hypot(tx, ty) || 1;
-          room.snowballs.push({
-            id: `sb_${room.tick}_${playerId}`,
-            ownerId: playerId,
-            x: p.x + (tx / mag) * 22,
-            y: p.y + (ty / mag) * 22,
-            vx: (tx / mag) * 390,
-            vy: (ty / mag) * 390,
-            ttl: 1.25,
+          const baseAngle = Math.atan2(ty, tx);
+          const offsets = Date.now() < (p.tripleUntil || 0) ? [-0.2, 0, 0.2] : [0];
+          offsets.forEach((off, idx) => {
+            const ang = baseAngle + off;
+            room!.snowballs.push({
+              id: `sb_${room!.tick}_${playerId}_${idx}`,
+              ownerId: playerId,
+              x: p.x + Math.cos(ang) * 22,
+              y: p.y + Math.sin(ang) * 22,
+              vx: Math.cos(ang) * 410,
+              vy: Math.sin(ang) * 410,
+              ttl: 1.35,
+            });
           });
           p.emote = 'none';
           p.emoteUntil = 0;
-          p.throwCd = 0.5;
+          p.throwCd = 0.45;
         } else if (msg.type === 'emote' && !p.eliminated) {
           const kind: YetiEmoteKind =
             msg.emote === 'dance' ? 'dance' : msg.emote === 'wave' ? 'wave' : 'none';

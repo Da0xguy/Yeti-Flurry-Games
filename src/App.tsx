@@ -311,14 +311,14 @@ export default function App() {
     <div className="min-h-screen bg-[#081322] text-slate-100 flex flex-col">
       {/* Strict 3-Zone Top Bar Contract */}
       <header
-        className={`sticky top-0 z-30 border-b backdrop-blur-md ${
+        className={`z-30 transition-colors duration-200 ${
           activeTab === 'home'
-            ? 'absolute inset-x-0 border-white/10 bg-transparent'
-            : 'border-slate-800/90 bg-[#0A1728]/90'
+            ? 'fixed top-0 inset-x-0 bg-gradient-to-b from-[#061120]/75 via-[#061120]/30 to-transparent backdrop-blur-[3px] border-b border-white/10'
+            : 'sticky top-0 border-b border-slate-800/90 bg-[#0A1728]/92 backdrop-blur-md'
         }`}
       >
-        <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-8 px-4 sm:px-6 py-3">
-          {/* Zone 1: 3D Gamish Brand Wordmark */}
+        <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-8 px-4 sm:px-6 py-3.5">
+          {/* Zone 1: Pixel Forge 3D Brand Wordmark */}
           <button
             type="button"
             onClick={() => setActiveTab('home')}
@@ -328,7 +328,7 @@ export default function App() {
           </button>
 
           {/* Zone 2: Clean single-line Navigation Links */}
-          <nav className="flex items-center gap-5 sm:gap-7 text-sm font-medium overflow-x-auto">
+          <nav className="flex items-center gap-5 sm:gap-7 text-sm font-semibold tracking-wide overflow-x-auto">
             {(
               [
                 { key: 'arena', label: 'Play Arena' },
@@ -344,6 +344,8 @@ export default function App() {
                 className={`whitespace-nowrap shrink-0 py-1 border-b-2 transition-colors ${
                   activeTab === item.key
                     ? 'border-sky-400 text-white'
+                    : activeTab === 'home'
+                    ? 'border-transparent text-slate-200/90 hover:text-white hover:border-sky-400/60'
                     : 'border-transparent text-slate-400 hover:text-slate-100'
                 }`}
               >
@@ -352,15 +354,15 @@ export default function App() {
             ))}
           </nav>
 
-          {/* Zone 3: Single Primary Action */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Zone 3: Primary Action + Wallet */}
+          <div className="flex items-center gap-2.5 shrink-0">
             <ConnectButton />
             <button
               type="button"
               onClick={() =>
                 activeTab === 'home' ? launchArena('launcher') : setActiveTab('yeti')
               }
-              className="rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-sky-400 transition-colors whitespace-nowrap shrink-0"
+              className="rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold tracking-wide text-slate-950 shadow-[0_0_20px_rgba(56,189,248,0.28)] hover:bg-sky-400 transition-colors whitespace-nowrap shrink-0"
             >
               {activeTab === 'home'
                 ? 'Launch Game'

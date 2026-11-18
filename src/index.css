@@ -17,8 +17,8 @@
 }
 
 @theme {
-  --font-display: "Pixel Forge", "Chakra Petch", system-ui, sans-serif;
-  --font-sans: "Chakra Petch", system-ui, sans-serif;
+  --font-display: "Pixel Forge", "Oxanium", "Chakra Petch", system-ui, sans-serif;
+  --font-sans: "Oxanium", "Chakra Petch", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
@@ -28,15 +28,15 @@
     scroll-behavior: smooth;
   }
 
-  h1, h2, h3, .font-display {
+  h1, h2, h3, h4, .font-display, .font-naming {
     font-family: var(--font-display);
-    letter-spacing: 0.015em;
+    letter-spacing: 0.03em;
   }
 }
 
-/* 3D Extruded Gamish Title Typography */
+/* 3D Extruded Pixel Forge Title Typography */
 .title-3d-game {
-  font-family: "Pixel Forge 3D", var(--font-display);
+  font-family: "Pixel Forge 3D", "Pixel Forge", var(--font-display);
   letter-spacing: 0.03em;
   color: #f0f9ff;
   text-shadow:
@@ -51,7 +51,7 @@
 }
 
 .title-3d-game-sm {
-  font-family: "Pixel Forge 3D", var(--font-display);
+  font-family: "Pixel Forge 3D", "Pixel Forge", var(--font-display);
   letter-spacing: 0.03em;
   color: #f0f9ff;
   text-shadow:
@@ -66,9 +66,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-:fullscreen {
-  border-radius: 0;
-  aspect-ratio: auto;
+:fullscreen,
+:-webkit-full-screen {
+  border-radius: 0 !important;
+  border-width: 0 !important;
+  aspect-ratio: auto !important;
+  width: 100vw !important;
+  height: 100vh !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

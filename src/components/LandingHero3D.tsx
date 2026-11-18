@@ -316,10 +316,10 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
           aria-hidden="true"
         />
 
-        <div className="relative z-10 mx-auto w-full max-w-[1200px] px-4 sm:px-6 py-16">
+        <div className="relative z-10 mx-auto w-full max-w-[1200px] px-4 sm:px-6 pt-24 pb-16">
           <div className="max-w-xl space-y-5">
             <p className="text-xs font-semibold tracking-wider text-sky-400">
-              Lofi the Yeti · 3D Arcade Survival on Sui
+              Lofi the Yeti · 3D Arcade Survival, Buggy Racing &amp; Blaster on Sui
             </p>
 
             <h1 className="title-3d-game text-5xl sm:text-6xl lg:text-[66px] leading-[1.02] text-balance">
@@ -327,7 +327,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
             </h1>
 
             <p className="text-base sm:text-lg leading-relaxed text-slate-200 max-w-lg">
-              Launch into expanded 3D worlds: pick Arcade Survival, Snow Drifter Racing, or Frost Fire, choose your 3D map, and bank Glacial Drops to fund real-world clean water wells.
+              Launch full-screen into massive 3D worlds: race long Beach-Buggy circuits through 4 Checkpoints, blast waves of Cryo Drones, or battle rival Yetis for Drops, Gems &amp; Power-Ups.
             </p>
 
             <div className="flex flex-wrap items-center gap-4 pt-2">
@@ -351,11 +351,11 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-2 text-xs text-slate-300 tabular-nums">
-              <span>3 Game Modes</span>
+              <span>3 Fullscreen Modes</span>
               <span aria-hidden="true">·</span>
-              <span>3 Expanded 3D Maps</span>
+              <span>Beach-Buggy Checkpoints</span>
               <span aria-hidden="true">·</span>
-              <span>6 Yeti Colorways</span>
+              <span>5 Power-Ups &amp; 3D Life Bars</span>
               <span aria-hidden="true">·</span>
               <span>{wellImpact.wellsFunded} Water Wells Funded</span>
               <span aria-hidden="true">·</span>
@@ -420,7 +420,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
 
                   <div className="space-y-2 px-6">
                     <span className="text-xs font-semibold text-sky-400">{gm.subtitle}</span>
-                    <h3 className="font-display text-2xl text-white">{gm.name}</h3>
+                    <h3 className="font-display text-xl text-white">{gm.name}</h3>
                     <p className="text-sm leading-relaxed text-slate-400">{gm.description}</p>
                     <p className="text-xs text-slate-300 pt-1">{gm.controlsSummary}</p>
                   </div>
@@ -447,7 +447,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <Compass className="h-3.5 w-3.5" style={{ color: map.accentHex }} />
-                    <h4 className="font-display text-lg text-white">{map.name}</h4>
+                    <h4 className="font-display text-base text-white">{map.name}</h4>
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed">{map.description}</p>
                 </div>
@@ -461,10 +461,10 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
           <div className="space-y-6">
             <div className="space-y-2">
               <p className="text-xs font-semibold text-sky-400">
-                02. In-Match Tasks & True Sui Ownership
+                02. Power-Ups, Checkpoints &amp; True Sui Ownership
               </p>
-              <h2 className="font-display text-3xl text-white text-balance">
-                Bank Drops, Smash Crates & Capture Shrine Beacons
+              <h2 className="font-display text-2xl sm:text-3xl text-white text-balance">
+                Bank Drops, Smash Crates &amp; Capture Shrine Beacons
               </h2>
             </div>
 
@@ -473,10 +473,10 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                 <Sparkles className="h-5 w-5 text-sky-400 mt-0.5 shrink-0" aria-hidden="true" />
                 <div>
                   <h3 className="text-base font-semibold text-white">
-                    Live Arena Tasks & Frost Crate Loot
+                    Live Power-Ups, 3D Life Bars &amp; Fullscreen Radar
                   </h3>
                   <p className="mt-1 text-sm leading-relaxed text-slate-400">
-                    Every match challenges you with dynamic tasks: carry Drops to the Central Well to bank 2x points and heal Hearts, smash 3D Frost Crates for power-ups, and hold Shrine Beacons.
+                    Collect Cryo Shields, Turbo Surge, Drop Magnets, Tri-Shot Blasters, and Medkits across 2:30–3:00 matches while tracking Checkpoints and rivals on the live fullscreen mini-map.
                   </p>
                 </div>
               </div>

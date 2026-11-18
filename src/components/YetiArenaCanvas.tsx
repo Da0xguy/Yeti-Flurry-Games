@@ -29,6 +29,12 @@ import {
   Gauge,
   ChevronLeft,
   Menu,
+  Maximize2,
+  Minimize2,
+  Heart,
+  Magnet,
+  Flag,
+  Flame,
 } from 'lucide-react';
 import type {
   ArenaTaskProgress,
@@ -51,8 +57,10 @@ import {
   ARENA_MAPS,
   ARENA_W,
   GAME_MODES,
+  RACE_BOUNDS,
   WELL_RITUAL_RADIUS,
   YETI_COLORWAYS,
+  getDistanceToRaceTrack,
   getGameModeSpec,
   getMapModeDetails,
   getMapObstacles,
@@ -69,8 +77,11 @@ import {
 import {
   animateYetiKart,
   buildAimReticle,
+  buildHealthBar3D,
   buildShooterTargetMesh,
   buildYetiKartRig,
+  updateHealthBar3D,
+  type HealthBar3D,
   type ShooterTargetMesh,
   type YetiKartRigParts,
 } from '../three/kartAndShooter';
@@ -160,14 +171,17 @@ interface LocalYeti {
   emote: YetiEmoteKind;
   emoteUntil: number;
   gatherAtWellUntil?: number;
+  magnetUntil: number;
+  tripleUntil: number;
 }
 
 interface Pickup {
   id: string;
-  kind: 'drop' | 'gem' | 'shield' | 'boost';
+  kind: 'drop' | 'gem' | 'shield' | 'boost' | 'magnet' | 'triple' | 'medkit';
   x: number;
   y: number;
   bobOffset: number;
+  respawnAt?: number;
 }
 
 interface CrateProp {
@@ -221,8 +235,13 @@ interface KartRacer {
   steerInput: number;
   nitro: number; // 0..100
   boostUntil: number;
+  shieldUntil: number;
+  tripleUntil: number;
+  magnetUntil: number;
   lap: number; // 1..3
   nextWp: number;
+  nextCheckpoint: number; // 1..4
+  checkpointsCleared: number;
   totalProgress: number;
   colorway: YetiColorId;
   hat: string;
@@ -355,6 +374,20 @@ function createTasksForMode(gm: GameModeId): ArenaTaskProgress[] {
   ];
 }
 
+function formatClock(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return `${m}:${rem.toString().padStart(2, '0')}`;
+}
+
+interface MinimapDot {
+  x: number;
+  y: number;
+  kind: 'player' | 'bot' | 'enemy' | 'bullseye' | 'pickup' | 'beacon' | 'well';
+  color?: string;
+}
+
 export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   yeti,
   playerName,
@@ -379,6 +412,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   const [launcherStep, setLauncherStep] = useState<LauncherStep>('choose_game');
   const [playMode, setPlayMode] = useState<PlayMode>('solo');
   const [muted, setMuted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [tunnelConnected, setTunnelConnected] = useState(false);
   const [tunnelPlayersCount, setTunnelPlayersCount] = useState(1);
   const [summary, setSummary] = useState<RunSummary | null>(null);
@@ -392,9 +426,14 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     wellDrops: 0,
     carriedDrops: 0,
     frostGems: 0,
-    hp: 3,
-    timeLeft: 75,
+    hp: 100,
+    maxHp: 100,
+    timeLeft: 150,
     wave: 1,
+    shieldSec: 0,
+    boostSec: 0,
+    magnetSec: 0,
+    tripleSec: 0,
     shieldActive: false,
     boostActive: false,
     dashReady: true,
@@ -405,14 +444,27 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     // Racing telemetry
     lap: 1,
     totalLaps: 3,
+    checkpoint: 0,
+    totalCheckpoints: 4,
     racePos: 1,
     speedKmh: 0,
     nitroPct: 100,
     countdown: 0,
+    offRoad: false,
     // Shooter telemetry
     elims: 0,
     combo: 1,
     novaReady: true,
+  });
+
+  const [minimapData, setMinimapData] = useState<{
+    dots: MinimapDot[];
+    ringRadius: number;
+    playerAngle: number;
+  }>({
+    dots: [],
+    ringRadius: ARENA_INITIAL_RING_RADIUS,
+    playerAngle: 0,
   });
 
   // Refs synced for 3D render loop
@@ -546,15 +598,22 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
   const spawnPickup = useCallback((idx: number, mapId: MapId): Pickup => {
     const angle = Math.random() * Math.PI * 2;
-    const dist = 85 + Math.random() * Math.max(115, simRef.current.ringRadius - 95);
+    const dist = 105 + Math.random() * Math.max(150, simRef.current.ringRadius - 105);
     const roll = Math.random();
-    const gemLimit = mapId === 'aurora_summit' ? 0.9 : 0.85;
-    const kind: Pickup['kind'] =
-      roll < 0.5 ? 'drop' : roll < gemLimit ? 'gem' : roll < 0.93 ? 'shield' : 'boost';
+    const gemLimit = mapId === 'aurora_summit' ? 0.72 : 0.68;
+    let kind: Pickup['kind'] = 'drop';
+    if (roll < 0.42) kind = 'drop';
+    else if (roll < gemLimit) kind = 'gem';
+    else if (roll < 0.78) kind = 'shield';
+    else if (roll < 0.85) kind = 'boost';
+    else if (roll < 0.91) kind = 'magnet';
+    else if (roll < 0.96) kind = 'triple';
+    else kind = 'medkit';
+
     const pos = nudgeOutsideObstacles(
       ARENA_CENTER_X + Math.cos(angle) * dist,
       ARENA_CENTER_Y + Math.sin(angle) * dist,
-      16,
+      18,
       mapId
     );
     return {
@@ -568,11 +627,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
   const spawnCrate = useCallback((idx: number): CrateProp => {
     const angle = Math.random() * Math.PI * 2;
-    const dist = 120 + Math.random() * 260;
+    const dist = 145 + Math.random() * 440;
     const pos = nudgeOutsideObstacles(
       ARENA_CENTER_X + Math.cos(angle) * dist,
       ARENA_CENTER_Y + Math.sin(angle) * dist,
-      22,
+      24,
       mapIdRef.current
     );
     return {
@@ -585,18 +644,18 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
   const spawnShooterWave = useCallback((waveNum: number, mapId: MapId) => {
     const s = simRef.current;
-    const droneCount = 3 + Math.min(5, waveNum);
-    const bullseyeCount = mapId === 'aurora_summit' ? 4 : 3;
+    const droneCount = 4 + Math.min(6, waveNum);
+    const bullseyeCount = mapId === 'aurora_summit' ? 5 : 4;
     const enemies: ShooterEnemy[] = [];
     const rivalColors: YetiColorId[] = ['glacier_mint', 'sunset_ember', 'aurora_violet'];
 
     for (let i = 0; i < droneCount; i++) {
       const a = (i / droneCount) * Math.PI * 2 + Math.random() * 0.4;
-      const d = 230 + Math.random() * 195;
+      const d = 290 + Math.random() * 320;
       const pos = nudgeOutsideObstacles(
         ARENA_CENTER_X + Math.cos(a) * d,
         ARENA_CENTER_Y + Math.sin(a) * d,
-        22,
+        24,
         mapId
       );
       enemies.push({
@@ -616,7 +675,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
     for (let i = 0; i < bullseyeCount; i++) {
       const a = (i / bullseyeCount) * Math.PI * 2 + 0.5;
-      const d = 180 + Math.random() * 210;
+      const d = 240 + Math.random() * 340;
       const pos = nudgeOutsideObstacles(
         ARENA_CENTER_X + Math.cos(a) * d,
         ARENA_CENTER_Y + Math.sin(a) * d,
@@ -638,14 +697,14 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       });
     }
 
-    // Add 1-2 Rival Yeti Sharpshooters per wave
-    const rivalTotal = waveNum >= 2 ? 2 : 1;
+    // Add 1-3 Rival Yeti Sharpshooters per wave
+    const rivalTotal = waveNum >= 2 ? Math.min(3, 1 + Math.floor(waveNum / 2)) : 1;
     for (let r = 0; r < rivalTotal; r++) {
-      const a = Math.PI * 0.25 + r * Math.PI;
+      const a = Math.PI * 0.25 + (r / rivalTotal) * Math.PI * 2;
       const pos = nudgeOutsideObstacles(
-        ARENA_CENTER_X + Math.cos(a) * 310,
-        ARENA_CENTER_Y + Math.sin(a) * 240,
-        22,
+        ARENA_CENTER_X + Math.cos(a) * 440,
+        ARENA_CENTER_Y + Math.sin(a) * 340,
+        24,
         mapId
       );
       enemies.push({
@@ -655,8 +714,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         y: pos.y,
         vx: 0,
         vy: 0,
-        hp: 2 + Math.floor(waveNum / 2),
-        maxHp: 2 + Math.floor(waveNum / 2),
+        hp: 3 + Math.floor(waveNum / 2),
+        maxHp: 3 + Math.floor(waveNum / 2),
         fireCd: 1.4 + r * 0.6,
         orbitAngle: a,
         colorway: rivalColors[(waveNum + r) % rivalColors.length],
@@ -714,11 +773,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         id: 'player',
         name: currentYeti?.name || playerName || 'Lofi Cub',
         x: ARENA_CENTER_X,
-        y: ARENA_CENTER_Y + 135,
+        y: ARENA_CENTER_Y + 185,
         vx: 0,
         vy: 0,
-        hp: 3,
-        maxHp: 3,
+        hp: 100,
+        maxHp: 100,
         score: 0,
         wellDrops: 0,
         carriedDrops: 0,
@@ -735,6 +794,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         throwPulse: 0,
         shieldUntil: 0,
         boostUntil: 0,
+        magnetUntil: 0,
+        tripleUntil: 0,
         hurtUntil: 0,
         facingX: 0,
         facingY: -1,
@@ -744,9 +805,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       };
 
       if (gm === 'car_racing') {
-        s.timeLeft = 90;
+        s.timeLeft = 180;
         s.ringRadius = ARENA_INITIAL_RING_RADIUS;
-        s.raceCountdown = 1.6;
+        s.raceCountdown = 1.8;
         s.racePadsHit = 0;
         const wps = getRaceTrackWaypoints(mapId);
         const start = wps[0];
@@ -774,8 +835,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             hat: currentYeti?.equipped.hat || 'hat_goggles',
             scarf: currentYeti?.equipped.scarf || 'scarf_lofi',
             bias: 1.0,
-            lane: -22,
-            rowBack: 18,
+            lane: -26,
+            rowBack: 22,
           },
           {
             id: 'kart_mira',
@@ -785,8 +846,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             hat: 'hat_beanie',
             scarf: 'scarf_aurora',
             bias: 0.96,
-            lane: 22,
-            rowBack: 18,
+            lane: 26,
+            rowBack: 22,
           },
           {
             id: 'kart_taro',
@@ -796,8 +857,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             hat: 'hat_crown',
             scarf: 'scarf_crimson',
             bias: 0.91,
-            lane: -22,
-            rowBack: 56,
+            lane: -26,
+            rowBack: 64,
           },
           {
             id: 'kart_pip',
@@ -807,8 +868,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             hat: 'hat_goggles',
             scarf: 'scarf_lofi',
             bias: 0.87,
-            lane: 22,
-            rowBack: 56,
+            lane: 26,
+            rowBack: 64,
           },
         ];
 
@@ -825,8 +886,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           steerInput: 0,
           nitro: 100,
           boostUntil: 0,
+          shieldUntil: 0,
+          tripleUntil: 0,
+          magnetUntil: 0,
           lap: 1,
           nextWp: 1,
+          nextCheckpoint: 1,
+          checkpointsCleared: 0,
           totalProgress: 0,
           colorway: rs.colorway,
           hat: rs.hat,
@@ -840,10 +906,28 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           aiLaneOffset: rs.lane * 0.45,
         }));
         s.entities = [playerYeti];
-        s.pickups = [];
+
+        // Spawn glowing Beach-Buggy Power-Up Orbs along the 14-waypoint long track
+        const racePowerKinds: Pickup['kind'][] = ['boost', 'triple', 'shield', 'magnet', 'gem', 'boost', 'triple', 'drop', 'shield'];
+        const trackOrbs: Pickup[] = [];
+        wps.forEach((wp, idx) => {
+          if (idx === 0) return;
+          if (idx % 2 === 1 || wp.isCheckpoint) {
+            const pKind = racePowerKinds[idx % racePowerKinds.length];
+            trackOrbs.push({
+              id: `rk_${idx}_${Math.random().toString(36).slice(2, 5)}`,
+              kind: pKind,
+              x: wp.x + (idx % 2 === 0 ? 22 : -22),
+              y: wp.y + (idx % 3 === 0 ? 18 : -18),
+              bobOffset: idx * 0.7,
+              respawnAt: 0,
+            });
+          }
+        });
+        s.pickups = trackOrbs;
         s.crates = [];
       } else if (gm === 'shooting') {
-        s.timeLeft = 65;
+        s.timeLeft = 135;
         s.ringRadius = ARENA_INITIAL_RING_RADIUS;
         s.shooterWave = 1;
         s.shooterElims = 0;
@@ -854,12 +938,12 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         s.shooterNovaCd = 0;
         s.karts = [];
         s.entities = [playerYeti];
-        s.pickups = Array.from({ length: 10 }, (_, i) => spawnPickup(i, mapId));
+        s.pickups = Array.from({ length: 16 }, (_, i) => spawnPickup(i, mapId));
         s.crates = [];
         spawnShooterWave(1, mapId);
       } else {
-        // Survival Flurry
-        s.timeLeft = 75;
+        // Survival Flurry (Expanded 2400x1600 Map · 150s)
+        s.timeLeft = 150;
         s.ringRadius = ARENA_INITIAL_RING_RADIUS;
         s.nextHazardIn = 4.2;
         s.karts = [];
@@ -868,9 +952,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           active: false,
           x: ARENA_CENTER_X,
           y: ARENA_CENTER_Y,
-          radius: 64,
+          radius: 78,
           timeLeft: 0,
-          nextIn: 7.5,
+          nextIn: 9.0,
           tickAccum: 0,
         };
 
@@ -890,12 +974,12 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         const bots: LocalYeti[] = botSpecs.map((b) => ({
           id: b.id,
           name: b.name,
-          x: ARENA_CENTER_X + Math.cos(b.angle) * 215,
-          y: ARENA_CENTER_Y + Math.sin(b.angle) * 165,
+          x: ARENA_CENTER_X + Math.cos(b.angle) * 340,
+          y: ARENA_CENTER_Y + Math.sin(b.angle) * 260,
           vx: 0,
           vy: 0,
-          hp: 3,
-          maxHp: 3,
+          hp: 100,
+          maxHp: 100,
           score: 0,
           wellDrops: 0,
           carriedDrops: 0,
@@ -912,6 +996,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           throwPulse: 0,
           shieldUntil: 0,
           boostUntil: 0,
+          magnetUntil: 0,
+          tripleUntil: 0,
           hurtUntil: 0,
           facingX: 1,
           facingY: 0,
@@ -921,8 +1007,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         }));
 
         s.entities = [playerYeti, ...bots];
-        s.pickups = Array.from({ length: 20 }, (_, i) => spawnPickup(i, mapId));
-        s.crates = Array.from({ length: 7 }, (_, i) => spawnCrate(i));
+        s.pickups = Array.from({ length: 28 }, (_, i) => spawnPickup(i, mapId));
+        s.crates = Array.from({ length: 10 }, (_, i) => spawnCrate(i));
       }
 
       rigVersionDirtyRef.current = true;
@@ -1013,7 +1099,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           if (me) {
             if (snap.mode === 'car_racing') {
               const s = simRef.current;
-              s.karts = snap.players.map((p) => ({
+                s.karts = snap.players.map((p) => ({
                 id: p.id,
                 name: p.name,
                 isBot: p.isBot,
@@ -1026,8 +1112,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 steerInput: 0,
                 nitro: p.nitro || 0,
                 boostUntil: p.boostUntil || 0,
+                shieldUntil: p.shieldUntil || 0,
+                tripleUntil: p.tripleUntil || 0,
+                magnetUntil: p.magnetUntil || 0,
                 lap: p.lap || 1,
                 nextWp: p.nextWp || 1,
+                nextCheckpoint: p.nextCheckpoint || 1,
+                checkpointsCleared: p.checkpointsCleared || 0,
                 totalProgress: p.totalProgress || 0,
                 score: p.score,
                 colorway: p.colorway,
@@ -1047,12 +1138,24 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   ...prev,
                   score: playerKart.score,
                   lap: Math.min(3, playerKart.lap),
+                  checkpoint: playerKart.checkpointsCleared,
+                  totalCheckpoints: 4,
                   racePos: sorted.findIndex((k) => k.id === playerKart.id) + 1,
                   speedKmh: Math.round(Math.abs(playerKart.speed) * 0.36),
                   nitroPct: Math.round(playerKart.nitro),
                   boostActive: Date.now() < playerKart.boostUntil,
                   countdown: 0,
                 }));
+                setMinimapData({
+                  dots: s.karts.map((k) => ({
+                    x: k.x,
+                    y: k.y,
+                    kind: k.id === tunnelPlayerIdRef.current ? 'player' : 'bot',
+                    color: getYetiColorway(k.colorway).accentHex,
+                  })),
+                  ringRadius: snap.ringRadius,
+                  playerAngle: playerKart.angle,
+                });
               }
               if (me.finished && gameStateRef.current === 'PLAYING') {
                 const sorted = [...snap.players].sort((a, b) => {
@@ -1099,8 +1202,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               carriedDrops: me.carriedDrops,
               frostGems: Math.floor(me.score / 25),
               hp: me.hp,
+              maxHp: me.maxHp || 100,
               timeLeft: snap.timeLeft,
-              wave: Math.max(1, Math.ceil((75 - snap.timeLeft) / 20)),
+              wave: Math.max(1, Math.ceil((150 - snap.timeLeft) / 25)),
+              shieldSec: me.shieldUntil > now ? Math.ceil((me.shieldUntil - now) / 1000) : 0,
+              boostSec: me.boostUntil > now ? Math.ceil((me.boostUntil - now) / 1000) : 0,
+              magnetSec: (me.magnetUntil || 0) > now ? Math.ceil(((me.magnetUntil || 0) - now) / 1000) : 0,
+              tripleSec: (me.tripleUntil || 0) > now ? Math.ceil(((me.tripleUntil || 0) - now) / 1000) : 0,
               shieldActive: now < me.shieldUntil,
               boostActive: now < me.boostUntil,
               dashReady: true,
@@ -1109,6 +1217,24 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               blessingLeft,
               ritualReady: blessingLeft <= 0,
             }));
+            if (snap.mode !== 'car_racing') {
+              setMinimapData({
+                dots: [
+                  { x: ARENA_CENTER_X, y: ARENA_CENTER_Y, kind: 'well' },
+                  ...(snap.beacon.active ? [{ x: snap.beacon.x, y: snap.beacon.y, kind: 'beacon' as const }] : []),
+                  ...snap.players
+                    .filter((p) => !p.eliminated)
+                    .map((p) => ({
+                      x: p.x,
+                      y: p.y,
+                      kind: (p.id === tunnelPlayerIdRef.current ? 'player' : 'bot') as MinimapDot['kind'],
+                      color: getYetiColorway(p.colorway).accentHex,
+                    })),
+                ],
+                ringRadius: snap.ringRadius,
+                playerAngle: 0,
+              });
+            }
 
             if (snap.mode !== 'car_racing' && me.eliminated && gameStateRef.current === 'PLAYING') {
               const survived = Math.max(5, Math.round((Date.now() - tunnelStartTimeRef.current) / 1000));
@@ -1361,16 +1487,25 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     player.emote = 'none';
     player.emoteUntil = 0;
 
-    const boltSpeed = isShooter ? 660 : 460;
-    simRef.current.snowballs.push({
-      id: `sb_${Date.now()}_${Math.random()}`,
-      ownerId: player.id,
-      x: player.x + dirX * 22,
-      y: player.y + dirY * 22,
-      vx: dirX * boltSpeed,
-      vy: dirY * boltSpeed,
-      ttl: isShooter ? 1.1 : 1.35,
-      isBlaster: isShooter,
+    const boltSpeed = isShooter ? 680 : 480;
+    const baseAngle = Math.atan2(dirY, dirX);
+    const hasTriple = Date.now() < player.tripleUntil;
+    const spreadAngles = hasTriple ? [-0.18, 0, 0.18] : [0];
+
+    spreadAngles.forEach((off, idx) => {
+      const ang = baseAngle + off;
+      const sx = Math.cos(ang);
+      const sy = Math.sin(ang);
+      simRef.current.snowballs.push({
+        id: `sb_${Date.now()}_${idx}_${Math.random()}`,
+        ownerId: player.id,
+        x: player.x + sx * 22,
+        y: player.y + sy * 22,
+        vx: sx * boltSpeed,
+        vy: sy * boltSpeed,
+        ttl: isShooter ? 1.25 : 1.45,
+        isBlaster: isShooter,
+      });
     });
     if (isShooter) soundEngine.playBlaster();
     else soundEngine.playThrow();
@@ -1386,7 +1521,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       for (const participant of participants) {
         participant.wellDrops += 2;
         participant.score += 65;
-        participant.hp = Math.min(participant.maxHp, participant.hp + 1);
+        participant.hp = Math.min(participant.maxHp, participant.hp + 25);
       }
 
       queueRing(ARENA_CENTER_X, ARENA_CENTER_Y, '#fde047', 4.8);
@@ -1499,16 +1634,41 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         });
       }
       if (gm === 'car_racing') {
-        flashBanner('Get Ready! 3-Lap Circuit Race');
+        flashBanner('Beach Buggy Circuit! Clear Checkpoints 1–4 & Grab Orbs');
       } else if (gm === 'shooting') {
-        flashBanner('Wave 1: Aim with Mouse & Blast Cryo Targets!');
+        flashBanner('Wave 1: Aim with Mouse, Grab Power-Ups & Shatter Drones!');
+      } else {
+        flashBanner('2:30 Match: Collect Power-Ups & Bank Drops at the Well!');
       }
     },
     [connectTunnel, disconnectTunnel, flashBanner, initSoloMatch]
   );
 
+  const toggleFullscreen = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || !document.fullscreenEnabled) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+    } else {
+      void viewport.requestFullscreen().catch(() => {
+        flashBanner('Fullscreen unavailable in this browser window');
+      });
+    }
+  }, [flashBanner]);
+
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
   const openGameMapLauncher = useCallback((step: LauncherStep = 'choose_game') => {
     disconnectTunnel();
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+    }
     setLauncherStep(step);
     setGameState('TITLE_MENU');
     gameStateRef.current = 'TITLE_MENU';
@@ -1808,6 +1968,30 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       roughness: 0.2,
     });
 
+    const magnetPkGeo = new THREE.TorusGeometry(0.3, 0.09, 12, 24);
+    const magnetPkMat = new THREE.MeshStandardMaterial({
+      color: '#f43f5e',
+      emissive: '#e11d48',
+      emissiveIntensity: 0.65,
+      roughness: 0.2,
+    });
+
+    const triplePkGeo = new THREE.DodecahedronGeometry(0.34, 0);
+    const triplePkMat = new THREE.MeshStandardMaterial({
+      color: '#c084fc',
+      emissive: '#9333ea',
+      emissiveIntensity: 0.7,
+      roughness: 0.18,
+    });
+
+    const medkitPkGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    const medkitPkMat = new THREE.MeshStandardMaterial({
+      color: '#34d399',
+      emissive: '#059669',
+      emissiveIntensity: 0.65,
+      roughness: 0.2,
+    });
+
     const crateBoxGeo = new THREE.BoxGeometry(1.0, 1.0, 1.0);
     const crateBandGeo = new THREE.BoxGeometry(1.08, 0.18, 1.08);
     const crateMat = new THREE.MeshPhysicalMaterial({
@@ -1965,13 +2149,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         s.shake = Math.max(0, s.shake - dt * 16);
 
         if (gm === 'car_racing') {
-          // ===== MINI CAR RACING SIMULATION =====
+          // ===== BEACH BUGGY CIRCUIT RACING SIMULATION =====
           const wps = getRaceTrackWaypoints(mapIdRef.current);
           if (s.raceCountdown > 0) {
             s.raceCountdown = Math.max(0, s.raceCountdown - dt);
             if (s.raceCountdown === 0) {
               soundEngine.playLap(false);
-              flashBanner('GO! Race 3 Laps & Hit Blue Boost Pads!');
+              flashBanner('GO! Clear Checkpoints 1–4 & Hit Power-Up Orbs!');
             }
           } else {
             s.elapsed += dt;
@@ -1985,6 +2169,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               ? 0.92
               : 0.945;
 
+          let playerOffRoad = false;
+
           for (const k of s.karts) {
             if (k.finished || s.raceCountdown > 0) continue;
 
@@ -1997,9 +2183,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               if (keys['s'] || keys['arrowdown'] || touchDirRef.current.dy > 0.2) throttle -= 0.7;
               if (keys['a'] || keys['arrowleft'] || touchDirRef.current.dx < -0.2) steer -= 1;
               if (keys['d'] || keys['arrowright'] || touchDirRef.current.dx > 0.2) steer += 1;
-              k.nitro = Math.min(100, k.nitro + dt * (Math.abs(steer) > 0.4 ? 14 : 7));
+              k.nitro = Math.min(100, k.nitro + dt * (Math.abs(steer) > 0.4 ? 15 : 8));
             } else {
-              // AI Kart follows track waypoints smoothly
               const wp = wps[k.nextWp];
               const targetX = wp.x + k.aiLaneOffset * Math.cos(k.nextWp);
               const targetY = wp.y + k.aiLaneOffset * Math.sin(k.nextWp);
@@ -2007,74 +2192,96 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               let diff = desired - k.angle;
               while (diff > Math.PI) diff -= Math.PI * 2;
               while (diff < -Math.PI) diff += Math.PI * 2;
-              steer = THREE.MathUtils.clamp(diff * 2.1, -1, 1);
+              steer = THREE.MathUtils.clamp(diff * 2.15, -1, 1);
               throttle = Math.abs(diff) > 0.9 ? 0.78 : 1.0;
-              k.nitro = Math.min(100, k.nitro + dt * 6);
-              if (k.nitro > 80 && Math.abs(diff) < 0.22 && now >= k.boostUntil) {
-                k.nitro -= 40;
-                k.boostUntil = now + 1150;
+              k.nitro = Math.min(100, k.nitro + dt * 6.5);
+              if (k.nitro > 78 && Math.abs(diff) < 0.22 && now >= k.boostUntil) {
+                k.nitro -= 38;
+                k.boostUntil = now + 1200;
               }
             }
 
             k.steerInput = steer;
             const boosting = now < k.boostUntil;
-            const maxSpd = (k.isBot ? 360 * k.aiSpeedBias : 385) * mapSpec.speedMult * (boosting ? 1.38 : 1.0);
-            const accelRate = (boosting ? 720 : 460) * mapSpec.speedMult;
+            const distTrack = getDistanceToRaceTrack(k.x, k.y, mapIdRef.current);
+            const offRoad = distTrack > 105;
+            if (!k.isBot) playerOffRoad = offRoad;
+            const offRoadMult = offRoad && !boosting ? 0.84 : 1.0;
+
+            const maxSpd =
+              (k.isBot ? 430 * k.aiSpeedBias : 455) *
+              mapSpec.speedMult *
+              (boosting ? 1.38 : 1.0) *
+              offRoadMult;
+            const accelRate = (boosting ? 840 : 540) * mapSpec.speedMult;
 
             if (throttle !== 0) {
-              k.speed = THREE.MathUtils.clamp(k.speed + throttle * accelRate * dt, -140, maxSpd);
+              k.speed = THREE.MathUtils.clamp(k.speed + throttle * accelRate * dt, -150, maxSpd);
             } else {
               k.speed *= 0.97;
             }
 
-            const turnAuthority = THREE.MathUtils.clamp(Math.abs(k.speed) / 90, 0.25, 1.0);
+            const turnAuthority = THREE.MathUtils.clamp(Math.abs(k.speed) / 95, 0.28, 1.0);
             const reverseSign = k.speed >= -5 ? 1 : -1;
-            k.angle += steer * 2.55 * turnAuthority * reverseSign * dt;
+            k.angle += steer * 2.6 * turnAuthority * reverseSign * dt;
 
-            // Blend velocity toward kart heading for fun drifty cornering
             const hx = Math.cos(k.angle) * k.speed;
             const hy = Math.sin(k.angle) * k.speed;
             k.vx = k.vx * (1 - (1 - gripFactor) * 1.4) + hx * ((1 - gripFactor) * 1.4);
             k.vy = k.vy * (1 - (1 - gripFactor) * 1.4) + hy * ((1 - gripFactor) * 1.4);
 
-            k.x += k.vx * dt;
-            k.y += k.vy * dt;
+            k.x = THREE.MathUtils.clamp(k.x + k.vx * dt, RACE_BOUNDS.minX, RACE_BOUNDS.maxX);
+            k.y = THREE.MathUtils.clamp(k.y + k.vy * dt, RACE_BOUNDS.minY, RACE_BOUNDS.maxY);
 
-            // Keep inside grand circular track boundary (r <= 555px)
-            const dxC = k.x - ARENA_CENTER_X;
-            const dyC = k.y - ARENA_CENTER_Y;
-            const distC = Math.hypot(dxC, dyC);
-            if (distC > 555) {
-              const nx = dxC / distC;
-              const ny = dyC / distC;
-              k.x = ARENA_CENTER_X + nx * 555;
-              k.y = ARENA_CENTER_Y + ny * 555;
-              k.vx *= 0.85;
-              k.vy *= 0.85;
-              k.speed *= 0.88;
-            }
-
-            // Solid obstacle bounce
-            const res = resolveArenaObstacleCollision(k.x, k.y, k.vx, k.vy, 20, mapIdRef.current);
-            k.x = res.x;
-            k.y = res.y;
-            k.vx = res.vx;
-            k.vy = res.vy;
-
-            // Drift / Boost tire trail
             if (boosting && Math.random() < 0.65) {
               queueBurst(k.x, k.y, '#22d3ee', 1);
             }
 
-            // Checkpoint advancement
+            // Collect Beach-Buggy Track Power-Up Orbs (9s respawn)
+            const orbRadius = now < k.magnetUntil ? 78 : 42;
+            for (const pk of s.pickups) {
+              if (pk.respawnAt && now < pk.respawnAt) continue;
+              if (Math.hypot(pk.x - k.x, pk.y - k.y) < orbRadius) {
+                pk.respawnAt = now + 9000;
+                if (pk.kind === 'boost') {
+                  k.nitro = Math.min(100, k.nitro + 30);
+                  k.boostUntil = Math.max(k.boostUntil, now + 1350);
+                  k.score += 55;
+                } else if (pk.kind === 'triple') {
+                  k.nitro = 100;
+                  k.boostUntil = now + 2200;
+                  k.tripleUntil = now + 7000;
+                  k.score += 75;
+                } else if (pk.kind === 'shield') {
+                  k.shieldUntil = now + 9000;
+                  k.score += 45;
+                } else if (pk.kind === 'magnet') {
+                  k.magnetUntil = now + 10000;
+                  k.score += 45;
+                } else if (pk.kind === 'gem') {
+                  k.gemsCollected += 2;
+                  k.score += 60;
+                } else {
+                  k.dropsCollected += 3;
+                  k.score += 45;
+                }
+                if (!k.isBot) {
+                  soundEngine.playPickup(pk.kind === 'gem' ? 'gem' : 'power');
+                  queueBurst(pk.x, pk.y, '#22d3ee', 8);
+                  queueRing(pk.x, pk.y, '#38bdf8', 2.2);
+                }
+              }
+            }
+
+            // Waypoint + Sequential Checkpoints 1..4
             const wp = wps[k.nextWp];
             const dWp = Math.hypot(k.x - wp.x, k.y - wp.y);
-            if (dWp < 118) {
+            if (dWp < 135) {
               if (wp.hasBoostPad && now >= k.boostUntil) {
                 k.boostUntil = now + 1250;
                 k.nitro = Math.min(100, k.nitro + 25);
                 k.dropsCollected += 2;
-                k.score += 45;
+                k.score += 50;
                 if (!k.isBot) {
                   s.racePadsHit += 1;
                   soundEngine.playBoost();
@@ -2084,13 +2291,26 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 }
               }
 
+              if (wp.isCheckpoint && wp.checkpointNum && wp.checkpointNum === k.nextCheckpoint) {
+                k.checkpointsCleared += 1;
+                k.nextCheckpoint = wp.checkpointNum + 1;
+                k.score += 90;
+                k.dropsCollected += 2;
+                if (!k.isBot) {
+                  soundEngine.playPickup('gem');
+                  queueBurst(k.x, k.y, '#fbbf24', 10);
+                  queueRing(k.x, k.y, '#fbbf24', 3.0);
+                  flashBanner(`Checkpoint ${wp.checkpointNum}/4 Cleared! +90 pts`);
+                }
+              }
+
               k.nextWp = (k.nextWp + 1) % wps.length;
               k.score += 35;
               k.dropsCollected += 1;
 
-              if (k.nextWp === 0) {
-                // Approaching start/finish line next
-              } else if (k.nextWp === 1 && k.totalProgress > 400) {
+              if (k.nextWp === 1 && k.checkpointsCleared >= 4) {
+                k.checkpointsCleared = 0;
+                k.nextCheckpoint = 1;
                 k.lap += 1;
                 if (!k.isBot) {
                   updateTaskProgress('race_laps', k.lap - 1, s.entities[0]);
@@ -2098,7 +2318,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 if (k.lap > 3) {
                   k.finished = true;
                   k.finishTime = s.elapsed;
-                  k.gemsCollected += 6;
+                  k.gemsCollected += 8;
                   if (!k.isBot) {
                     soundEngine.playLap(true);
                   }
@@ -2112,7 +2332,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             const nextWpPos = wps[k.nextWp];
             const distNext = Math.hypot(k.x - nextWpPos.x, k.y - nextWpPos.y);
             const wpIdxAdjusted = k.nextWp === 0 ? wps.length : k.nextWp;
-            k.totalProgress = (k.lap - 1) * 1000 + wpIdxAdjusted * 110 - distNext * 0.15;
+            k.totalProgress = (k.lap - 1) * 3000 + wpIdxAdjusted * 180 - distNext * 0.12;
           }
 
           const playerKart = s.karts.find((k) => k.id === 'player');
@@ -2127,15 +2347,35 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 score: playerKart.score,
                 wellDrops: playerKart.dropsCollected,
                 frostGems: playerKart.gemsCollected,
+                hp: 100,
+                maxHp: 100,
                 timeLeft: Math.ceil(s.timeLeft),
                 lap: Math.min(3, playerKart.lap),
                 totalLaps: 3,
+                checkpoint: playerKart.checkpointsCleared,
+                totalCheckpoints: 4,
                 racePos: posRank,
                 speedKmh: Math.round(Math.abs(playerKart.speed) * 0.36),
                 nitroPct: Math.round(playerKart.nitro),
+                shieldSec: playerKart.shieldUntil > now ? Math.ceil((playerKart.shieldUntil - now) / 1000) : 0,
+                boostSec: playerKart.boostUntil > now ? Math.ceil((playerKart.boostUntil - now) / 1000) : 0,
+                magnetSec: playerKart.magnetUntil > now ? Math.ceil((playerKart.magnetUntil - now) / 1000) : 0,
+                tripleSec: playerKart.tripleUntil > now ? Math.ceil((playerKart.tripleUntil - now) / 1000) : 0,
+                shieldActive: now < playerKart.shieldUntil,
                 boostActive: now < playerKart.boostUntil,
                 countdown: Math.ceil(s.raceCountdown),
+                offRoad: playerOffRoad,
               }));
+              setMinimapData({
+                dots: s.karts.map((k) => ({
+                  x: k.x,
+                  y: k.y,
+                  kind: k.isBot ? 'bot' : 'player',
+                  color: getYetiColorway(k.colorway).accentHex,
+                })),
+                ringRadius: s.ringRadius,
+                playerAngle: playerKart.angle,
+              });
             }
             if (playerKart.finished || s.timeLeft <= 0) {
               if (posRank <= 2) {
@@ -2155,6 +2395,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               s.shooterCombo = 1;
             }
           }
+          if (s.pickups.length < 16 && Math.random() < dt * 0.7) {
+            s.pickups.push(spawnPickup(Math.floor(s.elapsed * 10), mapIdRef.current));
+          }
 
           const player = s.entities[0];
           if (player && !player.eliminated) {
@@ -2173,7 +2416,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             if (k['a'] || k['arrowleft']) ix -= 1;
             if (k['d'] || k['arrowright']) ix += 1;
             const mag = Math.hypot(ix, iy);
-            const moveSpd = 245 * mapSpec.speedMult * (now < player.boostUntil ? 1.3 : 1);
+            const moveSpd = 265 * mapSpec.speedMult * (now < player.boostUntil ? 1.32 : 1);
             if (mag > 0.05) {
               player.vx = player.vx * 0.72 + (ix / mag) * moveSpd * 0.28;
               player.vy = player.vy * 0.72 + (iy / mag) * moveSpd * 0.28;
@@ -2182,7 +2425,6 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               player.vy *= 0.8;
             }
 
-            // Face aim reticle smoothly
             const adx = aimLogicalRef.current.x - player.x;
             const ady = aimLogicalRef.current.y - player.y;
             const amag = Math.hypot(adx, ady);
@@ -2206,10 +2448,16 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             player.vx = res.vx;
             player.vy = res.vy;
 
-            // Collect floor pickups
+            // Collect & Magnet-pull Power-Ups + Drops
+            const magnetActive = now < player.magnetUntil;
             for (let i = s.pickups.length - 1; i >= 0; i--) {
               const pk = s.pickups[i];
-              if (Math.hypot(pk.x - player.x, pk.y - player.y) < 30) {
+              const dPk = Math.hypot(pk.x - player.x, pk.y - player.y);
+              if (magnetActive && (pk.kind === 'drop' || pk.kind === 'gem') && dPk > 16 && dPk < 240) {
+                pk.x += ((player.x - pk.x) / dPk) * 420 * dt;
+                pk.y += ((player.y - pk.y) / dPk) * 420 * dt;
+              }
+              if (Math.hypot(pk.x - player.x, pk.y - player.y) < 34) {
                 if (pk.kind === 'drop') {
                   player.wellDrops += 1;
                   player.score += 20;
@@ -2219,14 +2467,27 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   player.score += 35;
                   soundEngine.playPickup('gem');
                 } else if (pk.kind === 'shield') {
-                  player.shieldUntil = now + 7000;
-                  player.hp = Math.min(player.maxHp, player.hp + 1);
+                  player.shieldUntil = now + 9000;
                   soundEngine.playPickup('power');
+                  flashBanner('Cryo Shield Active (9s)!');
+                } else if (pk.kind === 'boost') {
+                  player.boostUntil = now + 7000;
+                  soundEngine.playPickup('power');
+                  flashBanner('Turbo Surge Active (7s)!');
+                } else if (pk.kind === 'magnet') {
+                  player.magnetUntil = now + 10000;
+                  soundEngine.playPickup('power');
+                  flashBanner('Drop Magnet Active (10s)!');
+                } else if (pk.kind === 'triple') {
+                  player.tripleUntil = now + 10000;
+                  soundEngine.playPickup('power');
+                  flashBanner('Tri-Shot Blaster Active (10s)!');
                 } else {
-                  player.boostUntil = now + 6000;
-                  soundEngine.playPickup('power');
+                  player.hp = Math.min(player.maxHp, player.hp + 30);
+                  soundEngine.playPickup('gem');
+                  flashBanner('+30 HP Restored!');
                 }
-                queueBurst(pk.x, pk.y, '#22d3ee', 6);
+                queueBurst(pk.x, pk.y, '#22d3ee', 7);
                 s.pickups.splice(i, 1);
               }
             }
@@ -2235,16 +2496,16 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             for (const en of s.shooterEnemies) {
               if (en.kind === 'bullseye') {
                 en.orbitAngle += dt * 0.95;
-                en.x += Math.cos(en.orbitAngle) * 35 * dt;
-                en.y += Math.sin(en.orbitAngle) * 35 * dt;
+                en.x += Math.cos(en.orbitAngle) * 42 * dt;
+                en.y += Math.sin(en.orbitAngle) * 42 * dt;
               } else {
                 const dxP = player.x - en.x;
                 const dyP = player.y - en.y;
                 const distP = Math.hypot(dxP, dyP) || 1;
-                const desiredDist = en.kind === 'yeti_rival' ? 210 : 165;
-                const radialPush = distP > desiredDist ? 1 : distP < desiredDist - 45 ? -0.7 : 0;
+                const desiredDist = en.kind === 'yeti_rival' ? 240 : 185;
+                const radialPush = distP > desiredDist ? 1 : distP < desiredDist - 55 ? -0.7 : 0;
                 const strafe = en.kind === 'yeti_rival' ? 0.65 : 0.45;
-                const spd = (en.kind === 'yeti_rival' ? 135 : 108) * mapSpec.speedMult;
+                const spd = (en.kind === 'yeti_rival' ? 148 : 118) * mapSpec.speedMult;
                 const tx = (dxP / distP) * radialPush - (dyP / distP) * strafe;
                 const ty = (dyP / distP) * radialPush + (dxP / distP) * strafe;
                 en.vx = en.vx * 0.85 + tx * spd * 0.15;
@@ -2256,16 +2517,16 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 en.y = er.y;
 
                 en.fireCd -= dt;
-                if (en.fireCd <= 0 && distP < 480) {
+                if (en.fireCd <= 0 && distP < 560) {
                   en.fireCd = (en.kind === 'yeti_rival' ? 1.85 : 2.5) + Math.random() * 0.8;
                   s.snowballs.push({
                     id: `eb_${now}_${en.id}`,
                     ownerId: en.id,
                     x: en.x + (dxP / distP) * 20,
                     y: en.y + (dyP / distP) * 20,
-                    vx: (dxP / distP) * 270,
-                    vy: (dyP / distP) * 270,
-                    ttl: 1.8,
+                    vx: (dxP / distP) * 290,
+                    vy: (dyP / distP) * 290,
+                    ttl: 2.1,
                     isEnemyOrb: true,
                   });
                 }
@@ -2283,7 +2544,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               if (sb.ownerId === 'player') {
                 for (let eIdx = s.shooterEnemies.length - 1; eIdx >= 0; eIdx--) {
                   const en = s.shooterEnemies[eIdx];
-                  if (Math.hypot(en.x - sb.x, en.y - sb.y) < 26) {
+                  if (Math.hypot(en.x - sb.x, en.y - sb.y) < 28) {
                     hit = true;
                     en.hp -= 1;
                     s.hitsLanded += 1;
@@ -2305,10 +2566,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                       queueBurst(en.x, en.y, '#fbbf24', 12);
                       queueRing(en.x, en.y, '#fbbf24', 2.4);
 
-                      if (Math.random() < 0.42) {
+                      if (Math.random() < 0.52) {
+                        const pool: Pickup['kind'][] = ['drop', 'gem', 'shield', 'boost', 'magnet', 'triple', 'medkit'];
                         s.pickups.push({
                           id: `drop_${now}_${eIdx}`,
-                          kind: Math.random() < 0.5 ? 'drop' : Math.random() < 0.7 ? 'gem' : 'shield',
+                          kind: pool[Math.floor(Math.random() * pool.length)],
                           x: en.x,
                           y: en.y,
                           bobOffset: 0,
@@ -2326,7 +2588,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               } else if (Math.hypot(player.x - sb.x, player.y - sb.y) < 22) {
                 hit = true;
                 if (now >= player.shieldUntil && now >= player.hurtUntil) {
-                  player.hp = Math.max(0, player.hp - 1);
+                  player.hp = Math.max(0, player.hp - 20);
                   player.hurtUntil = now + 850;
                   s.shooterCombo = 1;
                   s.shake = 0.45;
@@ -2351,14 +2613,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               }
             }
 
-            // Spawn Next Wave automatically when cleared
             if (s.shooterEnemies.length === 0) {
               s.shooterWave += 1;
               player.score += 120;
-              player.hp = Math.min(player.maxHp, player.hp + 1);
+              player.hp = Math.min(player.maxHp, player.hp + 25);
               spawnShooterWave(s.shooterWave, mapIdRef.current);
               soundEngine.playLap(false);
-              flashBanner(`Wave ${s.shooterWave}! +1 Heart Restored`);
+              flashBanner(`Wave ${s.shooterWave}! +25 HP Restored`);
             }
 
             hudSyncAccum += dt;
@@ -2370,14 +2631,32 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 wellDrops: player.wellDrops,
                 frostGems: player.frostGems,
                 hp: player.hp,
+                maxHp: player.maxHp,
                 timeLeft: Math.ceil(s.timeLeft),
                 wave: s.shooterWave,
+                shieldSec: player.shieldUntil > now ? Math.ceil((player.shieldUntil - now) / 1000) : 0,
+                boostSec: player.boostUntil > now ? Math.ceil((player.boostUntil - now) / 1000) : 0,
+                magnetSec: player.magnetUntil > now ? Math.ceil((player.magnetUntil - now) / 1000) : 0,
+                tripleSec: player.tripleUntil > now ? Math.ceil((player.tripleUntil - now) / 1000) : 0,
                 shieldActive: now < player.shieldUntil,
                 boostActive: now < player.boostUntil,
                 elims: s.shooterElims,
                 combo: s.shooterCombo,
                 novaReady: s.shooterNovaCd <= 0,
               }));
+              setMinimapData({
+                dots: [
+                  { x: ARENA_CENTER_X, y: ARENA_CENTER_Y, kind: 'well' },
+                  ...s.shooterEnemies.map((en) => ({
+                    x: en.x,
+                    y: en.y,
+                    kind: (en.kind === 'bullseye' ? 'bullseye' : 'enemy') as MinimapDot['kind'],
+                  })),
+                  { x: player.x, y: player.y, kind: 'player' },
+                ],
+                ringRadius: s.ringRadius,
+                playerAngle: Math.atan2(player.facingY, player.facingX),
+              });
             }
 
             if (player.eliminated || s.timeLeft <= 0) {
@@ -2385,15 +2664,15 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             }
           }
         } else {
-          // ===== SURVIVAL FLURRY SIMULATION (EXPANDED 1500x960 MAP) =====
+          // ===== SURVIVAL FLURRY SIMULATION (EXPANDED 2400x1600 MAP · 150s) =====
           s.elapsed += dt;
           s.timeLeft = Math.max(0, s.timeLeft - dt);
-          s.ringRadius = Math.max(165, ARENA_INITIAL_RING_RADIUS - s.elapsed * 3.8);
+          s.ringRadius = Math.max(210, ARENA_INITIAL_RING_RADIUS - s.elapsed * 3.2);
 
-          while (s.pickups.length < 20) {
+          while (s.pickups.length < 28) {
             s.pickups.push(spawnPickup(Math.floor(s.elapsed * 10), mapIdRef.current));
           }
-          while (s.crates.length < 7) {
+          while (s.crates.length < 10) {
             s.crates.push(spawnCrate(Math.floor(s.elapsed * 10)));
           }
 
@@ -2401,13 +2680,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             s.beacon.timeLeft = Math.max(0, s.beacon.timeLeft - dt);
             if (s.beacon.timeLeft <= 0) {
               s.beacon.active = false;
-              s.beacon.nextIn = 10.5;
+              s.beacon.nextIn = 11.0;
             }
           } else {
             s.beacon.nextIn -= dt;
             if (s.beacon.nextIn <= 0) {
               const a = Math.random() * Math.PI * 2;
-              const d = 120 + Math.random() * Math.max(60, s.ringRadius - 170);
+              const d = 150 + Math.random() * Math.max(90, s.ringRadius - 210);
               const bPos = nudgeOutsideObstacles(
                 ARENA_CENTER_X + Math.cos(a) * d,
                 ARENA_CENTER_Y + Math.sin(a) * d,
@@ -2418,9 +2697,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 active: true,
                 x: bPos.x,
                 y: bPos.y,
-                radius: 64,
-                timeLeft: 10.5,
-                nextIn: 10.5,
+                radius: 78,
+                timeLeft: 12.0,
+                nextIn: 11.0,
                 tickAccum: 0,
               };
               flashBanner('Shrine Beacon Activated! Stand inside for Drops');
@@ -2430,7 +2709,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           s.nextHazardIn -= dt;
           if (s.nextHazardIn <= 0) {
             const angle = Math.random() * Math.PI * 2;
-            const dist = 75 + Math.random() * Math.max(70, s.ringRadius - 75);
+            const dist = 95 + Math.random() * Math.max(100, s.ringRadius - 95);
             const hPos = nudgeOutsideObstacles(
               ARENA_CENTER_X + Math.cos(angle) * dist,
               ARENA_CENTER_Y + Math.sin(angle) * dist,
@@ -2441,11 +2720,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               id: `hz_${now}_${Math.random()}`,
               x: hPos.x,
               y: hPos.y,
-              radius: 40,
-              timer: 1.4,
-              maxTimer: 1.4,
+              radius: 44,
+              timer: 1.45,
+              maxTimer: 1.45,
             });
-            s.nextHazardIn = Math.max(1.7, 3.8 - s.elapsed * 0.03);
+            s.nextHazardIn = Math.max(1.5, 3.6 - s.elapsed * 0.018);
           }
 
           const hazardBurstCol =
@@ -2465,7 +2744,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 if (ent.eliminated) continue;
                 if (Math.hypot(ent.x - hz.x, ent.y - hz.y) < hz.radius + 10) {
                   if (now >= ent.shieldUntil && now >= ent.hurtUntil) {
-                    ent.hp = Math.max(0, ent.hp - 1);
+                    ent.hp = Math.max(0, ent.hp - 20);
                     ent.hurtUntil = now + 900;
                     if (!ent.isBot) {
                       s.shake = 0.45;
@@ -2510,7 +2789,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               } else if (ent.gatherAtWellUntil && now < ent.gatherAtWellUntil) {
                 ix = 0;
                 iy = 0;
-              } else if (dC > s.ringRadius - 45 || ent.carriedDrops >= 3) {
+              } else if (dC > s.ringRadius - 55 || ent.carriedDrops >= 3) {
                 ix = dxC / (dC || 1);
                 iy = dyC / (dC || 1);
               } else {
@@ -2532,7 +2811,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
               if (ent.throwCd <= 0) {
                 const target = s.entities.find(
-                  (o) => o.id !== ent.id && !o.eliminated && Math.hypot(o.x - ent.x, o.y - ent.y) < 310
+                  (o) => o.id !== ent.id && !o.eliminated && Math.hypot(o.x - ent.x, o.y - ent.y) < 340
                 );
                 if (target) {
                   const d = Math.hypot(target.x - ent.x, target.y - ent.y) || 1;
@@ -2542,9 +2821,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                     ownerId: ent.id,
                     x: ent.x + ((target.x - ent.x) / d) * 20,
                     y: ent.y + ((target.y - ent.y) / d) * 20,
-                    vx: ((target.x - ent.x) / d) * 355,
-                    vy: ((target.y - ent.y) / d) * 355,
-                    ttl: 1.3,
+                    vx: ((target.x - ent.x) / d) * 370,
+                    vy: ((target.y - ent.y) / d) * 370,
+                    ttl: 1.4,
                   });
                   ent.throwCd = 2.2 + Math.random() * 1.4;
                 }
@@ -2552,7 +2831,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             }
 
             const boostFactor = now < ent.boostUntil ? 1.38 : 1;
-            const baseSpeed = (ent.isBot ? 185 : 225) * boostFactor * mapSpec.speedMult;
+            const baseSpeed = (ent.isBot ? 205 : 245) * boostFactor * mapSpec.speedMult;
             const mag = Math.hypot(ix, iy);
             if (mag > 0.05 && ent.dashTime <= 0) {
               const nx = ix / mag;
@@ -2573,8 +2852,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               queueBurst(ent.x, ent.y, trailCol, ent.dashTime > 0 ? 2 : 1);
             }
 
-            ent.x = Math.max(45, Math.min(W - 45, ent.x + ent.vx * dt));
-            ent.y = Math.max(45, Math.min(H - 45, ent.y + ent.vy * dt));
+            ent.x = Math.max(55, Math.min(W - 55, ent.x + ent.vx * dt));
+            ent.y = Math.max(55, Math.min(H - 55, ent.y + ent.vy * dt));
 
             const resolved = resolveArenaObstacleCollision(
               ent.x,
@@ -2596,9 +2875,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   ent.score += 60;
                   queueBurst(cr.x, cr.y, '#fde047', 12);
                   queueRing(cr.x, cr.y, '#fbbf24', 2.4);
+                  const cratePool: Pickup['kind'][] = ['gem', 'shield', 'magnet', 'triple', 'medkit'];
                   s.pickups.push({
                     id: `cr_pk_${now}_${c}`,
-                    kind: Math.random() < 0.6 ? 'gem' : 'shield',
+                    kind: cratePool[Math.floor(Math.random() * cratePool.length)],
                     x: cr.x,
                     y: cr.y,
                     bobOffset: 0,
@@ -2614,18 +2894,18 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             }
 
             const distCenter = Math.hypot(ent.x - ARENA_CENTER_X, ent.y - ARENA_CENTER_Y);
-            if (distCenter < 70 && ent.carriedDrops >= 2) {
+            if (distCenter < 75 && ent.carriedDrops >= 2) {
               const bonus = ent.carriedDrops * 28;
               ent.score += bonus;
               ent.wellDrops += ent.carriedDrops;
               ent.carriedDrops = 0;
-              ent.hp = Math.min(ent.maxHp, ent.hp + 1);
+              ent.hp = Math.min(ent.maxHp, ent.hp + 25);
               queueBurst(ARENA_CENTER_X, ARENA_CENTER_Y, '#34d399', 14);
               queueRing(ARENA_CENTER_X, ARENA_CENTER_Y, '#34d399', 3.4);
               if (!ent.isBot) {
                 s.wellBanks += 1;
                 soundEngine.playPickup('power');
-                flashBanner(`Well Deposit! +${bonus} pts & +1 Heart`);
+                flashBanner(`Well Deposit! +${bonus} pts & +25 HP`);
                 updateTaskProgress('task_bank', s.wellBanks, ent);
               }
             }
@@ -2646,7 +2926,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             }
 
             if (distCenter > s.ringRadius && now >= ent.hurtUntil && now >= ent.shieldUntil) {
-              ent.hp = Math.max(0, ent.hp - 1);
+              ent.hp = Math.max(0, ent.hp - 15);
               ent.hurtUntil = now + 1100;
               if (!ent.isBot) {
                 s.shake = 0.4;
@@ -2656,9 +2936,15 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             }
 
             const dropMult = now < s.blessingUntil ? 2 : 1;
+            const magnetActive = now < ent.magnetUntil;
             for (let i = s.pickups.length - 1; i >= 0; i--) {
               const pk = s.pickups[i];
-              if (Math.hypot(pk.x - ent.x, pk.y - ent.y) < 30) {
+              const dPk = Math.hypot(pk.x - ent.x, pk.y - ent.y);
+              if (magnetActive && (pk.kind === 'drop' || pk.kind === 'gem') && dPk > 16 && dPk < 240) {
+                pk.x += ((ent.x - pk.x) / dPk) * 420 * dt;
+                pk.y += ((ent.y - pk.y) / dPk) * 420 * dt;
+              }
+              if (Math.hypot(pk.x - ent.x, pk.y - ent.y) < 34) {
                 if (pk.kind === 'drop') {
                   ent.score += 15 * dropMult;
                   ent.wellDrops += dropMult;
@@ -2669,13 +2955,40 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   ent.frostGems += 1;
                   if (!ent.isBot) soundEngine.playPickup('gem');
                 } else if (pk.kind === 'shield') {
-                  ent.shieldUntil = now + 7000;
-                  ent.score += 20;
-                  if (!ent.isBot) soundEngine.playPickup('power');
+                  ent.shieldUntil = now + 9000;
+                  ent.score += 25;
+                  if (!ent.isBot) {
+                    soundEngine.playPickup('power');
+                    flashBanner('Cryo Shield Active (9s)!');
+                  }
+                } else if (pk.kind === 'boost') {
+                  ent.boostUntil = now + 7000;
+                  ent.score += 25;
+                  if (!ent.isBot) {
+                    soundEngine.playPickup('power');
+                    flashBanner('Turbo Surge Active (7s)!');
+                  }
+                } else if (pk.kind === 'magnet') {
+                  ent.magnetUntil = now + 10000;
+                  ent.score += 30;
+                  if (!ent.isBot) {
+                    soundEngine.playPickup('power');
+                    flashBanner('Drop Magnet Active (10s)!');
+                  }
+                } else if (pk.kind === 'triple') {
+                  ent.tripleUntil = now + 10000;
+                  ent.score += 30;
+                  if (!ent.isBot) {
+                    soundEngine.playPickup('power');
+                    flashBanner('Tri-Shot Flurry Active (10s)!');
+                  }
                 } else {
-                  ent.boostUntil = now + 6000;
+                  ent.hp = Math.min(ent.maxHp, ent.hp + 30);
                   ent.score += 20;
-                  if (!ent.isBot) soundEngine.playPickup('power');
+                  if (!ent.isBot) {
+                    soundEngine.playPickup('gem');
+                    flashBanner('+30 HP Restored!');
+                  }
                 }
                 queueBurst(pk.x, pk.y, '#bae6fd', 7);
                 s.pickups.splice(i, 1);
@@ -2721,7 +3034,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   ent.vy += sb.vy * 0.65;
                   const shooter = s.entities.find((e) => e.id === sb.ownerId);
                   if (now >= ent.hurtUntil) {
-                    ent.hp = Math.max(0, ent.hp - 1);
+                    ent.hp = Math.max(0, ent.hp - 20);
                     ent.hurtUntil = now + 750;
                     if (shooter) {
                       shooter.score += 45;
@@ -2771,9 +3084,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                       }
                     }
                     queueRing(cr.x, cr.y, '#fbbf24', 2.4);
+                    const cratePool: Pickup['kind'][] = ['gem', 'shield', 'magnet', 'triple', 'medkit'];
                     s.pickups.push({
                       id: `cr_drop_${now}_${c}`,
-                      kind: Math.random() < 0.65 ? 'gem' : 'drop',
+                      kind: cratePool[Math.floor(Math.random() * cratePool.length)],
                       x: cr.x,
                       y: cr.y,
                       bobOffset: 0,
@@ -2793,7 +3107,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           const player = s.entities.find((e) => e.id === 'player');
           if (player) {
             hudSyncAccum += dt;
-            if (hudSyncAccum > 0.1) {
+            if (hudSyncAccum > 0.08) {
               hudSyncAccum = 0;
               const distWell = Math.hypot(player.x - ARENA_CENTER_X, player.y - ARENA_CENTER_Y);
               const blessingLeft =
@@ -2805,8 +3119,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 carriedDrops: player.carriedDrops,
                 frostGems: player.frostGems,
                 hp: player.hp,
+                maxHp: player.maxHp,
                 timeLeft: Math.ceil(s.timeLeft),
-                wave: Math.max(1, Math.ceil(s.elapsed / 20)),
+                wave: Math.max(1, Math.ceil(s.elapsed / 25)),
+                shieldSec: player.shieldUntil > now ? Math.ceil((player.shieldUntil - now) / 1000) : 0,
+                boostSec: player.boostUntil > now ? Math.ceil((player.boostUntil - now) / 1000) : 0,
+                magnetSec: player.magnetUntil > now ? Math.ceil((player.magnetUntil - now) / 1000) : 0,
+                tripleSec: player.tripleUntil > now ? Math.ceil((player.tripleUntil - now) / 1000) : 0,
                 shieldActive: now < player.shieldUntil,
                 boostActive: now < player.boostUntil,
                 dashReady: player.dashCd <= 0,
@@ -2815,6 +3134,22 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 blessingLeft,
                 ritualReady: now >= s.ritualCooldownUntil,
               }));
+              setMinimapData({
+                dots: [
+                  { x: ARENA_CENTER_X, y: ARENA_CENTER_Y, kind: 'well' },
+                  ...(s.beacon.active ? [{ x: s.beacon.x, y: s.beacon.y, kind: 'beacon' as const }] : []),
+                  ...s.entities
+                    .filter((e) => !e.eliminated)
+                    .map((e) => ({
+                      x: e.x,
+                      y: e.y,
+                      kind: (e.isBot ? 'bot' : 'player') as MinimapDot['kind'],
+                      color: getYetiColorway(e.colorway).accentHex,
+                    })),
+                ],
+                ringRadius: s.ringRadius,
+                playerAngle: 0,
+              });
             }
 
             const botsAlive = s.entities.filter((e) => e.isBot && !e.eliminated).length;
@@ -2891,6 +3226,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               y: p.y,
               vx: p.vx,
               vy: p.vy,
+              hp: p.hp,
+              maxHp: p.maxHp || 100,
               facingX: 0,
               facingY: 1,
               hat:
@@ -2918,6 +3255,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               y: e.y,
               vx: e.vx,
               vy: e.vy,
+              hp: e.hp,
+              maxHp: e.maxHp || 100,
               facingX: e.facingX,
               facingY: e.facingY,
               hat:
@@ -2951,6 +3290,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               isPlayer: act.isMe,
             });
             rig.root.userData.rigKey = rigKey;
+            if (!act.isMe) {
+              const hpBar = buildHealthBar3D(1.15, 2.35);
+              rig.root.add(hpBar.group);
+              rig.root.userData.hpBar = hpBar;
+            }
             yetiRigs.set(act.id, rig);
             actorsGroup.add(rig.root);
           }
@@ -2961,6 +3305,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           const wx = toWorldX(act.x);
           const wz = toWorldZ(act.y);
           rig.root.position.set(wx, 0, wz);
+
+          if (rig.root.userData.hpBar) {
+            updateHealthBar3D(rig.root.userData.hpBar as HealthBar3D, act.hp, act.maxHp, camera);
+          }
 
           if (act.isMe) {
             focusX = wx;
@@ -3066,9 +3414,17 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 scarfId: 'scarf_crimson',
                 isPlayer: false,
               });
+              const hpBar = buildHealthBar3D(1.2, 2.35);
+              sm.root.add(hpBar.group);
+              sm.root.userData.hpBar = hpBar;
               shooterGroup.add(sm.root);
             } else {
               sm = buildShooterTargetMesh(en.kind, accentHex);
+              if (en.kind === 'drone') {
+                const hpBar = buildHealthBar3D(1.0, 1.9);
+                sm.group.add(hpBar.group);
+                sm.group.userData.hpBar = hpBar;
+              }
               shooterGroup.add(sm.group);
             }
             shooterMeshes.set(en.id, sm);
@@ -3081,12 +3437,18 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             const spd = Math.hypot(en.vx, en.vy);
             if (spd > 5) sm.root.rotation.y = Math.atan2(en.vx, en.vy);
             animateYetiWalk(sm, { speed: spd, dt, elapsedTime });
+            if (sm.root.userData.hpBar) {
+              updateHealthBar3D(sm.root.userData.hpBar as HealthBar3D, en.hp, en.maxHp, camera);
+            }
           } else {
             sm.group.position.set(wx, 0, wz);
             if (en.kind === 'drone') {
               sm.coreMesh.rotation.y += dt * 2.5;
               sm.ringMesh.rotation.z += dt * 4.2;
               sm.group.position.y = Math.sin(elapsedTime * 4 + en.orbitAngle) * 0.16;
+              if (sm.group.userData.hpBar) {
+                updateHealthBar3D(sm.group.userData.hpBar as HealthBar3D, en.hp, en.maxHp, camera);
+              }
             } else {
               sm.group.rotation.y += dt * 1.8;
             }
@@ -3100,16 +3462,21 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         }
       }
 
-      // Sync Pickups
+      // Sync Pickups (including Beach-Buggy respawning orbs & new power-ups)
       const activePickups = tunnelSnap ? tunnelSnap.pickups : s.pickups;
       const seenPickupIds = new Set<string>();
       for (const pk of activePickups) {
+        const respawnAt = (pk as Pickup).respawnAt;
+        if (respawnAt && now < respawnAt) continue;
         seenPickupIds.add(pk.id);
         let mesh = pickupMeshes.get(pk.id);
         if (!mesh) {
           if (pk.kind === 'drop') mesh = new THREE.Mesh(dropGeo, dropMat);
           else if (pk.kind === 'gem') mesh = new THREE.Mesh(gemGeo, gemMat);
           else if (pk.kind === 'shield') mesh = new THREE.Mesh(shieldPkGeo, shieldPkMat);
+          else if (pk.kind === 'magnet') mesh = new THREE.Mesh(magnetPkGeo, magnetPkMat);
+          else if (pk.kind === 'triple') mesh = new THREE.Mesh(triplePkGeo, triplePkMat);
+          else if (pk.kind === 'medkit') mesh = new THREE.Mesh(medkitPkGeo, medkitPkMat);
           else mesh = new THREE.Mesh(boostPkGeo, boostPkMat);
           mesh.castShadow = !isSoftwareGl;
           pickupMeshes.set(pk.id, mesh);
@@ -3117,10 +3484,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         }
         mesh.position.set(
           toWorldX(pk.x),
-          0.54 + Math.sin(elapsedTime * 4 + ((pk as Pickup).bobOffset || 0)) * 0.14,
+          0.56 + Math.sin(elapsedTime * 4 + ((pk as Pickup).bobOffset || 0)) * 0.14,
           toWorldZ(pk.y)
         );
-        mesh.rotation.y += dt * 2.2;
+        mesh.rotation.y += dt * 2.4;
+        if (pk.kind === 'magnet') mesh.rotation.x = Math.sin(elapsedTime * 2) * 0.25;
       }
       for (const [id, mesh] of pickupMeshes.entries()) {
         if (!seenPickupIds.has(id)) {
@@ -3304,12 +3672,12 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       if (gm === 'car_racing' && chaseYaw !== null && gameStateRef.current !== 'TITLE_MENU') {
         const fwdX = Math.sin(chaseYaw);
         const fwdZ = Math.cos(chaseYaw);
-        targetCamX = focusX - fwdX * 7.6;
-        targetCamY = 3.65;
-        targetCamZ = focusZ - fwdZ * 7.6;
-        lookX = focusX + fwdX * 3.8;
-        lookY = 0.95;
-        lookZ = focusZ + fwdZ * 3.8;
+        targetCamX = focusX - fwdX * 8.2;
+        targetCamY = 3.85;
+        targetCamZ = focusZ - fwdZ * 8.2;
+        lookX = focusX + fwdX * 4.6;
+        lookY = 1.0;
+        lookZ = focusZ + fwdZ * 4.6;
       }
 
       camera.position.x = THREE.MathUtils.damp(camera.position.x, targetCamX, 5.5, dt);
@@ -3406,7 +3774,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             <span className="font-mono font-semibold text-white">{hud.score}</span>
           </div>
 
-          {selectedGameMode === 'car_racing' ? (
+              {selectedGameMode === 'car_racing' ? (
             <>
               <div className="flex items-center gap-1.5">
                 <Car className="h-4 w-4 text-cyan-400" aria-hidden="true" />
@@ -3416,9 +3784,16 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
-                <Gauge className="h-4 w-4 text-amber-300" aria-hidden="true" />
+                <Flag className="h-4 w-4 text-amber-300" aria-hidden="true" />
+                <span className="text-slate-400">CP</span>
+                <span className="font-mono font-semibold text-amber-200">
+                  {hud.checkpoint}/{hud.totalCheckpoints}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Gauge className="h-4 w-4 text-sky-300" aria-hidden="true" />
                 <span className="text-slate-400">Pos</span>
-                <span className="font-mono font-semibold text-amber-200">#{hud.racePos}/4</span>
+                <span className="font-mono font-semibold text-white">#{hud.racePos}/4</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Wind className="h-4 w-4 text-sky-300" aria-hidden="true" />
@@ -3449,9 +3824,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 <span className="font-mono font-semibold text-sky-200">{hud.wellDrops}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <Shield className="h-4 w-4 text-emerald-400" aria-hidden="true" />
-                <span className="text-slate-400">Hearts</span>
-                <span className="font-mono font-semibold text-white">{hud.hp}/3</span>
+                <Heart className="h-4 w-4 text-rose-400" aria-hidden="true" />
+                <span className="text-slate-400">Life</span>
+                <span className="font-mono font-semibold text-white">{hud.hp}/{hud.maxHp}</span>
               </div>
             </>
           ) : (
@@ -3472,9 +3847,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 <span className="font-mono font-semibold text-sky-200">{hud.frostGems}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <Shield className="h-4 w-4 text-emerald-400" aria-hidden="true" />
-                <span className="text-slate-400">Hearts</span>
-                <span className="font-mono font-semibold text-white">{hud.hp}/3</span>
+                <Heart className="h-4 w-4 text-rose-400" aria-hidden="true" />
+                <span className="text-slate-400">Life</span>
+                <span className="font-mono font-semibold text-white">{hud.hp}/{hud.maxHp}</span>
               </div>
             </>
           )}
@@ -3482,7 +3857,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           <div className="flex items-center gap-1.5">
             <Snowflake className="h-4 w-4 text-slate-300" aria-hidden="true" />
             <span className="text-slate-400">Time</span>
-            <span className="font-mono font-semibold text-white">{hud.timeLeft}s</span>
+            <span className="font-mono font-semibold text-white">{formatClock(hud.timeLeft)}</span>
           </div>
 
           <div className="flex items-center gap-1.5 border-l border-slate-700/80 pl-4">
@@ -3528,6 +3903,15 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
           <button
             type="button"
+            onClick={toggleFullscreen}
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            className="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-800/80 p-2 text-slate-200 hover:bg-slate-700 transition-colors shrink-0"
+          >
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </button>
+
+          <button
+            type="button"
             onClick={toggleMute}
             aria-label={muted ? 'Unmute game audio' : 'Mute game audio'}
             className="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-800/80 p-2 text-slate-200 hover:bg-slate-700 transition-colors shrink-0"
@@ -3570,20 +3954,293 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       >
         <div ref={mountRef} className="w-full h-full cursor-crosshair select-none touch-none" />
 
-        {gameState === 'PLAYING' && playMode === 'solo' && (
-          <button
-            type="button"
-            onClick={() => setGameState('PAUSED')}
-            aria-label="Pause game"
-            className="absolute right-4 top-4 z-20 inline-flex items-center gap-1.5 rounded-lg border border-slate-600/80 bg-[#081322]/85 px-3 py-2 text-xs font-semibold text-slate-100 shadow-lg backdrop-blur-sm transition-colors hover:border-sky-400 hover:bg-[#0D1C30] hover:text-white"
-          >
-            <Pause className="h-3.5 w-3.5" />
-            Pause
-          </button>
+        {/* IN-VIEWPORT FULLSCREEN MINI-HUD & LIFE BARS */}
+        {gameState === 'PLAYING' && (
+          <>
+            {/* Top-Left: Life Bar + Shield / Nitro Bar + Power-Up Timers */}
+            <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-col gap-1.5 rounded-xl border border-white/15 bg-[#061120]/76 px-3 py-2.5 backdrop-blur-md shadow-lg min-w-[215px]">
+              <div className="flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-wider text-slate-200">
+                <span className="inline-flex items-center gap-1.5">
+                  <Heart className="h-3.5 w-3.5 text-rose-400 fill-rose-400" />
+                  {selectedGameMode === 'car_racing' ? 'Kart Hull' : 'Yeti Life'}
+                </span>
+                <span className="font-mono text-xs text-white tabular-nums">
+                  {hud.hp}/{hud.maxHp}
+                </span>
+              </div>
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-900/90 border border-white/10">
+                <div
+                  className={`h-full transition-all duration-150 ${
+                    hud.hp > 55
+                      ? 'bg-gradient-to-r from-emerald-500 to-cyan-400'
+                      : hud.hp > 28
+                      ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                      : 'bg-gradient-to-r from-rose-600 to-orange-500'
+                  }`}
+                  style={{ width: `${Math.max(0, Math.min(100, (hud.hp / Math.max(1, hud.maxHp)) * 100))}%` }}
+                />
+              </div>
+
+              {selectedGameMode === 'car_racing' ? (
+                <div className="space-y-1 pt-0.5">
+                  <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-cyan-200">
+                    <span className="inline-flex items-center gap-1">
+                      <Zap className="h-3 w-3 text-cyan-400" /> Nitro
+                    </span>
+                    <span className="font-mono tabular-nums">{hud.nitroPct}%</span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-900/90">
+                    <div
+                      className="h-full bg-gradient-to-r from-sky-500 to-cyan-300 transition-all duration-100"
+                      style={{ width: `${hud.nitroPct}%` }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-sky-300 pt-0.5">
+                  <span>
+                    {selectedGameMode === 'shooting'
+                      ? hud.novaReady
+                        ? 'Frost Nova: READY (Space)'
+                        : 'Frost Nova: Charging'
+                      : hud.dashReady
+                      ? 'Frost Dash: READY (Space)'
+                      : 'Frost Dash: Recharging'}
+                  </span>
+                </div>
+              )}
+
+              {(hud.shieldSec > 0 || hud.boostSec > 0 || hud.magnetSec > 0 || hud.tripleSec > 0) && (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {hud.shieldSec > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded bg-cyan-500/20 border border-cyan-400/50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-200 tabular-nums">
+                      <Shield className="h-2.5 w-2.5" /> {hud.shieldSec}s
+                    </span>
+                  )}
+                  {hud.boostSec > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded bg-teal-500/20 border border-teal-400/50 px-1.5 py-0.5 text-[10px] font-semibold text-teal-200 tabular-nums">
+                      <Flame className="h-2.5 w-2.5" /> {hud.boostSec}s
+                    </span>
+                  )}
+                  {hud.magnetSec > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded bg-rose-500/20 border border-rose-400/50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-200 tabular-nums">
+                      <Magnet className="h-2.5 w-2.5" /> {hud.magnetSec}s
+                    </span>
+                  )}
+                  {hud.tripleSec > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded bg-purple-500/20 border border-purple-400/50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-200 tabular-nums">
+                      <Sparkles className="h-2.5 w-2.5" /> 3× {hud.tripleSec}s
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Top-Center: Compact Mini-Display Info Strip */}
+            <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-20 hidden sm:flex items-center gap-3.5 rounded-xl border border-white/15 bg-[#061120]/76 px-4 py-2 text-xs backdrop-blur-md shadow-lg tabular-nums whitespace-nowrap">
+              <span className="font-mono font-bold text-white">{formatClock(hud.timeLeft)}</span>
+              <span className="text-slate-600">|</span>
+              <span className="font-mono font-semibold text-sky-300">{hud.score} pts</span>
+              <span className="text-slate-600">|</span>
+              {selectedGameMode === 'car_racing' ? (
+                <>
+                  <span className="font-semibold text-cyan-200">
+                    Lap {hud.lap}/{hud.totalLaps}
+                  </span>
+                  <span className="font-semibold text-amber-300">
+                    CP {hud.checkpoint}/{hud.totalCheckpoints}
+                  </span>
+                  <span className="font-mono font-semibold text-white">#{hud.racePos}/4</span>
+                  <span className="font-mono text-slate-300">{hud.speedKmh} km/h</span>
+                  {hud.offRoad && (
+                    <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+                      OFF-ROAD
+                    </span>
+                  )}
+                </>
+              ) : selectedGameMode === 'shooting' ? (
+                <>
+                  <span className="font-semibold text-cyan-200">Wave {hud.wave}</span>
+                  <span className="font-semibold text-white">{hud.elims} Elims</span>
+                  <span className="font-semibold text-amber-300">{hud.combo}× Streak</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold text-cyan-200">{hud.wellDrops} Drops</span>
+                  <span className="font-semibold text-sky-200">{hud.frostGems} Gems</span>
+                  <span className="font-semibold text-slate-300">Wave {hud.wave}</span>
+                </>
+              )}
+            </div>
+
+            {/* Top-Right: Fullscreen Game Menu, Pause, Fullscreen Toggle & Mute */}
+            <div className="absolute right-3 top-3 z-20 flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (playMode === 'solo') setGameState('PAUSED');
+                  else openGameMapLauncher('choose_game');
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/40 bg-[#061120]/82 px-2.5 py-1.5 text-xs font-semibold text-sky-200 shadow-lg backdrop-blur-md transition-colors hover:border-sky-300 hover:text-white whitespace-nowrap shrink-0"
+              >
+                <Menu className="h-3.5 w-3.5" />
+                Game Menu
+              </button>
+
+              {playMode === 'solo' && (
+                <button
+                  type="button"
+                  onClick={() => setGameState('PAUSED')}
+                  aria-label="Pause game"
+                  className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-[#061120]/82 p-1.5 text-slate-100 shadow-lg backdrop-blur-md transition-colors hover:border-sky-400 hover:text-white"
+                >
+                  <Pause className="h-4 w-4" />
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-[#061120]/82 p-1.5 text-slate-100 shadow-lg backdrop-blur-md transition-colors hover:border-sky-400 hover:text-white"
+              >
+                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleMute}
+                aria-label={muted ? 'Unmute audio' : 'Mute audio'}
+                className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-[#061120]/82 p-1.5 text-slate-100 shadow-lg backdrop-blur-md transition-colors hover:border-sky-400 hover:text-white"
+              >
+                {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+              </button>
+            </div>
+
+            {/* Bottom-Left: Live SVG Mini-Map Radar */}
+            <div className="pointer-events-none absolute left-3 bottom-3 z-20 rounded-xl border border-white/15 bg-[#061120]/78 p-2 backdrop-blur-md shadow-lg">
+              <div className="flex items-center justify-between text-[9px] font-semibold uppercase tracking-wider text-slate-300 mb-1 px-0.5">
+                <span>{selectedGameMode === 'car_racing' ? 'Circuit Radar' : 'Arena Radar'}</span>
+                <span className="text-sky-300">{activeMap.name}</span>
+              </div>
+              {selectedGameMode === 'car_racing' ? (
+                (() => {
+                  const wps = getRaceTrackWaypoints(selectedMapId);
+                  const minX = RACE_BOUNDS.minX + 200;
+                  const maxX = RACE_BOUNDS.maxX - 200;
+                  const minY = RACE_BOUNDS.minY + 120;
+                  const maxY = RACE_BOUNDS.maxY - 120;
+                  const sx = (x: number) => 8 + ((x - minX) / (maxX - minX)) * 148;
+                  const sy = (y: number) => 8 + ((y - minY) / (maxY - minY)) * 96;
+                  const pts = wps.map((w) => `${sx(w.x).toFixed(1)},${sy(w.y).toFixed(1)}`).join(' ');
+                  return (
+                    <svg width={164} height={112} viewBox="0 0 164 112" className="block">
+                      <polygon
+                        points={pts}
+                        fill="none"
+                        stroke="#1e3a5f"
+                        strokeWidth={7}
+                        strokeLinejoin="round"
+                      />
+                      <polygon
+                        points={pts}
+                        fill="none"
+                        stroke="#38bdf8"
+                        strokeOpacity={0.55}
+                        strokeWidth={2}
+                        strokeLinejoin="round"
+                      />
+                      {wps.map((w, idx) =>
+                        w.isCheckpoint ? (
+                          <circle
+                            key={`cp_${idx}`}
+                            cx={sx(w.x)}
+                            cy={sy(w.y)}
+                            r={3.2}
+                            fill="#fbbf24"
+                          />
+                        ) : idx === 0 ? (
+                          <rect
+                            key="start_sf"
+                            x={sx(w.x) - 3.5}
+                            y={sy(w.y) - 3.5}
+                            width={7}
+                            height={7}
+                            fill="#f8fafc"
+                            stroke="#0284c7"
+                            strokeWidth={1.2}
+                          />
+                        ) : null
+                      )}
+                      {minimapData.dots.map((d, i) => (
+                        <circle
+                          key={`md_${i}`}
+                          cx={sx(d.x)}
+                          cy={sy(d.y)}
+                          r={d.kind === 'player' ? 4.2 : 3}
+                          fill={d.kind === 'player' ? '#38bdf8' : d.color || '#fb923c'}
+                          stroke={d.kind === 'player' ? '#ffffff' : 'none'}
+                          strokeWidth={1.3}
+                        />
+                      ))}
+                    </svg>
+                  );
+                })()
+              ) : (
+                <svg width={164} height={112} viewBox="0 0 164 112" className="block">
+                  <rect x={2} y={2} width={160} height={108} rx={6} fill="#08162a" stroke="#1e3a5f" strokeWidth={1} />
+                  {selectedGameMode === 'survival' && (
+                    <circle
+                      cx={(ARENA_CENTER_X / W) * 164}
+                      cy={(ARENA_CENTER_Y / H) * 112}
+                      r={Math.max(8, (minimapData.ringRadius / W) * 164)}
+                      fill="none"
+                      stroke="#38bdf8"
+                      strokeOpacity={0.45}
+                      strokeDasharray="3 2"
+                      strokeWidth={1.2}
+                    />
+                  )}
+                  {minimapData.dots.map((d, i) => {
+                    const cx = (d.x / W) * 164;
+                    const cy = (d.y / H) * 112;
+                    if (d.kind === 'well') {
+                      return <circle key={`mm_${i}`} cx={cx} cy={cy} r={4} fill="#22d3ee" fillOpacity={0.45} stroke="#67e8f9" strokeWidth={1} />;
+                    }
+                    if (d.kind === 'beacon') {
+                      return <circle key={`mm_${i}`} cx={cx} cy={cy} r={4.5} fill="none" stroke="#fde047" strokeWidth={1.4} />;
+                    }
+                    if (d.kind === 'enemy' || d.kind === 'bullseye') {
+                      return (
+                        <circle
+                          key={`mm_${i}`}
+                          cx={cx}
+                          cy={cy}
+                          r={2.8}
+                          fill={d.kind === 'bullseye' ? '#fbbf24' : '#f43f5e'}
+                        />
+                      );
+                    }
+                    return (
+                      <circle
+                        key={`mm_${i}`}
+                        cx={cx}
+                        cy={cy}
+                        r={d.kind === 'player' ? 4 : 2.8}
+                        fill={d.kind === 'player' ? '#38bdf8' : d.color || '#94a3b8'}
+                        stroke={d.kind === 'player' ? '#ffffff' : 'none'}
+                        strokeWidth={1.2}
+                      />
+                    );
+                  })}
+                </svg>
+              )}
+            </div>
+          </>
         )}
 
         {bannerMsg && gameState === 'PLAYING' && (
-          <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-10 rounded-lg border border-sky-400/50 bg-[#081322]/90 px-4 py-1.5 text-xs font-semibold text-sky-200">
+          <div className="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 z-20 rounded-lg border border-sky-400/50 bg-[#081322]/90 px-4 py-1.5 text-xs font-semibold text-sky-200 backdrop-blur-md">
             {bannerMsg}
           </div>
         )}
@@ -3826,29 +4483,51 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           </div>
         )}
 
-        {/* PAUSED OVERLAY */}
+        {/* PAUSED / IN-FULLSCREEN GAME MENU OVERLAY */}
         {gameState === 'PAUSED' && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#061120]/82 p-6">
-            <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-[#0D1C30] p-6 text-center space-y-4">
-              <h3 className="title-3d-game-sm text-3xl">Game Paused</h3>
-              <p className="text-sm text-slate-300">
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#061120]/84 p-6 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-[#0D1C30] p-6 text-center space-y-4 shadow-2xl">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-400">
+                  Game Menu · Paused
+                </p>
+                <h3 className="title-3d-game-sm text-3xl mt-1">Lofi Arena</h3>
+              </div>
+              <p className="text-xs text-slate-300">
                 {activeGame.name} · {activeMap.name}
               </p>
-              <div className="flex justify-center gap-3">
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
                 <button
                   type="button"
                   onClick={() => setGameState('PLAYING')}
-                  className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-400 transition-colors"
+                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500 px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-sky-400 transition-colors"
                 >
-                  <Play className="h-4 w-4" />
+                  <Play className="h-3.5 w-3.5" />
                   Resume
                 </button>
                 <button
                   type="button"
-                  onClick={() => openGameMapLauncher('choose_game')}
-                  className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 transition-colors"
+                  onClick={() => startGame(playMode, selectedGameMode)}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-700 transition-colors"
                 >
-                  Change Game
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Restart
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors"
+                >
+                  {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                  {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openGameMapLauncher('choose_game')}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/10 px-4 py-2.5 text-xs font-semibold text-sky-200 hover:bg-sky-500/20 transition-colors"
+                >
+                  <Menu className="h-3.5 w-3.5" />
+                  Switch Game
                 </button>
               </div>
             </div>

@@ -402,3 +402,66 @@ export function buildAimReticle(): THREE.Group {
   g.add(outer, inner);
   return g;
 }
+
+export interface HealthBar3D {
+  group: THREE.Group;
+  fillMesh: THREE.Mesh;
+  fillMat: THREE.MeshBasicMaterial;
+  width: number;
+}
+
+export function buildHealthBar3D(width = 1.05, yOffset = 2.35): HealthBar3D {
+  const group = new THREE.Group();
+  group.position.y = yOffset;
+
+  const bgMat = new THREE.MeshBasicMaterial({
+    color: '#061120',
+    transparent: true,
+    opacity: 0.85,
+    side: THREE.DoubleSide,
+    depthTest: true,
+  });
+  const bg = new THREE.Mesh(new THREE.PlaneGeometry(width + 0.08, 0.16), bgMat);
+  group.add(bg);
+
+  const borderMat = new THREE.MeshBasicMaterial({
+    color: '#38bdf8',
+    transparent: true,
+    opacity: 0.45,
+    side: THREE.DoubleSide,
+  });
+  const border = new THREE.Mesh(new THREE.PlaneGeometry(width + 0.12, 0.2), borderMat);
+  border.position.z = -0.005;
+  group.add(border);
+
+  const fillMat = new THREE.MeshBasicMaterial({
+    color: '#22c55e',
+    side: THREE.DoubleSide,
+  });
+  const fillMesh = new THREE.Mesh(new THREE.PlaneGeometry(width, 0.11), fillMat);
+  fillMesh.position.z = 0.01;
+  group.add(fillMesh);
+
+  return { group, fillMesh, fillMat, width };
+}
+
+export function updateHealthBar3D(
+  bar: HealthBar3D,
+  hp: number,
+  maxHp: number,
+  camera: THREE.Camera
+): void {
+  const pct = THREE.MathUtils.clamp(maxHp > 0 ? hp / maxHp : 0, 0, 1);
+  bar.group.visible = pct > 0 && pct < 1.001;
+  if (!bar.group.visible) return;
+  bar.group.quaternion.copy(camera.quaternion);
+  bar.fillMesh.scale.x = Math.max(0.001, pct);
+  bar.fillMesh.position.x = -(bar.width * (1 - pct)) * 0.5;
+  if (pct > 0.55) {
+    bar.fillMat.color.set('#34d399');
+  } else if (pct > 0.28) {
+    bar.fillMat.color.set('#fbbf24');
+  } else {
+    bar.fillMat.color.set('#f43f5e');
+  }
+}
