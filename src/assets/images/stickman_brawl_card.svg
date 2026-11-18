@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" role="img" aria-labelledby="title desc">
+  <title id="title">Stickman Frost Brawl 2D</title>
+  <desc id="desc">Lofi the Yeti as an articulated 2D stickman leaping into combat against rival frost stickmen.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#071529"/>
+      <stop offset="1" stop-color="#0f2f52"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="960" height="480" fill="url(#bg)"/>
+  <path d="M0 360 L200 260 L380 340 L600 220 L800 320 L960 250 V480 H0 Z" fill="#0b223d"/>
+  <rect x="0" y="385" width="960" height="95" fill="#12365d"/>
+  <rect x="0" y="385" width="960" height="6" fill="#38bdf8"/>
+  <!-- Floating ice ledge -->
+  <rect x="130" y="275" width="210" height="16" rx="8" fill="#1e4976" stroke="#7dd3fc" stroke-width="2"/>
+  <rect x="640" y="255" width="200" height="16" rx="8" fill="#1e4976" stroke="#7dd3fc" stroke-width="2"/>
+  <!-- Hero 2D Stickman Lofi Yeti (left-center) -->
+  <g transform="translate(340 285)">
+    <ellipse cx="0" cy="100" rx="56" ry="11" fill="#040c18" opacity=".6"/>
+    <!-- Scarf tail -->
+    <path d="M-12 -18 Q-58 -36 -84 -10 Q-52 -6 -16 -6 Z" fill="#38bdf8"/>
+    <!-- Stickman body & limbs -->
+    <path d="M0 -18 L-6 38 M-6 38 L-34 86 M-6 38 L34 80 M0 -6 L-38 14 M0 -6 L62 -22" stroke="#e0f2fe" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <!-- Punch energy flash -->
+    <circle cx="72" cy="-24" r="22" fill="#38bdf8" opacity=".4" filter="url(#glow)"/>
+    <circle cx="72" cy="-24" r="10" fill="#e0f2fe"/>
+    <!-- Lofi Yeti Head -->
+    <circle cx="4" cy="-54" r="34" fill="#f8fafc" stroke="#38bdf8" stroke-width="4"/>
+    <path d="M-20 -78 L-32 -98 M24 -78 L36 -98" stroke="#bae6fd" stroke-width="9" stroke-linecap="round"/>
+    <ellipse cx="5" cy="-52" rx="23" ry="18" fill="#87c5ee"/>
+    <circle cx="-4" cy="-55" r="4.5" fill="#071529"/><circle cx="15" cy="-55" r="4.5" fill="#071529"/>
+    <path d="M-4 -42 Q6 -35 16 -42" stroke="#071529" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  </g>
+  <!-- Rival Frost Stickman (right) -->
+  <g transform="translate(620 295)">
+    <ellipse cx="0" cy="90" rx="46" ry="10" fill="#040c18" opacity=".55"/>
+    <path d="M0 -16 L8 38 M8 38 L-16 84 M8 38 L36 82 M0 -4 L-42 -14 M0 -4 L38 18" stroke="#fb923c" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <circle cx="0" cy="-42" r="22" fill="#0f172a" stroke="#fb923c" stroke-width="4"/>
+    <path d="M-24 -44 L24 -48" stroke="#f97316" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="-7" cy="-42" r="3" fill="#fed7aa"/><circle cx="8" cy="-42" r="3" fill="#fed7aa"/>
+  </g>
+  <!-- Impact sparks -->
+  <path d="M452 246 L488 226 L466 258 L502 268 L462 276 L478 308 L448 278 L420 298 L438 264 Z" fill="#7dd3fc" filter="url(#glow)"/>
+  <text x="34" y="56" fill="#bae6fd" font-family="sans-serif" font-size="18" font-weight="700" letter-spacing="4">2D STICKMAN BRAWL</text>
+</svg>

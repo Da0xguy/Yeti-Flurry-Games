@@ -6,10 +6,17 @@ export type CosmeticSlot = 'hat' | 'scarf' | 'trail';
 
 export type MapId = 'glacier_well' | 'volcanic_springs' | 'aurora_summit';
 
-export type GameModeId = 'survival' | 'car_racing' | 'shooting';
+export type GameModeId =
+  | 'survival'
+  | 'car_racing'
+  | 'shooting'
+  | 'stickman_brawl'
+  | 'stickman_wrestling'
+  | 'stickman_run';
 
 export interface GameModeSpec {
   id: GameModeId;
+  dimension: '3D' | '2D';
   name: string;
   shortLabel: string;
   subtitle: string;

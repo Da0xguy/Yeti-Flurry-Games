@@ -2,6 +2,7 @@ import { useDAppKit, useWalletConnection } from '@mysten/dapp-kit-react';
 import { ConnectButton } from '@mysten/dapp-kit-react/ui';
 import { Transaction } from '@mysten/sui/transactions';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { Home } from 'lucide-react';
 import type {
   CosmeticSlot,
   GameModeId,
@@ -15,9 +16,11 @@ import type {
 } from './types';
 import { LandingHero3D } from './components/LandingHero3D';
 import { YetiArenaCanvas } from './components/YetiArenaCanvas';
+import { StickmanArcadeCanvas } from './components/StickmanArcadeCanvas';
 import { MyYetiView } from './components/MyYetiView';
 import { LeaderboardWellView } from './components/LeaderboardWellView';
 import { DocsAndMoveView } from './components/DocsAndMoveView';
+import { GAME_MODES, getGameModeSpec } from './data/gameCatalog';
 import { uploadPlayerProfile } from './lib/walrus';
 
 const STORAGE_ADDR_KEY = 'yeti_flurry_owner_address';
@@ -298,7 +301,8 @@ export default function App() {
 
   const handleShareRun = async (summary: RunSummary) => {
     const name = yeti?.name || 'Lofi Cub';
-    const text = `Scored ${summary.score} pts and gathered ${summary.wellDrops} Glacial Drops for @lofitheyeti Clean Water Wells in Yeti Flurry Rush on Sui! (${name})`;
+    const modeLabel = getGameModeSpec(summary.gameMode).name;
+    const text = `Scored ${summary.score} pts and gathered ${summary.wellDrops} Glacial Drops in ${modeLabel} on Yeti Flurry Rush! (${name})`;
     try {
       await navigator.clipboard.writeText(text);
       showToast('Share card text copied to clipboard');
@@ -379,7 +383,6 @@ export default function App() {
         <main className="flex-1">
           <LandingHero3D
             yeti={yeti}
-            wellImpact={wellImpact}
             onLaunchGame={() => launchArena('launcher')}
             onLaunchMode={(gm) => launchArena('choose_map', undefined, gm)}
             onLaunchTunnel={(mapId) => launchArena('tunnel', mapId, 'survival')}
@@ -389,24 +392,102 @@ export default function App() {
       ) : (
         <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 sm:px-6 py-6 sm:py-8">
           {activeTab === 'arena' && (
-            <div className="space-y-6">
-              <YetiArenaCanvas
-                yeti={yeti}
-                playerName={yeti?.name || 'Lofi Cub'}
-                selectedGameMode={selectedGameMode}
-                onChangeGameMode={setSelectedGameMode}
-                selectedMapId={selectedMapId}
-                onChangeMapId={setSelectedMapId}
-                selectedColorway={selectedColorway}
-                onChangeColorway={handleChangeColorway}
-                wellImpact={wellImpact}
-                onWellImpactUpdate={setWellImpact}
-                autoLaunchMode={autoLaunchMode}
-                onAutoLaunchHandled={() => setAutoLaunchMode(null)}
-                onMintPrompt={() => setActiveTab('yeti')}
-                onRecordRun={handleRecordRun}
-                onShareRun={handleShareRun}
-              />
+            <div className="space-y-5">
+              {/* Group of Games Switcher (3D Arena + 2D Stickman & Wrestling + Back to Landing) */}
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-[#0B1729] px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('home')}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-white transition-colors whitespace-nowrap shrink-0 mr-1"
+                  >
+                    <Home className="h-3.5 w-3.5 text-sky-400" />
+                    Landing Page
+                  </button>
+
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-sky-400 mr-1">
+                    3D Games:
+                  </span>
+                  {GAME_MODES.filter((g) => g.dimension === '3D').map((gm) => (
+                    <button
+                      key={gm.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedGameMode(gm.id);
+                        setAutoLaunchMode('choose_map');
+                      }}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                        selectedGameMode === gm.id
+                          ? 'bg-sky-500 text-slate-950'
+                          : 'border border-slate-700/80 bg-slate-900/70 text-slate-300 hover:border-sky-400 hover:text-white'
+                      }`}
+                    >
+                      {gm.shortLabel}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300 mr-1">
+                    2D Stickman:
+                  </span>
+                  {GAME_MODES.filter((g) => g.dimension === '2D').map((gm) => (
+                    <button
+                      key={gm.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedGameMode(gm.id);
+                        setAutoLaunchMode('choose_map');
+                      }}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                        selectedGameMode === gm.id
+                          ? 'bg-amber-400 text-slate-950'
+                          : 'border border-slate-700/80 bg-slate-900/70 text-amber-200/90 hover:border-amber-400 hover:text-white'
+                      }`}
+                    >
+                      {gm.shortLabel}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {getGameModeSpec(selectedGameMode).dimension === '2D' ? (
+                <StickmanArcadeCanvas
+                  yeti={yeti}
+                  playerName={yeti?.name || 'Lofi Cub'}
+                  selectedGameMode={selectedGameMode}
+                  onChangeGameMode={setSelectedGameMode}
+                  selectedMapId={selectedMapId}
+                  onChangeMapId={setSelectedMapId}
+                  selectedColorway={selectedColorway}
+                  onChangeColorway={handleChangeColorway}
+                  autoLaunchMode={autoLaunchMode}
+                  onAutoLaunchHandled={() => setAutoLaunchMode(null)}
+                  onMintPrompt={() => setActiveTab('yeti')}
+                  onRecordRun={handleRecordRun}
+                  onShareRun={handleShareRun}
+                  onReturnHome={() => setActiveTab('home')}
+                />
+              ) : (
+                <YetiArenaCanvas
+                  yeti={yeti}
+                  playerName={yeti?.name || 'Lofi Cub'}
+                  selectedGameMode={selectedGameMode}
+                  onChangeGameMode={setSelectedGameMode}
+                  selectedMapId={selectedMapId}
+                  onChangeMapId={setSelectedMapId}
+                  selectedColorway={selectedColorway}
+                  onChangeColorway={handleChangeColorway}
+                  wellImpact={wellImpact}
+                  onWellImpactUpdate={setWellImpact}
+                  autoLaunchMode={autoLaunchMode}
+                  onAutoLaunchHandled={() => setAutoLaunchMode(null)}
+                  onMintPrompt={() => setActiveTab('yeti')}
+                  onRecordRun={handleRecordRun}
+                  onShareRun={handleShareRun}
+                  onReturnHome={() => setActiveTab('home')}
+                />
+              )}
 
               <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-300 border-t border-slate-800/80 pt-5">
                 <div className="space-y-1">
@@ -421,18 +502,18 @@ export default function App() {
                 </div>
                 <div className="space-y-1">
                   <span className="font-semibold text-white block">
-                    Lofi Clean Water Wells
+                    2D Stickman &amp; Wrestling Suite
                   </span>
-                  <p className="text-slate-400 leading-relaxed tabular-nums">
-                    {wellImpact.wellsFunded} wells funded · {wellImpact.totalDropsCollected.toLocaleString()} total Glacial Drops gathered by players.
+                  <p className="text-slate-400 leading-relaxed">
+                    Play as an articulated 2D Lofi the Yeti figure in Stickman Yeti Wrestling, Frost Brawl waves, and Glacier Runs.
                   </p>
                 </div>
                 <div className="space-y-1">
                   <span className="font-semibold text-white block">
-                    Multi-Map Sui Tunnels
+                    Multi-Map 3D Sui Tunnels
                   </span>
                   <p className="text-slate-400 leading-relaxed">
-                    Every map runs its own real-time WebSocket Tunnel room with crates, beacons, and AI Yetis filling open slots.
+                    Every 3D map runs its own real-time WebSocket Tunnel room with crates, beacons, and AI Yetis filling open slots.
                   </p>
                 </div>
               </div>

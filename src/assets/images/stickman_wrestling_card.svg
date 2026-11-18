@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" role="img" aria-labelledby="title desc">
+  <title id="title">Stickman Yeti Wrestling 2D</title>
+  <desc id="desc">2D Stickman Lofi the Yeti inside a glowing wrestling ring executing an aerial dropkick against a rival stick wrestler.</desc>
+  <defs>
+    <linearGradient id="arena" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#091024"/>
+      <stop offset="1" stop-color="#17254a"/>
+    </linearGradient>
+    <filter id="ringGlow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="960" height="480" fill="url(#arena)"/>
+  <!-- Arena spotlights -->
+  <polygon points="180,0 410,360 550,360 320,0" fill="#38bdf8" opacity=".1"/>
+  <polygon points="780,0 550,360 410,360 640,0" fill="#f59e0b" opacity=".09"/>
+  <!-- Ring Turnbuckles & Ropes -->
+  <rect x="88" y="190" width="22" height="190" rx="6" fill="#0284c7" stroke="#bae6fd" stroke-width="3"/>
+  <rect x="850" y="190" width="22" height="190" rx="6" fill="#e11d48" stroke="#fda4af" stroke-width="3"/>
+  <line x1="110" y1="215" x2="850" y2="215" stroke="#38bdf8" stroke-width="6"/>
+  <line x1="110" y1="262" x2="850" y2="262" stroke="#e2e8f0" stroke-width="5"/>
+  <line x1="110" y1="309" x2="850" y2="309" stroke="#f43f5e" stroke-width="6"/>
+  <!-- Ring Mat -->
+  <polygon points="60,360 900,360 950,480 10,480" fill="#1e293b" stroke="#38bdf8" stroke-width="4"/>
+  <ellipse cx="480" cy="415" rx="165" ry="30" fill="none" stroke="#38bdf8" stroke-opacity=".45" stroke-width="4"/>
+  <!-- Lofi Yeti Wrestler Stickman mid-slam -->
+  <g transform="translate(360 225) rotate(-14)">
+    <path d="M0 -14 L-10 42 M-10 42 L-38 88 M-10 42 L38 72 M0 -4 L-36 -28 M0 -4 L54 12" stroke="#f8fafc" stroke-width="11" stroke-linecap="round" fill="none"/>
+    <!-- Championship belt -->
+    <rect x="-18" y="20" width="26" height="10" rx="3" fill="#fbbf24" stroke="#78350f" stroke-width="2"/>
+    <!-- Lofi Yeti Head -->
+    <circle cx="4" cy="-48" r="33" fill="#f8fafc" stroke="#38bdf8" stroke-width="4"/>
+    <path d="M-20 -72 L-32 -92 M24 -72 L36 -92" stroke="#bae6fd" stroke-width="8" stroke-linecap="round"/>
+    <ellipse cx="5" cy="-46" rx="22" ry="17" fill="#87c5ee"/>
+    <circle cx="-3" cy="-49" r="4" fill="#091024"/><circle cx="14" cy="-49" r="4" fill="#091024"/>
+    <path d="M-4 -36 H16" stroke="#091024" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <!-- Rival Masked Stickman Wrestler -->
+  <g transform="translate(590 278) rotate(12)">
+    <path d="M0 -18 L-6 42 M-6 42 L-30 86 M-6 42 L26 84 M0 -4 L-44 -14 M0 -4 L38 14" stroke="#f43f5e" stroke-width="10" stroke-linecap="round" fill="none"/>
+    <circle cx="0" cy="-46" r="23" fill="#1e1b4b" stroke="#fbbf24" stroke-width="4"/>
+    <path d="M-12 -52 L-3 -45 L-12 -38 M12 -52 L3 -45 L12 -38" stroke="#fbbf24" stroke-width="3.5" fill="none"/>
+  </g>
+  <text x="480" y="130" text-anchor="middle" fill="#fbbf24" font-family="sans-serif" font-size="36" font-weight="900" letter-spacing="5" filter="url(#ringGlow)">LOFI SLAM! 1-2-3</text>
+  <text x="34" y="56" fill="#fda4af" font-family="sans-serif" font-size="18" font-weight="700" letter-spacing="4">2D STICKMAN WRESTLING</text>
+</svg>

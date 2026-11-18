@@ -35,6 +35,7 @@ import {
   Magnet,
   Flag,
   Flame,
+  Home,
 } from 'lucide-react';
 import type {
   ArenaTaskProgress,
@@ -85,6 +86,8 @@ import {
   type ShooterTargetMesh,
   type YetiKartRigParts,
 } from '../three/kartAndShooter';
+import { ArenaMiniMap, type MiniMapDot } from './ArenaMiniMap';
+import { ArenaGameOverOverlay } from './ArenaGameOverOverlay';
 
 type GameState = 'TITLE_MENU' | 'PLAYING' | 'PAUSED' | 'GAME_OVER';
 type PlayMode = 'solo' | 'tunnel';
@@ -106,6 +109,7 @@ interface YetiArenaCanvasProps {
   onMintPrompt: () => void;
   onRecordRun: (summary: RunSummary) => Promise<void>;
   onShareRun: (summary: RunSummary) => void;
+  onReturnHome: () => void;
 }
 
 const W = ARENA_W;
@@ -381,11 +385,12 @@ function formatClock(totalSeconds: number): string {
   return `${m}:${rem.toString().padStart(2, '0')}`;
 }
 
-interface MinimapDot {
-  x: number;
-  y: number;
-  kind: 'player' | 'bot' | 'enemy' | 'bullseye' | 'pickup' | 'beacon' | 'well';
-  color?: string;
+function getPowerUpRadarColor(kind: string): string {
+  if (kind === 'shield') return '#22d3ee';
+  if (kind === 'magnet') return '#f43f5e';
+  if (kind === 'triple') return '#c084fc';
+  if (kind === 'medkit') return '#34d399';
+  return '#2dd4bf';
 }
 
 export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
@@ -404,6 +409,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   onMintPrompt,
   onRecordRun,
   onShareRun,
+  onReturnHome,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -416,6 +422,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   const [tunnelConnected, setTunnelConnected] = useState(false);
   const [tunnelPlayersCount, setTunnelPlayersCount] = useState(1);
   const [summary, setSummary] = useState<RunSummary | null>(null);
+  const [lifeDepleted, setLifeDepleted] = useState(false);
   const [claimStatus, setClaimStatus] = useState<'idle' | 'claiming' | 'claimed'>('idle');
   const [webglFallback, setWebglFallback] = useState(false);
   const [tasks, setTasks] = useState<ArenaTaskProgress[]>(() => createTasksForMode(selectedGameMode));
@@ -458,13 +465,17 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   });
 
   const [minimapData, setMinimapData] = useState<{
-    dots: MinimapDot[];
+    dots: MiniMapDot[];
     ringRadius: number;
     playerAngle: number;
+    nextCheckpoint: number;
+    checkpointsCleared: number;
   }>({
     dots: [],
     ringRadius: ARENA_INITIAL_RING_RADIUS,
     playerAngle: 0,
+    nextCheckpoint: 1,
+    checkpointsCleared: 0,
   });
 
   // Refs synced for 3D render loop
@@ -1147,14 +1158,24 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   countdown: 0,
                 }));
                 setMinimapData({
-                  dots: s.karts.map((k) => ({
-                    x: k.x,
-                    y: k.y,
-                    kind: k.id === tunnelPlayerIdRef.current ? 'player' : 'bot',
-                    color: getYetiColorway(k.colorway).accentHex,
-                  })),
+                  dots: [
+                    ...snap.pickups.map((pk) => ({
+                      x: pk.x,
+                      y: pk.y,
+                      kind: 'powerup' as const,
+                      color: getPowerUpRadarColor(pk.kind),
+                    })),
+                    ...s.karts.map((k) => ({
+                      x: k.x,
+                      y: k.y,
+                      kind: (k.id === tunnelPlayerIdRef.current ? 'player' : 'bot') as MiniMapDot['kind'],
+                      color: getYetiColorway(k.colorway).accentHex,
+                    })),
+                  ],
                   ringRadius: snap.ringRadius,
                   playerAngle: playerKart.angle,
+                  nextCheckpoint: playerKart.nextCheckpoint,
+                  checkpointsCleared: playerKart.checkpointsCleared,
                 });
               }
               if (me.finished && gameStateRef.current === 'PLAYING') {
@@ -1185,6 +1206,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   extraStatValue: `#${rank} · 3/3 Laps`,
                 };
                 setSummary(runSum);
+                setLifeDepleted(false);
                 setClaimStatus('idle');
                 setGameState('GAME_OVER');
                 soundEngine.playRoundEnd(rank <= 2);
@@ -1218,21 +1240,34 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               ritualReady: blessingLeft <= 0,
             }));
             if (snap.mode !== 'car_racing') {
+              const pHeading =
+                Math.hypot(me.vx, me.vy) > 10 ? Math.atan2(me.vy, me.vx) : -Math.PI / 2;
               setMinimapData({
                 dots: [
                   { x: ARENA_CENTER_X, y: ARENA_CENTER_Y, kind: 'well' },
                   ...(snap.beacon.active ? [{ x: snap.beacon.x, y: snap.beacon.y, kind: 'beacon' as const }] : []),
+                  ...snap.crates.map((cr) => ({ x: cr.x, y: cr.y, kind: 'crate' as const })),
+                  ...snap.pickups
+                    .filter((pk) => pk.kind !== 'drop' && pk.kind !== 'gem')
+                    .map((pk) => ({
+                      x: pk.x,
+                      y: pk.y,
+                      kind: 'powerup' as const,
+                      color: getPowerUpRadarColor(pk.kind),
+                    })),
                   ...snap.players
                     .filter((p) => !p.eliminated)
                     .map((p) => ({
                       x: p.x,
                       y: p.y,
-                      kind: (p.id === tunnelPlayerIdRef.current ? 'player' : 'bot') as MinimapDot['kind'],
+                      kind: (p.id === tunnelPlayerIdRef.current ? 'player' : 'bot') as MiniMapDot['kind'],
                       color: getYetiColorway(p.colorway).accentHex,
                     })),
                 ],
                 ringRadius: snap.ringRadius,
-                playerAngle: 0,
+                playerAngle: pHeading,
+                nextCheckpoint: 1,
+                checkpointsCleared: 0,
               });
             }
 
@@ -1258,6 +1293,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 xpEarned: Math.round(me.score / 5) + 25,
               };
               setSummary(runSum);
+              setLifeDepleted(true);
               setClaimStatus('idle');
               setGameState('GAME_OVER');
               soundEngine.playRoundEnd(rank === 1);
@@ -1317,6 +1353,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         extraStatValue: `#${rank} · ${Math.min(3, playerKart.lap)}/3 Laps`,
       };
       setSummary(runSum);
+      setLifeDepleted(false);
       setClaimStatus('idle');
       setGameState('GAME_OVER');
       soundEngine.playRoundEnd(rank <= 2);
@@ -1325,6 +1362,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
     if (gm === 'shooting') {
       const finalScore = player.score + s.shooterMaxCombo * 25;
+      const defeated = player.eliminated || player.hp <= 0;
       const runSum: RunSummary = {
         score: finalScore,
         wellDrops: player.wellDrops,
@@ -1338,22 +1376,27 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         cratesSmashed: s.shooterBullseyes,
         wellBanks: s.shooterWave,
         tasksDone,
-        rank: player.eliminated ? 2 : 1,
+        rank: defeated ? 2 : 1,
         totalContenders: 1,
         xpEarned: Math.round(finalScore / 5) + 30 + tasksDone * 20,
         extraStatLabel: 'Elims / Streak',
         extraStatValue: `${s.shooterElims} · ${s.shooterMaxCombo}×`,
       };
+      if (defeated) {
+        setHud((prev) => ({ ...prev, hp: 0 }));
+      }
       setSummary(runSum);
+      setLifeDepleted(defeated);
       setClaimStatus('idle');
       setGameState('GAME_OVER');
-      soundEngine.playRoundEnd(!player.eliminated);
+      soundEngine.playRoundEnd(!defeated);
       return;
     }
 
     // Survival
     const sorted = [...s.entities].sort((a, b) => b.score - a.score);
     const rank = sorted.findIndex((e) => e.id === 'player') + 1;
+    const defeated = player.eliminated || player.hp <= 0;
     const runSum: RunSummary = {
       score: player.score,
       wellDrops: player.wellDrops,
@@ -1371,10 +1414,14 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       totalContenders: s.entities.length,
       xpEarned: Math.round(player.score / 5) + 25 + tasksDone * 20,
     };
+    if (defeated) {
+      setHud((prev) => ({ ...prev, hp: 0 }));
+    }
     setSummary(runSum);
+    setLifeDepleted(defeated);
     setClaimStatus('idle');
     setGameState('GAME_OVER');
-    soundEngine.playRoundEnd(rank === 1 && !player.eliminated);
+    soundEngine.playRoundEnd(rank === 1 && !defeated);
   }, []);
 
   const triggerDashOrSpecial = useCallback(() => {
@@ -1618,6 +1665,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       setPlayMode(effectiveMode);
       playModeRef.current = effectiveMode;
       setSummary(null);
+      setLifeDepleted(false);
       setClaimStatus('idle');
       if (effectiveMode === 'solo') {
         disconnectTunnel();
@@ -2314,6 +2362,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 k.lap += 1;
                 if (!k.isBot) {
                   updateTaskProgress('race_laps', k.lap - 1, s.entities[0]);
+                  if (s.entities[0]) s.entities[0].hp = s.entities[0].maxHp;
                 }
                 if (k.lap > 3) {
                   k.finished = true;
@@ -2324,7 +2373,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   }
                 } else if (!k.isBot) {
                   soundEngine.playLap(k.lap === 3);
-                  flashBanner(k.lap === 3 ? 'FINAL LAP (3/3)!' : `Lap ${k.lap}/3!`);
+                  flashBanner(
+                    k.lap === 3
+                      ? 'FINAL LAP (3/3) · FULL HP RESTORED!'
+                      : `Lap ${k.lap}/3 · Full HP Restored!`
+                  );
                 }
               }
             }
@@ -2367,14 +2420,26 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 offRoad: playerOffRoad,
               }));
               setMinimapData({
-                dots: s.karts.map((k) => ({
-                  x: k.x,
-                  y: k.y,
-                  kind: k.isBot ? 'bot' : 'player',
-                  color: getYetiColorway(k.colorway).accentHex,
-                })),
+                dots: [
+                  ...s.pickups
+                    .filter((pk) => !pk.respawnAt || now >= pk.respawnAt)
+                    .map((pk) => ({
+                      x: pk.x,
+                      y: pk.y,
+                      kind: 'powerup' as const,
+                      color: getPowerUpRadarColor(pk.kind),
+                    })),
+                  ...s.karts.map((k) => ({
+                    x: k.x,
+                    y: k.y,
+                    kind: (k.isBot ? 'bot' : 'player') as MiniMapDot['kind'],
+                    color: getYetiColorway(k.colorway).accentHex,
+                  })),
+                ],
                 ringRadius: s.ringRadius,
                 playerAngle: playerKart.angle,
+                nextCheckpoint: playerKart.nextCheckpoint,
+                checkpointsCleared: playerKart.checkpointsCleared,
               });
             }
             if (playerKart.finished || s.timeLeft <= 0) {
@@ -2616,10 +2681,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             if (s.shooterEnemies.length === 0) {
               s.shooterWave += 1;
               player.score += 120;
-              player.hp = Math.min(player.maxHp, player.hp + 25);
+              player.hp = player.maxHp;
               spawnShooterWave(s.shooterWave, mapIdRef.current);
               soundEngine.playLap(false);
-              flashBanner(`Wave ${s.shooterWave}! +25 HP Restored`);
+              flashBanner(`Wave ${s.shooterWave} · Full HP Restored!`);
             }
 
             hudSyncAccum += dt;
@@ -2647,15 +2712,25 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               setMinimapData({
                 dots: [
                   { x: ARENA_CENTER_X, y: ARENA_CENTER_Y, kind: 'well' },
+                  ...s.pickups
+                    .filter((pk) => pk.kind !== 'drop' && pk.kind !== 'gem')
+                    .map((pk) => ({
+                      x: pk.x,
+                      y: pk.y,
+                      kind: 'powerup' as const,
+                      color: getPowerUpRadarColor(pk.kind),
+                    })),
                   ...s.shooterEnemies.map((en) => ({
                     x: en.x,
                     y: en.y,
-                    kind: (en.kind === 'bullseye' ? 'bullseye' : 'enemy') as MinimapDot['kind'],
+                    kind: (en.kind === 'bullseye' ? 'bullseye' : 'enemy') as MiniMapDot['kind'],
                   })),
                   { x: player.x, y: player.y, kind: 'player' },
                 ],
                 ringRadius: s.ringRadius,
                 playerAngle: Math.atan2(player.facingY, player.facingX),
+                nextCheckpoint: 1,
+                checkpointsCleared: 0,
               });
             }
 
@@ -3138,17 +3213,28 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 dots: [
                   { x: ARENA_CENTER_X, y: ARENA_CENTER_Y, kind: 'well' },
                   ...(s.beacon.active ? [{ x: s.beacon.x, y: s.beacon.y, kind: 'beacon' as const }] : []),
+                  ...s.crates.map((cr) => ({ x: cr.x, y: cr.y, kind: 'crate' as const })),
+                  ...s.pickups
+                    .filter((pk) => pk.kind !== 'drop' && pk.kind !== 'gem')
+                    .map((pk) => ({
+                      x: pk.x,
+                      y: pk.y,
+                      kind: 'powerup' as const,
+                      color: getPowerUpRadarColor(pk.kind),
+                    })),
                   ...s.entities
                     .filter((e) => !e.eliminated)
                     .map((e) => ({
                       x: e.x,
                       y: e.y,
-                      kind: (e.isBot ? 'bot' : 'player') as MinimapDot['kind'],
+                      kind: (e.isBot ? 'bot' : 'player') as MiniMapDot['kind'],
                       color: getYetiColorway(e.colorway).accentHex,
                     })),
                 ],
                 ringRadius: s.ringRadius,
-                playerAngle: 0,
+                playerAngle: Math.atan2(player.facingY, player.facingX),
+                nextCheckpoint: 1,
+                checkpointsCleared: 0,
               });
             }
 
@@ -3746,6 +3832,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     setClaimStatus('claimed');
   };
 
+  const handleExitToLanding = useCallback(async () => {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen().catch(() => {});
+    }
+    onReturnHome();
+  }, [onReturnHome]);
+
   useEffect(() => {
     if (autoLaunchMode === 'tunnel') {
       onChangeGameMode('survival');
@@ -4073,8 +4166,17 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               )}
             </div>
 
-            {/* Top-Right: Fullscreen Game Menu, Pause, Fullscreen Toggle & Mute */}
+            {/* Top-Right: Landing Page, Fullscreen Game Menu, Pause, Fullscreen Toggle & Mute */}
             <div className="absolute right-3 top-3 z-20 flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleExitToLanding}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-[#061120]/82 px-2.5 py-1.5 text-xs font-semibold text-slate-200 shadow-lg backdrop-blur-md transition-colors hover:border-sky-400 hover:text-white whitespace-nowrap shrink-0"
+              >
+                <Home className="h-3.5 w-3.5 text-sky-400" />
+                Landing
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -4117,125 +4219,17 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               </button>
             </div>
 
-            {/* Bottom-Left: Live SVG Mini-Map Radar */}
-            <div className="pointer-events-none absolute left-3 bottom-3 z-20 rounded-xl border border-white/15 bg-[#061120]/78 p-2 backdrop-blur-md shadow-lg">
-              <div className="flex items-center justify-between text-[9px] font-semibold uppercase tracking-wider text-slate-300 mb-1 px-0.5">
-                <span>{selectedGameMode === 'car_racing' ? 'Circuit Radar' : 'Arena Radar'}</span>
-                <span className="text-sky-300">{activeMap.name}</span>
-              </div>
-              {selectedGameMode === 'car_racing' ? (
-                (() => {
-                  const wps = getRaceTrackWaypoints(selectedMapId);
-                  const minX = RACE_BOUNDS.minX + 200;
-                  const maxX = RACE_BOUNDS.maxX - 200;
-                  const minY = RACE_BOUNDS.minY + 120;
-                  const maxY = RACE_BOUNDS.maxY - 120;
-                  const sx = (x: number) => 8 + ((x - minX) / (maxX - minX)) * 148;
-                  const sy = (y: number) => 8 + ((y - minY) / (maxY - minY)) * 96;
-                  const pts = wps.map((w) => `${sx(w.x).toFixed(1)},${sy(w.y).toFixed(1)}`).join(' ');
-                  return (
-                    <svg width={164} height={112} viewBox="0 0 164 112" className="block">
-                      <polygon
-                        points={pts}
-                        fill="none"
-                        stroke="#1e3a5f"
-                        strokeWidth={7}
-                        strokeLinejoin="round"
-                      />
-                      <polygon
-                        points={pts}
-                        fill="none"
-                        stroke="#38bdf8"
-                        strokeOpacity={0.55}
-                        strokeWidth={2}
-                        strokeLinejoin="round"
-                      />
-                      {wps.map((w, idx) =>
-                        w.isCheckpoint ? (
-                          <circle
-                            key={`cp_${idx}`}
-                            cx={sx(w.x)}
-                            cy={sy(w.y)}
-                            r={3.2}
-                            fill="#fbbf24"
-                          />
-                        ) : idx === 0 ? (
-                          <rect
-                            key="start_sf"
-                            x={sx(w.x) - 3.5}
-                            y={sy(w.y) - 3.5}
-                            width={7}
-                            height={7}
-                            fill="#f8fafc"
-                            stroke="#0284c7"
-                            strokeWidth={1.2}
-                          />
-                        ) : null
-                      )}
-                      {minimapData.dots.map((d, i) => (
-                        <circle
-                          key={`md_${i}`}
-                          cx={sx(d.x)}
-                          cy={sy(d.y)}
-                          r={d.kind === 'player' ? 4.2 : 3}
-                          fill={d.kind === 'player' ? '#38bdf8' : d.color || '#fb923c'}
-                          stroke={d.kind === 'player' ? '#ffffff' : 'none'}
-                          strokeWidth={1.3}
-                        />
-                      ))}
-                    </svg>
-                  );
-                })()
-              ) : (
-                <svg width={164} height={112} viewBox="0 0 164 112" className="block">
-                  <rect x={2} y={2} width={160} height={108} rx={6} fill="#08162a" stroke="#1e3a5f" strokeWidth={1} />
-                  {selectedGameMode === 'survival' && (
-                    <circle
-                      cx={(ARENA_CENTER_X / W) * 164}
-                      cy={(ARENA_CENTER_Y / H) * 112}
-                      r={Math.max(8, (minimapData.ringRadius / W) * 164)}
-                      fill="none"
-                      stroke="#38bdf8"
-                      strokeOpacity={0.45}
-                      strokeDasharray="3 2"
-                      strokeWidth={1.2}
-                    />
-                  )}
-                  {minimapData.dots.map((d, i) => {
-                    const cx = (d.x / W) * 164;
-                    const cy = (d.y / H) * 112;
-                    if (d.kind === 'well') {
-                      return <circle key={`mm_${i}`} cx={cx} cy={cy} r={4} fill="#22d3ee" fillOpacity={0.45} stroke="#67e8f9" strokeWidth={1} />;
-                    }
-                    if (d.kind === 'beacon') {
-                      return <circle key={`mm_${i}`} cx={cx} cy={cy} r={4.5} fill="none" stroke="#fde047" strokeWidth={1.4} />;
-                    }
-                    if (d.kind === 'enemy' || d.kind === 'bullseye') {
-                      return (
-                        <circle
-                          key={`mm_${i}`}
-                          cx={cx}
-                          cy={cy}
-                          r={2.8}
-                          fill={d.kind === 'bullseye' ? '#fbbf24' : '#f43f5e'}
-                        />
-                      );
-                    }
-                    return (
-                      <circle
-                        key={`mm_${i}`}
-                        cx={cx}
-                        cy={cy}
-                        r={d.kind === 'player' ? 4 : 2.8}
-                        fill={d.kind === 'player' ? '#38bdf8' : d.color || '#94a3b8'}
-                        stroke={d.kind === 'player' ? '#ffffff' : 'none'}
-                        strokeWidth={1.2}
-                      />
-                    );
-                  })}
-                </svg>
-              )}
-            </div>
+            {/* Bottom-Left: Real-Time Mini-Map Overlay Component */}
+            <ArenaMiniMap
+              gameMode={selectedGameMode}
+              mapId={selectedMapId}
+              dots={minimapData.dots}
+              ringRadius={minimapData.ringRadius}
+              playerAngle={minimapData.playerAngle}
+              nextCheckpoint={minimapData.nextCheckpoint}
+              checkpointsCleared={minimapData.checkpointsCleared}
+              totalCheckpoints={hud.totalCheckpoints}
+            />
           </>
         )}
 
@@ -4294,57 +4288,87 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   </h2>
                 </div>
 
-                {launcherStep === 'choose_map' && (
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setLauncherStep('choose_game')}
+                    onClick={handleExitToLanding}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-white transition-colors whitespace-nowrap shrink-0"
                   >
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                    Change Game Type
+                    <Home className="h-3.5 w-3.5 text-sky-400" />
+                    Landing Page
                   </button>
-                )}
+                  {launcherStep === 'choose_map' && (
+                    <button
+                      type="button"
+                      onClick={() => setLauncherStep('choose_game')}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-white transition-colors whitespace-nowrap shrink-0"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                      Change Game Type
+                    </button>
+                  )}
+                </div>
               </div>
 
               {launcherStep === 'choose_game' ? (
                 <div className="space-y-5">
-                  <div className="grid gap-3.5 md:grid-cols-3">
-                    {GAME_MODES.map((gm) => {
-                      const Icon =
-                        gm.id === 'car_racing' ? Car : gm.id === 'shooting' ? Crosshair : Snowflake;
-                      const isSel = selectedGameMode === gm.id;
-                      return (
-                        <button
-                          key={gm.id}
-                          type="button"
-                          onClick={() => {
-                            onChangeGameMode(gm.id);
-                            setLauncherStep('choose_map');
-                          }}
-                          className={`flex flex-col justify-between rounded-xl border p-4 text-left transition-colors space-y-3 ${
-                            isSel
-                              ? 'border-sky-400 bg-sky-500/15 text-white'
-                              : 'border-slate-700 bg-slate-900/75 text-slate-300 hover:border-sky-500/60 hover:text-white'
-                          }`}
-                        >
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <Icon className="h-5 w-5 text-sky-400" />
-                              <span className="text-[11px] font-semibold text-sky-300">
-                                {gm.shortLabel}
-                              </span>
+                  <div className="space-y-4">
+                    <div className="grid gap-3.5 md:grid-cols-3">
+                      {GAME_MODES.filter((g) => g.dimension === '3D').map((gm) => {
+                        const Icon =
+                          gm.id === 'car_racing' ? Car : gm.id === 'shooting' ? Crosshair : Snowflake;
+                        const isSel = selectedGameMode === gm.id;
+                        return (
+                          <button
+                            key={gm.id}
+                            type="button"
+                            onClick={() => {
+                              onChangeGameMode(gm.id);
+                              setLauncherStep('choose_map');
+                            }}
+                            className={`flex flex-col justify-between rounded-xl border p-4 text-left transition-colors space-y-3 ${
+                              isSel
+                                ? 'border-sky-400 bg-sky-500/15 text-white'
+                                : 'border-slate-700 bg-slate-900/75 text-slate-300 hover:border-sky-500/60 hover:text-white'
+                            }`}
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <Icon className="h-5 w-5 text-sky-400" />
+                                <span className="text-[11px] font-semibold text-sky-300">
+                                  {gm.shortLabel}
+                                </span>
+                              </div>
+                              <h3 className="font-display text-xl text-white">{gm.name}</h3>
+                              <p className="text-xs leading-relaxed text-slate-400">
+                                {gm.description}
+                              </p>
                             </div>
-                            <h3 className="font-display text-xl text-white">{gm.name}</h3>
-                            <p className="text-xs leading-relaxed text-slate-400">
-                              {gm.description}
-                            </p>
-                          </div>
-                          <span className="text-xs font-semibold text-sky-300">
-                            Select & Choose Map →
-                          </span>
-                        </button>
-                      );
-                    })}
+                            <span className="text-xs font-semibold text-sky-300">
+                              Select &amp; Choose Map →
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5">
+                      <span className="text-xs font-semibold text-amber-200">
+                        2D Stickman Games (Lofi the Yeti Figure):
+                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {GAME_MODES.filter((g) => g.dimension === '2D').map((gm) => (
+                          <button
+                            key={gm.id}
+                            type="button"
+                            onClick={() => onChangeGameMode(gm.id)}
+                            className="rounded-lg border border-amber-400/40 bg-[#081322] px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-400 hover:text-slate-950 transition-colors whitespace-nowrap shrink-0"
+                          >
+                            {gm.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Colorway Picker */}
@@ -4393,7 +4417,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                     <span className="px-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                       Game
                     </span>
-                    {GAME_MODES.map((gm) => {
+                    {GAME_MODES.filter((g) => g.dimension === '3D').map((gm) => {
                       const Icon =
                         gm.id === 'car_racing' ? Car : gm.id === 'shooting' ? Crosshair : Snowflake;
                       return (
@@ -4529,6 +4553,14 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   <Menu className="h-3.5 w-3.5" />
                   Switch Game
                 </button>
+                <button
+                  type="button"
+                  onClick={handleExitToLanding}
+                  className="col-span-2 inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-white transition-colors"
+                >
+                  <Home className="h-3.5 w-3.5 text-sky-400" />
+                  Return to Landing Page
+                </button>
               </div>
             </div>
           </div>
@@ -4536,87 +4568,16 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
         {/* GAME OVER / RUN SUMMARY OVERLAY */}
         {gameState === 'GAME_OVER' && summary && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#061120]/88 p-6">
-            <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-[#0D1C30] p-6 space-y-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs text-sky-400">
-                    {getGameModeSpec(summary.gameMode).name} · {getMapSpec(summary.mapId).name} · Rank #{summary.rank}
-                  </p>
-                  <h3 className="title-3d-game-sm text-3xl mt-1">
-                    {summary.rank === 1 ? 'Arctic Champion!' : 'Run Complete'}
-                  </h3>
-                </div>
-                <span className="font-mono text-2xl font-bold text-sky-300 tabular-nums">
-                  {summary.score} pts
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 tabular-nums">
-                <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-                  <span className="text-xs text-slate-400 block">Well Drops</span>
-                  <span className="font-mono text-lg font-semibold text-cyan-300">+{summary.wellDrops}</span>
-                </div>
-                <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-                  <span className="text-xs text-slate-400 block">Frost Gems</span>
-                  <span className="font-mono text-lg font-semibold text-sky-300">+{summary.frostGems}</span>
-                </div>
-                <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-                  <span className="text-xs text-slate-400 block">Tasks Done</span>
-                  <span className="font-mono text-lg font-semibold text-emerald-300">{summary.tasksDone}/3</span>
-                </div>
-                <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-                  <span className="text-xs text-slate-400 block">
-                    {summary.extraStatLabel || 'Crates / Hits'}
-                  </span>
-                  <span className="font-mono text-lg font-semibold text-white">
-                    {summary.extraStatValue || `${summary.cratesSmashed} / ${summary.hitsLanded}`}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={handleClaimSummary}
-                  disabled={claimStatus !== 'idle'}
-                  className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-sky-400 disabled:opacity-60 transition-colors whitespace-nowrap shrink-0"
-                >
-                  <Zap className="h-4 w-4" />
-                  {claimStatus === 'idle'
-                    ? 'Settle Run on Sui (0 Gas)'
-                    : claimStatus === 'claiming'
-                    ? 'Settling PTB...'
-                    : 'Settled On-Chain'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => startGame(playMode, summary.gameMode)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Play Again
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openGameMapLauncher('choose_game')}
-                  className="rounded-lg border border-slate-700 bg-transparent px-4 py-2.5 text-sm font-medium text-slate-300 hover:text-white hover:border-slate-500 transition-colors whitespace-nowrap shrink-0"
-                >
-                  Switch Game / Map
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onShareRun(summary)}
-                  className="rounded-lg border border-slate-700 bg-transparent px-4 py-2.5 text-sm font-medium text-slate-300 hover:text-white hover:border-slate-500 transition-colors whitespace-nowrap shrink-0"
-                >
-                  Share
-                </button>
-              </div>
-            </div>
-          </div>
+          <ArenaGameOverOverlay
+            summary={summary}
+            lifeDepleted={lifeDepleted}
+            claimStatus={claimStatus}
+            onClaimSummary={handleClaimSummary}
+            onRestart={() => startGame(playMode, summary.gameMode)}
+            onReturnToMenu={() => openGameMapLauncher('choose_game')}
+            onReturnHome={handleExitToLanding}
+            onShare={() => onShareRun(summary)}
+          />
         )}
       </div>
 

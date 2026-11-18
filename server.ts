@@ -1250,7 +1250,15 @@ async function startServer() {
         ? mapId
         : 'glacier_well';
     const validGameMode: GameModeId =
-      gameMode && ['survival', 'car_racing', 'shooting'].includes(gameMode)
+      gameMode &&
+      [
+        'survival',
+        'car_racing',
+        'shooting',
+        'stickman_brawl',
+        'stickman_wrestling',
+        'stickman_run',
+      ].includes(gameMode)
         ? gameMode
         : 'survival';
 

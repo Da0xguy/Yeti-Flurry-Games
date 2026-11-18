@@ -1,15 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { Play, Users, ArrowRight, Droplets, Sparkles, Shield, Compass, Car, Crosshair, Snowflake } from 'lucide-react';
-import type { GameModeId, MapId, WellImpactState, YetiObject } from '../types';
-import { ARENA_MAPS, GAME_MODES } from '../data/gameCatalog';
+import { Play, Users, ArrowRight, Sparkles, Shield, Compass, Car, Crosshair, Snowflake, Swords, Trophy, Flame } from 'lucide-react';
+import type { GameModeId, MapId, YetiObject } from '../types';
+import { ARENA_MAPS, GAME_MODES, YETI_COLORWAYS } from '../data/gameCatalog';
 import { buildArcticEnvironment } from '../three/arenaEnvironment';
 import { animateYetiWalk, buildYetiRig } from '../three/yetiBuilder';
 
 interface LandingHero3DProps {
   yeti: YetiObject | null;
-  wellImpact: WellImpactState;
   onLaunchGame: () => void;
   onLaunchMode: (gameMode: GameModeId) => void;
   onLaunchTunnel: (mapId?: MapId) => void;
@@ -20,11 +19,13 @@ const GAME_CARD_ART: Record<GameModeId, string> = {
   survival: '/src/assets/images/arcade_survival_card.svg',
   car_racing: '/src/assets/images/snow_drifter_card.svg',
   shooting: '/src/assets/images/frost_fire_card.svg',
+  stickman_wrestling: '/src/assets/images/stickman_wrestling_card.svg',
+  stickman_brawl: '/src/assets/images/stickman_brawl_card.svg',
+  stickman_run: '/src/assets/images/stickman_run_card.svg',
 };
 
 export const LandingHero3D: React.FC<LandingHero3DProps> = ({
   yeti,
-  wellImpact,
   onLaunchGame,
   onLaunchMode,
   onLaunchTunnel,
@@ -281,16 +282,29 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
     };
   }, [yeti?.colorway, yeti?.equipped.hat, yeti?.equipped.scarf]);
 
-  const dropsIntoNextWell =
-    wellImpact.totalDropsCollected % wellImpact.dropsPerWellMilestone;
-  const wellPct = Math.min(
-    100,
-    Math.round((dropsIntoNextWell / wellImpact.dropsPerWellMilestone) * 100)
-  );
+  const modes2D = GAME_MODES.filter((g) => g.dimension === '2D');
+  const modes3D = GAME_MODES.filter((g) => g.dimension === '3D');
+
+  const getModeIcon = (id: GameModeId) => {
+    switch (id) {
+      case 'car_racing':
+        return Car;
+      case 'shooting':
+        return Crosshair;
+      case 'stickman_wrestling':
+        return Trophy;
+      case 'stickman_brawl':
+        return Swords;
+      case 'stickman_run':
+        return Flame;
+      default:
+        return Snowflake;
+    }
+  };
 
   return (
     <div className="space-y-16 pb-8">
-      {/* FULL-BLEED 3D HERO SECTION (Open landing layout — NO card box) */}
+      {/* FULL-BLEED 3D HERO SECTION */}
       <section className="relative overflow-hidden min-h-[590px] lg:min-h-[650px] flex items-center border-b border-slate-800/80">
         <div
           ref={mountRef}
@@ -319,7 +333,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
         <div className="relative z-10 mx-auto w-full max-w-[1200px] px-4 sm:px-6 pt-24 pb-16">
           <div className="max-w-xl space-y-5">
             <p className="text-xs font-semibold tracking-wider text-sky-400">
-              Lofi the Yeti · 3D Arcade Survival, Buggy Racing &amp; Blaster on Sui
+              Lofi the Yeti · 3D Arena &amp; 2D Stickman Multi-Game Arcade on Sui
             </p>
 
             <h1 className="title-3d-game text-5xl sm:text-6xl lg:text-[66px] leading-[1.02] text-balance">
@@ -327,7 +341,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
             </h1>
 
             <p className="text-base sm:text-lg leading-relaxed text-slate-200 max-w-lg">
-              Launch full-screen into massive 3D worlds: race long Beach-Buggy circuits through 4 Checkpoints, blast waves of Cryo Drones, or battle rival Yetis for Drops, Gems &amp; Power-Ups.
+              One Lofi Arcade, 6 playable games: jump into 2D Stickman Yeti Wrestling &amp; Frost Brawl as Lofi the Yeti, or go full-screen in 3D Survival, Beach-Buggy Racing, and Frost Fire Shooter.
             </p>
 
             <div className="flex flex-wrap items-center gap-4 pt-2">
@@ -337,27 +351,34 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                 className="inline-flex items-center gap-2.5 rounded-lg bg-sky-500 px-6 py-3.5 text-sm font-bold text-slate-950 hover:bg-sky-400 transition-colors whitespace-nowrap shrink-0"
               >
                 <Play className="h-4 w-4 fill-current" />
-                Launch 3D Game
+                Launch Game Suite
               </button>
 
               <button
                 type="button"
-                onClick={() => onLaunchTunnel('glacier_well')}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-600/80 bg-[#09182c]/85 px-5 py-3.5 text-sm font-semibold text-white hover:border-sky-400 hover:text-sky-200 transition-colors whitespace-nowrap shrink-0"
+                onClick={() => onLaunchMode('stickman_wrestling')}
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-400/60 bg-[#09182c]/85 px-5 py-3.5 text-sm font-semibold text-amber-200 hover:bg-amber-400 hover:text-slate-950 transition-colors whitespace-nowrap shrink-0"
               >
-                <Users className="h-4 w-4 text-sky-400" />
-                Join Live Tunnel
+                <Trophy className="h-4 w-4" />
+                2D Stickman Wrestling
               </button>
             </div>
 
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-2 text-xs text-slate-300 tabular-nums">
-              <span>3 Fullscreen Modes</span>
+              <span>6 Arcade Games (3D + 2D)</span>
               <span aria-hidden="true">·</span>
-              <span>Beach-Buggy Checkpoints</span>
+              <span>Lofi Stickman Figure &amp; Wrestling</span>
               <span aria-hidden="true">·</span>
-              <span>5 Power-Ups &amp; 3D Life Bars</span>
+              <span>Live Mini-Map &amp; Life Bars</span>
               <span aria-hidden="true">·</span>
-              <span>{wellImpact.wellsFunded} Water Wells Funded</span>
+              <button
+                type="button"
+                onClick={() => onLaunchTunnel('glacier_well')}
+                className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200 underline underline-offset-4"
+              >
+                <Users className="h-3.5 w-3.5" />
+                Join Live 3D Tunnel
+              </button>
               <span aria-hidden="true">·</span>
               <button
                 type="button"
@@ -371,16 +392,83 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
         </div>
       </section>
 
-      {/* BELOW THE FOLD: 3 GAME MODES + 3 EXPANDED MAPS */}
-      <section className="mx-auto max-w-[1200px] px-4 sm:px-6 space-y-12">
+      {/* BELOW THE FOLD: GROUP OF GAMES (2D STICKMAN SUITE + 3D ARENA SUITE) */}
+      <section className="mx-auto max-w-[1200px] px-4 sm:px-6 space-y-14">
+        {/* SECTION 01: 2D STICKMAN & WRESTLING GAMES WITH LOFI THE YETI */}
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold text-amber-300">
+                01. 2D Stickman Arcade · Featuring Lofi the Yeti Figure
+              </p>
+              <h2 className="font-display text-3xl text-white mt-1">
+                Stickman Wrestling, Frost Brawl &amp; Glacier Run
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => onLaunchMode('stickman_wrestling')}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-300 hover:text-amber-200"
+            >
+              Step Into The 2D Ring
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-3">
+            {modes2D.map((gm) => {
+              const Icon = getModeIcon(gm.id);
+              return (
+                <div
+                  key={gm.id}
+                  className="group flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-800 bg-[#0D1C30] space-y-5 transition-transform hover:-translate-y-1 hover:border-amber-400/60"
+                >
+                  <div className="relative h-40 overflow-hidden">
+                    <img
+                      src={GAME_CARD_ART[gm.id]}
+                      alt={`${gm.name} 2D stickman artwork`}
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0D1C30] via-[#0D1C30]/35 to-transparent" />
+                    <div className="absolute inset-x-5 bottom-4 flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                        2D Stickman · {gm.shortLabel}
+                      </span>
+                      <Icon className="h-5 w-5 text-amber-300 drop-shadow-lg" aria-hidden="true" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 px-6">
+                    <span className="text-xs font-semibold text-sky-400">{gm.subtitle}</span>
+                    <h3 className="font-display text-xl text-white">{gm.name}</h3>
+                    <p className="text-sm leading-relaxed text-slate-400">{gm.description}</p>
+                    <p className="text-xs text-slate-300 pt-1">{gm.controlsSummary}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onLaunchMode(gm.id)}
+                    className="mx-6 mb-6 inline-flex items-center justify-center gap-2 rounded-lg bg-amber-400/95 px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-amber-300 transition-colors"
+                  >
+                    <Play className="h-3.5 w-3.5 fill-current" />
+                    Play {gm.shortLabel}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* SECTION 02: 3D ARENA GAMES + 3 WORLDS */}
         <div className="space-y-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="text-xs font-semibold text-sky-400">
-                01. Three 3D Arcade Games · Pick Game Type Then Choose Map
+                02. 3D Arena Games · Pick Game Type Then Choose Map
               </p>
               <h2 className="font-display text-3xl text-white mt-1">
-                Arcade Survival, Snow Drifter Racing & Frost Fire
+                Arcade Survival, Snow Drifter Racing &amp; Frost Fire
               </h2>
             </div>
             <button
@@ -388,15 +476,14 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
               onClick={onLaunchGame}
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-sky-400 hover:text-sky-300"
             >
-              Open Game Launcher
+              Open 3D Game Launcher
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
 
           <div className="grid gap-5 md:grid-cols-3">
-            {GAME_MODES.map((gm) => {
-              const Icon =
-                gm.id === 'car_racing' ? Car : gm.id === 'shooting' ? Crosshair : Snowflake;
+            {modes3D.map((gm) => {
+              const Icon = getModeIcon(gm.id);
               return (
                 <div
                   key={gm.id}
@@ -405,14 +492,14 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                   <div className="relative h-40 overflow-hidden">
                     <img
                       src={GAME_CARD_ART[gm.id]}
-                      alt={`${gm.name} game artwork`}
+                      alt={`${gm.name} 3D game artwork`}
                       loading="lazy"
                       className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0D1C30] via-[#0D1C30]/35 to-transparent" />
                     <div className="absolute inset-x-5 bottom-4 flex items-center justify-between gap-2">
-                      <span className="rounded-full border border-white/15 bg-[#081322]/75 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-sky-200 backdrop-blur-sm">
-                        {gm.shortLabel}
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-sky-300">
+                        3D World · {gm.shortLabel}
                       </span>
                       <Icon className="h-5 w-5 text-white drop-shadow-lg" aria-hidden="true" />
                     </div>
@@ -456,27 +543,39 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
           </div>
         </div>
 
-        {/* SECTION 02: CORE GAMEPLAY & TASKS */}
+        {/* SECTION 03: LOFI STICKMAN & 3D ROSTER + SUI ARCADE PROGRESSION */}
         <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr] items-center">
           <div className="space-y-6">
             <div className="space-y-2">
               <p className="text-xs font-semibold text-sky-400">
-                02. Power-Ups, Checkpoints &amp; True Sui Ownership
+                03. Unified Lofi Arcade · 2D Stickman &amp; 3D Progression
               </p>
               <h2 className="font-display text-2xl sm:text-3xl text-white text-balance">
-                Bank Drops, Smash Crates &amp; Capture Shrine Beacons
+                One Lofi the Yeti Character Across 6 Games
               </h2>
             </div>
 
             <div className="space-y-5 border-t border-slate-800 pt-5">
               <div className="flex items-start gap-4">
+                <Trophy className="h-5 w-5 text-amber-400 mt-0.5 shrink-0" aria-hidden="true" />
+                <div>
+                  <h3 className="text-base font-semibold text-white">
+                    Stickman Yeti Wrestling &amp; Frost Brawl Combat
+                  </h3>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-400">
+                    Grapple rival stickmen for overhead Suplex Slams, rebound off elastic ring ropes, charge your Avalanche Finisher, and score 1-2-3 Pinfall victories as 2D Stickman Lofi.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
                 <Sparkles className="h-5 w-5 text-sky-400 mt-0.5 shrink-0" aria-hidden="true" />
                 <div>
                   <h3 className="text-base font-semibold text-white">
-                    Live Power-Ups, 3D Life Bars &amp; Fullscreen Radar
+                    Live Power-Ups, Life Bars &amp; Fullscreen Radar
                   </h3>
                   <p className="mt-1 text-sm leading-relaxed text-slate-400">
-                    Collect Cryo Shields, Turbo Surge, Drop Magnets, Tri-Shot Blasters, and Medkits across 2:30–3:00 matches while tracking Checkpoints and rivals on the live fullscreen mini-map.
+                    Collect Cryo Shields, Turbo Surge, Drop Magnets, Rage Multipliers, and Medkits while tracking checkpoints and rivals on the fullscreen mini-map.
                   </p>
                 </div>
               </div>
@@ -485,83 +584,87 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                 <Shield className="h-5 w-5 text-cyan-400 mt-0.5 shrink-0" aria-hidden="true" />
                 <div>
                   <h3 className="text-base font-semibold text-white">
-                    Custom Yeti Colorways & Non-P2W Cosmetics
+                    Custom Yeti Colorways &amp; Sui Object Progression
                   </h3>
                   <p className="mt-1 text-sm leading-relaxed text-slate-400">
-                    Style your furry 3D Lofi Yeti across 6 vibrant colorways, hats, scarves, and frost trails stored via Sui objects without pay-to-win stats.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <Droplets className="h-5 w-5 text-teal-400 mt-0.5 shrink-0" aria-hidden="true" />
-                <div>
-                  <h3 className="text-base font-semibold text-white">
-                    Glacial Drops Power Real-World Water Wells
-                  </h3>
-                  <p className="mt-1 text-sm leading-relaxed text-slate-400">
-                    Every Glacial Drop banked at the central well increments the community Lofi Well Impact Pool toward funding new clean water wells.
+                    Your chosen colorway, hat, and scarf carry seamlessly into both the 3D Yeti rig and the 2D Stickman Lofi figure with zero pay-to-win stats.
                   </p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="grid gap-6 rounded-2xl border border-slate-800 bg-[#0D1C30] p-6">
-            <div className="flex items-center gap-4">
-              <img
-                src="/src/assets/images/lofi_well_emblem_1794874871937.jpg"
-                alt="Enchanted glacial water well overflowing with drops"
-                referrerPolicy="no-referrer"
-                className="h-24 w-24 rounded-xl object-cover border border-slate-800 shrink-0"
-              />
+          <div className="grid gap-5 rounded-2xl border border-slate-800 bg-[#0D1C30] p-6">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold text-cyan-400">
-                  Community Water Well Milestone
+                <p className="text-xs font-semibold text-amber-300">
+                  Playable Mascot · 2D &amp; 3D Cross-Mode
                 </p>
                 <h3 className="font-display text-2xl text-white mt-0.5">
-                  Well #{wellImpact.wellsFunded + 1} Progress
+                  Lofi the Yeti Roster
                 </h3>
-                <p className="text-xs text-slate-400 mt-1 tabular-nums">
-                  {wellImpact.wellsFunded} wells funded · {wellImpact.activeContributors} active Yetis
+                <p className="text-xs text-slate-400 mt-1">
+                  {yeti
+                    ? `${yeti.name} · Level ${yeti.level} ${yeti.stage}`
+                    : 'Mint a free starter Yeti to track high scores across all 6 games.'}
                 </p>
               </div>
+              <img
+                src="/src/assets/images/lofi_yeti_face_1794999269515.jpg"
+                alt="Lofi the Yeti mascot character"
+                className="h-20 w-20 rounded-xl object-cover bg-[#061224] p-1 border border-slate-700 shrink-0"
+              />
             </div>
 
             <div className="grid grid-cols-3 gap-4 tabular-nums border-t border-slate-800 pt-4">
               <div>
-                <span className="text-xs text-slate-400 block">Wells Funded</span>
-                <span className="font-mono text-2xl font-bold text-cyan-300">
-                  {wellImpact.wellsFunded}
-                </span>
+                <span className="text-xs text-slate-400 block">2D Games</span>
+                <span className="font-mono text-2xl font-bold text-amber-300">3</span>
               </div>
               <div>
-                <span className="text-xs text-slate-400 block">Glacial Drops</span>
+                <span className="text-xs text-slate-400 block">3D Arenas</span>
+                <span className="font-mono text-2xl font-bold text-sky-300">3</span>
+              </div>
+              <div>
+                <span className="text-xs text-slate-400 block">Colorways</span>
                 <span className="font-mono text-2xl font-bold text-white">
-                  {wellImpact.totalDropsCollected.toLocaleString()}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs text-slate-400 block">Progress</span>
-                <span className="font-mono text-2xl font-bold text-sky-300">
-                  {wellPct}%
+                  {YETI_COLORWAYS.length}
                 </span>
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs tabular-nums">
-                <span className="text-slate-300">Next milestone</span>
-                <span className="font-mono text-cyan-300">
-                  {dropsIntoNextWell} / {wellImpact.dropsPerWellMilestone} drops
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 pt-4">
+              {YETI_COLORWAYS.map((cw) => (
+                <span
+                  key={cw.id}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-700/80 bg-[#081322] px-2.5 py-1 text-[11px] text-slate-200"
+                >
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: cw.skinHex }}
+                    aria-hidden="true"
+                  />
+                  {cw.name}
                 </span>
-              </div>
-              <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
-                <div
-                  className="h-full rounded-full bg-cyan-400 transition-all duration-300"
-                  style={{ width: `${wellPct}%` }}
-                />
-              </div>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => onLaunchMode('stickman_wrestling')}
+                className="inline-flex items-center gap-2 rounded-lg bg-amber-400 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300 transition-colors"
+              >
+                <Trophy className="h-3.5 w-3.5" />
+                Play Stickman Wrestling
+              </button>
+              <button
+                type="button"
+                onClick={onOpenMyYeti}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-white transition-colors"
+              >
+                Customize Yeti
+              </button>
             </div>
           </div>
         </div>

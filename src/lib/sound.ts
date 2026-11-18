@@ -229,6 +229,81 @@ class ArcticSoundEngine {
       osc.stop(t + 0.22);
     });
   }
+
+  public playPunch(heavy = false): void {
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = heavy ? 'sawtooth' : 'triangle';
+    osc.frequency.setValueAtTime(heavy ? 210 : 320, now);
+    osc.frequency.exponentialRampToValueAtTime(heavy ? 52 : 95, now + (heavy ? 0.14 : 0.08));
+    gain.gain.setValueAtTime(heavy ? 0.12 : 0.085, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + (heavy ? 0.16 : 0.09));
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.17);
+  }
+
+  public playSlam(): void {
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(145, now);
+    osc.frequency.exponentialRampToValueAtTime(34, now + 0.28);
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.32);
+  }
+
+  public playBell(rings = 1): void {
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    for (let i = 0; i < rings; i++) {
+      const t = now + i * 0.18;
+      [880, 1318.5].forEach((freq, j) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(j === 0 ? 0.1 : 0.06, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.34);
+      });
+    }
+  }
+
+  public playPinTick(count: number): void {
+    const ctx = this.ensureCtx();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(420 + count * 120, now);
+    gain.gain.setValueAtTime(0.11, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.13);
+  }
 }
 
 export const soundEngine = new ArcticSoundEngine();

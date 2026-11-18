@@ -26,18 +26,20 @@ export const RACE_BOUNDS = {
 export const GAME_MODES: GameModeSpec[] = [
   {
     id: 'survival',
+    dimension: '3D',
     name: 'Arcade Survival',
-    shortLabel: 'Survival',
+    shortLabel: 'Survival 3D',
     subtitle: 'Central Well · Snowball Clash · Power-Ups · 2:30 Match',
     description:
-      'Roam the huge 3D arena, grab Glacial Drops & Power-Ups (Shield, Magnet, Turbo, Tri-Shot, Medkit), bank at the Central Well, and outlast rival Yetis.',
+      'Roam the huge 3D arena, grab Glacial Drops & Power-Ups (Shield, Magnet, Turbo, Tri-Shot, Medkit), bank at the Shrine, and outlast rival Yetis.',
     controlsSummary: 'WASD / Arrows move · Space Dash · Click / J Throw · 1/E Wave · 2/F Dance',
     supportsTunnel: true,
   },
   {
     id: 'car_racing',
+    dimension: '3D',
     name: 'Snow Drifter Racing',
-    shortLabel: 'Kart Race',
+    shortLabel: 'Buggy 3D',
     subtitle: '3-Lap Beach Buggy Circuit · 4 Checkpoints · Track Power-Ups',
     description:
       'Tear down sweeping Beach-Buggy style coastal sweepers, canyon hairpins, and alpine straightaways. Hit Checkpoints 1–4, boost pads, and track power-up orbs over 3 laps.',
@@ -46,12 +48,46 @@ export const GAME_MODES: GameModeSpec[] = [
   },
   {
     id: 'shooting',
+    dimension: '3D',
     name: 'Frost Fire',
-    shortLabel: 'Shooter',
+    shortLabel: 'Shooter 3D',
     subtitle: 'Wave Combat · Cryo Drones · Tri-Blaster & Frost Nova',
     description:
       'Aim your 3D Frost Blaster across the vast open arena to shatter Cryo Drones, spinning Ice Bullseyes, and rival Yeti sharpshooters while grabbing combat power-ups.',
     controlsSummary: 'WASD / Arrows Strafe · Mouse Aim · Click / J Rapid Fire · Space Frost Nova',
+    supportsTunnel: false,
+  },
+  {
+    id: 'stickman_wrestling',
+    dimension: '2D',
+    name: 'Stickman Yeti Wrestling',
+    shortLabel: 'Wrestling 2D',
+    subtitle: 'Pro Ring · Suplex Slams · Rope Bounce · 1-2-3 Pinfall',
+    description:
+      'Step into the 2D ring as Lofi the Yeti Stickman! Execute suplex slams, bounce off elastic ropes, unleash your Avalanche Finisher, and score a 1-2-3 pinfall across 3 championship bouts.',
+    controlsSummary: 'A / D Move · W Jump · S Guard · J Strike · K Grapple/Pin · Space Rope Dash · L Finisher',
+    supportsTunnel: false,
+  },
+  {
+    id: 'stickman_brawl',
+    dimension: '2D',
+    name: 'Stickman Frost Brawl',
+    shortLabel: 'Stick Brawl 2D',
+    subtitle: '2D Side-View Combat · Ledges · Wave Bosses & Combos',
+    description:
+      'Control an articulated 2D Lofi the Yeti Stickman fighter across multi-ledge icy canyons. Chain punches, uppercuts, snowball throws, and frost dashes against wave fighters.',
+    controlsSummary: 'A / D Move · W Double Jump · S Guard · J Combo Hit · K Heavy Uppercut · L Ice Throw · Space Dash',
+    supportsTunnel: false,
+  },
+  {
+    id: 'stickman_run',
+    dimension: '2D',
+    name: 'Stickman Glacier Run',
+    shortLabel: 'Glacier Run 2D',
+    subtitle: 'Fast 2D Platform Runner · Slide · Double Jump · Blasts',
+    description:
+      'Sprint as 2D Stickman Lofi across crumbling frozen cliffs, slide under icicle volleys, shatter ice crates with snowballs, and rack up Glacial Drops & Combo multipliers.',
+    controlsSummary: 'W / Up / Space Jump (x2) · S / Down Slide · J Snowball Blast',
     supportsTunnel: false,
   },
 ];
@@ -209,6 +245,60 @@ export function getMapModeDetails(mapId: MapId, gameMode: GameModeId): {
     return {
       tag: 'Open Glacial Range',
       summary: 'Balanced iceberg cover and clear long-range sightlines around the Central Well.',
+    };
+  }
+  if (gameMode === 'stickman_wrestling') {
+    if (mapId === 'volcanic_springs') {
+      return {
+        tag: 'Caldera Cage Ring',
+        summary: 'Heated basalt arena spotlights, fast rope rebounds, and bonus finisher charge.',
+      };
+    }
+    if (mapId === 'aurora_summit') {
+      return {
+        tag: 'Skyline Championship',
+        summary: 'High-altitude aurora ring with crisp bounce physics and emerald turnbuckles.',
+      };
+    }
+    return {
+      tag: 'Frost Slam Ring',
+      summary: 'Classic icy blue squared circle with elastic ropes and championship turnbuckles.',
+    };
+  }
+  if (gameMode === 'stickman_brawl') {
+    if (mapId === 'volcanic_springs') {
+      return {
+        tag: 'Ember Ridge Brawl',
+        summary: 'High-heat basalt platforms with rapid enemy rushers and ember power orbs.',
+      };
+    }
+    if (mapId === 'aurora_summit') {
+      return {
+        tag: 'Aurora Spire Brawl',
+        summary: 'Low-gravity sky ledges for soaring stickman aerial combos and crystal gems.',
+      };
+    }
+    return {
+      tag: 'Frozen Gorge Brawl',
+      summary: 'Two-tier frozen ice ledges built for fast 2D stickman brawling and snowball zoning.',
+    };
+  }
+  if (gameMode === 'stickman_run') {
+    if (mapId === 'volcanic_springs') {
+      return {
+        tag: 'Caldera Cliff Sprint',
+        summary: 'Blistering pace across volcanic spires with tighter gaps and double gem streaks.',
+      };
+    }
+    if (mapId === 'aurora_summit') {
+      return {
+        tag: 'Aurora Sky Dash',
+        summary: 'Floaty double-jumps between glowing crystal platforms under northern lights.',
+      };
+    }
+    return {
+      tag: 'Glacier Ridge Sprint',
+      summary: 'Classic frozen canyon sprint with snow ramps, ice crates, and sweeping platforms.',
     };
   }
   const spec = getMapSpec(mapId);
@@ -457,8 +547,8 @@ export function resolveArenaObstacleCollision(
 export const CAREER_QUESTS: CareerQuest[] = [
   {
     id: 'quest_well_guardian',
-    title: 'Clean Water Steward',
-    description: 'Contribute 25 Glacial Drops across any arena runs to fund community wells.',
+    title: 'Glacial Drop Collector',
+    description: 'Gather 25 Glacial Drops across any 3D or 2D Lofi Arcade runs.',
     metric: 'wellDrops',
     target: 25,
     rewardGems: 25,
