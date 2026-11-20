@@ -280,7 +280,7 @@ export function getMapModeDetails(mapId: MapId, gameMode: GameModeId): {
     }
     return {
       tag: 'Cryo Station Alpha',
-      summary: 'Explore 6 connected ship rooms, scan clues to unlock blast doors, and escape before Imposters catch you.',
+      summary: 'Explore 12 connected station rooms, scan clues to unlock blast doors, and escape before Imposters catch you.',
     };
   }
   if (gameMode === 'stickman_run') {
@@ -544,45 +544,79 @@ export function resolveArenaObstacleCollision(
   return { x: rx, y: ry, vx: rvx, vy: rvy };
 }
 
+export type RaceObstacleKind = 'jersey_barrier' | 'cryo_spinner' | 'fuel_barrel' | 'jump_ramp';
+
 export interface RaceTrackObstacle {
   id: string;
   x: number;
   y: number;
   radius: number;
-  kind: 'rock' | 'cryo_pylon';
+  yaw: number;
+  kind: RaceObstacleKind;
 }
 
 /**
- * Physical trackside boulders and glowing cryo pylons along curves and straights.
- * Positioned deliberately 48–76 logical units off centerline so clean racing lines remain passable.
+ * Creative race-track obstacles & launch ramps distributed across the wide 260-unit circuit:
+ * - jump_ramp: Turbo launch ramp granting air-time, Nitro & speed burst
+ * - cryo_spinner: Rotating hazard blade pedestal to dodge between lanes
+ * - fuel_barrel: Volatile frost fuel barrels (smashable with Frost Shield or Cryo Missiles)
+ * - jersey_barrier: Striped chicane roadblocks forcing crisp racing lines
  */
 export function getRaceTrackObstacles(mapId: MapId): RaceTrackObstacle[] {
   const wps = getRaceTrackWaypoints(mapId);
-  const offsets = [58, -56, 62, -60, 54, -64, 60, -54, 58, -62];
+  const lateralOffsets = [72, -68, 0, -76, 74, 64, -72, 0, 78, -68, 66, -74, 58];
+  const pattern: RaceObstacleKind[] = [
+    'jump_ramp',
+    'cryo_spinner',
+    'fuel_barrel',
+    'jersey_barrier',
+    'jump_ramp',
+    'cryo_spinner',
+    'fuel_barrel',
+    'jersey_barrier',
+    'jump_ramp',
+    'cryo_spinner',
+    'fuel_barrel',
+    'jersey_barrier',
+    'jump_ramp',
+  ];
   const obs: RaceTrackObstacle[] = [];
+
   for (let idx = 1; idx < wps.length; idx++) {
-    const prev = wps[idx - 1];
     const cur = wps[idx];
     const next = wps[(idx + 1) % wps.length];
-    const dirX = next.x - prev.x;
-    const dirY = next.y - prev.y;
+    const dirX = next.x - cur.x;
+    const dirY = next.y - cur.y;
     const len = Math.hypot(dirX, dirY) || 1;
     const perpX = -dirY / len;
     const perpY = dirX / len;
+    const yaw = Math.atan2(dirX, dirY);
 
-    // Place chicane pylon/rock halfway between cur and next for active dodging
-    if (idx % 2 === 1 || idx === 6 || idx === 10) {
-      const midX = (cur.x + next.x) * 0.5;
-      const midY = (cur.y + next.y) * 0.5;
-      const lateral = offsets[obs.length % offsets.length];
-      obs.push({
-        id: `race_obs_${mapId}_${idx}`,
-        x: midX + perpX * lateral,
-        y: midY + perpY * lateral,
-        radius: obs.length % 3 === 0 ? 32 : 26,
-        kind: obs.length % 2 === 0 ? 'rock' : 'cryo_pylon',
-      });
-    }
+    const midX = (cur.x + next.x) * 0.5;
+    const midY = (cur.y + next.y) * 0.5;
+    const kind = pattern[(idx - 1) % pattern.length];
+    const lateral =
+      kind === 'jump_ramp'
+        ? idx % 2 === 0
+          ? -38
+          : 38
+        : lateralOffsets[(idx - 1) % lateralOffsets.length];
+
+    obs.push({
+      id: `race_obs_${mapId}_${idx}`,
+      x: midX + perpX * lateral,
+      y: midY + perpY * lateral,
+      yaw,
+      radius:
+        kind === 'jump_ramp'
+          ? 44
+          : kind === 'cryo_spinner'
+          ? 34
+          : kind === 'jersey_barrier'
+          ? 36
+          : 28,
+      kind,
+    });
   }
   return obs;
 }
@@ -593,21 +627,24 @@ export function resolveRaceObstacleCollision(
   vx: number,
   vy: number,
   kartRadius: number,
-  mapId: MapId
-): { x: number; y: number; vx: number; vy: number; hit: boolean } {
+  mapId: MapId,
+  skipIds?: Set<string>
+): { x: number; y: number; vx: number; vy: number; hitObs: RaceTrackObstacle | null } {
   let rx = x;
   let ry = y;
   let rvx = vx;
   let rvy = vy;
-  let hit = false;
+  let hitObs: RaceTrackObstacle | null = null;
 
   for (const obs of getRaceTrackObstacles(mapId)) {
+    if (obs.kind === 'jump_ramp') continue;
+    if (skipIds?.has(obs.id)) continue;
     const dx = rx - obs.x;
     const dy = ry - obs.y;
     const dist = Math.hypot(dx, dy);
     const minDist = obs.radius + kartRadius;
     if (dist < minDist) {
-      hit = true;
+      hitObs = obs;
       const nx = dist > 0.01 ? dx / dist : 1;
       const ny = dist > 0.01 ? dy / dist : 0;
       rx = obs.x + nx * minDist;
@@ -619,7 +656,7 @@ export function resolveRaceObstacleCollision(
       }
     }
   }
-  return { x: rx, y: ry, vx: rvx, vy: rvy, hit };
+  return { x: rx, y: ry, vx: rvx, vy: rvy, hitObs };
 }
 
 export const CAREER_QUESTS: CareerQuest[] = [

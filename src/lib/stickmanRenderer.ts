@@ -637,56 +637,206 @@ export function drawStickmanCharacter(
     ey: number,
     width: number,
     mainColor: string,
-    tipColor?: string
+    tipColor?: string,
+    isLeg = false
   ) => {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#071324';
-    ctx.lineWidth = width + 3.5;
+
+    if (isLofiYeti) {
+      ctx.strokeStyle = '#071324';
+      ctx.lineWidth = width + 3.5;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(mx, my);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+
+      ctx.strokeStyle = mainColor;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(mx, my);
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+      return;
+    }
+
+    // Stylized NPC tactical limb: thicker armored upper segment + tapered forearm/greave + glove/boot
+    ctx.strokeStyle = '#040a14';
+    ctx.lineWidth = width + 5.2;
     ctx.beginPath();
     ctx.moveTo(sx, sy);
     ctx.lineTo(mx, my);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#071324';
+    ctx.lineWidth = width + 3.8;
+    ctx.beginPath();
+    ctx.moveTo(mx, my);
     ctx.lineTo(ex, ey);
     ctx.stroke();
 
     ctx.strokeStyle = mainColor;
-    ctx.lineWidth = width;
+    ctx.lineWidth = width + 1.4;
     ctx.beginPath();
     ctx.moveTo(sx, sy);
     ctx.lineTo(mx, my);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = width + 0.6;
+    ctx.beginPath();
+    ctx.moveTo(mx, my);
     ctx.lineTo(ex, ey);
     ctx.stroke();
 
-    if (tipColor && !isLofiYeti) {
-      ctx.fillStyle = tipColor;
-      ctx.strokeStyle = '#071324';
+    // Accent cuff/knee joint highlight
+    ctx.fillStyle = tipColor || accentColor;
+    ctx.beginPath();
+    ctx.arc(mx, my, width * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (isLeg) {
+      // Combat Boot Silhouette
+      const legAng = Math.atan2(ey - my, ex - mx);
+      ctx.save();
+      ctx.translate(ex, ey);
+      ctx.rotate((legAng - Math.PI / 2) * 0.28);
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = tipColor || accentColor;
       ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.arc(ex, ey, width * 0.65, 0, Math.PI * 2);
+      ctx.roundRect(-4.5, -3, 13, 7, 2.5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      // Tactical Gauntlet Glove
+      ctx.fillStyle = tipColor || accentColor;
+      ctx.strokeStyle = '#040a14';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(ex, ey, width * 0.8, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }
   };
 
-  // Back normal stickman limbs
-  drawNormalStickLimb(hipX, hipY, leftLeg.mx, leftLeg.my, leftLeg.ex, leftLeg.ey, 5.5, bodyStroke, accentColor);
-  drawNormalStickLimb(shoulderX, shoulderY, leftArm.mx, leftArm.my, leftArm.ex, leftArm.ey, 5, bodyStroke, accentColor);
+  // Back limbs
+  drawNormalStickLimb(hipX, hipY, leftLeg.mx, leftLeg.my, leftLeg.ex, leftLeg.ey, 5.5, bodyStroke, accentColor, true);
+  drawNormalStickLimb(shoulderX, shoulderY, leftArm.mx, leftArm.my, leftArm.ex, leftArm.ey, 5, bodyStroke, accentColor, false);
 
-  // Normal Stickman Torso Spine (clean generic stickman line — no suit clutter)
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = '#071324';
-  ctx.lineWidth = 10;
-  ctx.beginPath();
-  ctx.moveTo(hipX, hipY);
-  ctx.lineTo(neckX, neckY);
-  ctx.stroke();
+  // NPC Dorsal Equipment (Imposter Oxygen Pack OR Boss Flowing Cape)
+  if (!isLofiYeti && bossAura) {
+    const flutter = Math.sin(animTime * 8) * 6;
+    ctx.save();
+    ctx.fillStyle = imposterVisor ? '#4c0519' : '#1e1b4b';
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(shoulderX - 3, shoulderY - 2);
+    ctx.quadraticCurveTo(hipX - 24, hipY - 8, hipX - 34 + flutter, hipY + 26);
+    ctx.lineTo(hipX - 12 + flutter * 0.6, hipY + 22);
+    ctx.lineTo(hipX + 2, hipY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  } else if (!isLofiYeti && imposterVisor) {
+    // Among Us-style dorsal cryo oxygen tank
+    ctx.save();
+    ctx.translate(shoulderX - 6, shoulderY + 6);
+    ctx.rotate(torsoLean);
+    ctx.fillStyle = '#0f172a';
+    ctx.strokeStyle = bodyStroke;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.roundRect(-10, -2, 10, 22, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(-7.5, 4, 4, 8);
+    ctx.restore();
+  }
 
-  ctx.strokeStyle = bodyStroke;
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.moveTo(hipX, hipY);
-  ctx.lineTo(neckX, neckY);
-  ctx.stroke();
+  // Torso Spine / Tapered Tactical Armor Jacket
+  if (isLofiYeti) {
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#071324';
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(hipX, hipY);
+    ctx.lineTo(neckX, neckY);
+    ctx.stroke();
+
+    ctx.strokeStyle = bodyStroke;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(hipX, hipY);
+    ctx.lineTo(neckX, neckY);
+    ctx.stroke();
+  } else {
+    // Sleek Tapered Tactical Operative / Boss Armored Torso
+    ctx.save();
+    ctx.translate(hipX, hipY);
+    ctx.rotate(torsoLean);
+    const jacketGrad = ctx.createLinearGradient(0, -spineLen, 0, 2);
+    jacketGrad.addColorStop(0, flashHit ? '#ffffff' : bodyStroke);
+    jacketGrad.addColorStop(1, '#0f172a');
+    ctx.fillStyle = jacketGrad;
+    ctx.strokeStyle = '#040a14';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(-7, 2);
+    ctx.lineTo(-11.5, -spineLen + 2);
+    ctx.lineTo(0, -spineLen - 3);
+    ctx.lineTo(11.5, -spineLen + 2);
+    ctx.lineTo(7, 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Tactical chest vest stripe + collar + belt
+    ctx.fillStyle = '#071324';
+    ctx.fillRect(-7.5, -4, 15, 5);
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(-2.5, -4, 5, 5);
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, -spineLen + 3);
+    ctx.lineTo(4.5, -spineLen * 0.48);
+    ctx.lineTo(0, -6);
+    ctx.stroke();
+
+    if (bossAura) {
+      // Glowing Boss Reactor Core + Shoulder Pauldron Wings
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(3, -spineLen * 0.62, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(-14, -spineLen + 4);
+      ctx.lineTo(-6, -spineLen - 5);
+      ctx.lineTo(-4, -spineLen + 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(14, -spineLen + 4);
+      ctx.lineTo(6, -spineLen - 5);
+      ctx.lineTo(4, -spineLen + 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   // Wrestling Championship Belt (only when champion in wrestling mode)
   if (hasBelt) {
@@ -705,9 +855,9 @@ export function drawStickmanCharacter(
     ctx.restore();
   }
 
-  // Front normal stickman limbs
-  drawNormalStickLimb(hipX, hipY, rightLeg.mx, rightLeg.my, rightLeg.ex, rightLeg.ey, 5.5, bodyStroke, accentColor);
-  drawNormalStickLimb(shoulderX, shoulderY, rightArm.mx, rightArm.my, rightArm.ex, rightArm.ey, 5, bodyStroke, accentColor);
+  // Front limbs
+  drawNormalStickLimb(hipX, hipY, rightLeg.mx, rightLeg.my, rightLeg.ex, rightLeg.ey, 5.5, bodyStroke, accentColor, true);
+  drawNormalStickLimb(shoulderX, shoulderY, rightArm.mx, rightArm.my, rightArm.ex, rightArm.ey, 5, bodyStroke, accentColor, false);
 
   if (weapon === 'pistols') {
     // Killer Bean style sleek twin handguns (back hand + front hand)
@@ -794,7 +944,7 @@ export function drawStickmanCharacter(
     ctx.restore();
   }
 
-  // HEAD: Authentic Lofi the Yeti X Face Sprite OR Rival Stickman Head
+  // HEAD: Authentic Lofi the Yeti X Face Sprite OR Upgraded Stylized NPC Head
   ctx.save();
   ctx.translate(headX, headY);
   ctx.rotate(torsoLean * 0.35);
@@ -857,48 +1007,141 @@ export function drawStickmanCharacter(
       ctx.stroke();
     }
   } else if (imposterVisor) {
-    // Among Us-inspired menacing Imposter Visor Stickman Head
-    ctx.fillStyle = '#7f1d1d';
-    ctx.strokeStyle = bodyStroke;
-    ctx.lineWidth = 3.2;
+    // Pressurized Astronaut / Tactical Imposter Helmet
+    const helmGrad = ctx.createRadialGradient(-4, -5, 3, 0, 0, 17);
+    helmGrad.addColorStop(0, flashHit ? '#ffffff' : bodyStroke);
+    helmGrad.addColorStop(1, '#450a0a');
+    ctx.fillStyle = helmGrad;
+    ctx.strokeStyle = '#040a14';
+    ctx.lineWidth = 2.8;
     ctx.beginPath();
-    ctx.arc(0, 0, 15, 0, Math.PI * 2);
+    ctx.ellipse(0, -1, 15.5, 16.5, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    // Glowing cyan/crimson tactical visor
-    ctx.fillStyle = '#38bdf8';
-    ctx.strokeStyle = '#071324';
-    ctx.lineWidth = 1.8;
+    // Boss Warden Horns if Boss
+    if (bossAura) {
+      ctx.fillStyle = '#fbbf24';
+      ctx.strokeStyle = '#040a14';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(-9, -12);
+      ctx.lineTo(-15, -27);
+      ctx.lineTo(-2, -16);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(5, -15);
+      ctx.lineTo(14, -27);
+      ctx.lineTo(12, -11);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Curved Multi-Tone Tactical Visor + Glare + Glowing Cyber-Eye
+    const vGrad = ctx.createLinearGradient(0, -7, 15, 5);
+    vGrad.addColorStop(0, '#0c4a6e');
+    vGrad.addColorStop(0.5, '#38bdf8');
+    vGrad.addColorStop(1, '#bae6fd');
+    ctx.fillStyle = vGrad;
+    ctx.strokeStyle = '#040a14';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(0, -6, 15, 8.5, 4);
+    ctx.roundRect(-1, -7.5, 16.5, 10, 5);
     ctx.fill();
     ctx.stroke();
 
-    // Visor glare + red imposter pupil
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(3, -4.5, 6, 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.roundRect(2, -5.8, 7.5, 2.2, 1);
+    ctx.fill();
+
+    // Sinister glowing red scanner pupil inside visor
     ctx.fillStyle = '#ef4444';
     ctx.beginPath();
-    ctx.arc(10, -1, 1.8, 0, Math.PI * 2);
+    ctx.arc(10.5, -2.2, 2.1, 0, Math.PI * 2);
     ctx.fill();
-  } else {
-    // Rival Stickman Head
+
+    // Respirator vent grille on chin
     ctx.fillStyle = '#0f172a';
-    ctx.strokeStyle = bodyStroke;
-    ctx.lineWidth = 3.2;
+    ctx.fillRect(3, 5.5, 8, 5);
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(0, 0, 14, 0, Math.PI * 2);
+    ctx.moveTo(5, 6.5);
+    ctx.lineTo(5, 9.5);
+    ctx.moveTo(8.5, 6.5);
+    ctx.lineTo(8.5, 9.5);
+    ctx.stroke();
+  } else {
+    // Upgraded Killer-Bean / Cyber-Operative Head (Shaded Dome + Tactical Shades + Furrowed Brow + Boss Helm)
+    const headGrad = ctx.createRadialGradient(-4, -5, 3, 1, 0, 16);
+    headGrad.addColorStop(0, flashHit ? '#ffffff' : bossAura ? '#475569' : '#334155');
+    headGrad.addColorStop(1, '#090e1a');
+    ctx.fillStyle = headGrad;
+    ctx.strokeStyle = bodyStroke;
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.ellipse(0, -1, 14.5, 15.5, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
+    // Combat Headband with Trailing Knot Ribbon
     ctx.fillStyle = accentColor;
-    ctx.fillRect(-13, -7, 26, 5);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-13.5, -8.5, 27, 4.5);
     ctx.beginPath();
-    ctx.arc(2, -1, 2.2, 0, Math.PI * 2);
-    ctx.arc(9, -1, 2.2, 0, Math.PI * 2);
+    ctx.moveTo(-13.5, -7);
+    ctx.lineTo(-22 - Math.sin(animTime * 9) * 3, -10);
+    ctx.lineTo(-20 - Math.sin(animTime * 9) * 3, -4);
+    ctx.closePath();
     ctx.fill();
+
+    // Sleek Wrap-Around Tactical Shades / Glowing Visor
+    ctx.fillStyle = '#020617';
+    ctx.strokeStyle = bossAura ? '#fbbf24' : '#94a3b8';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-1, -5.5);
+    ctx.lineTo(15, -6.5);
+    ctx.lineTo(14.5, 0.5);
+    ctx.lineTo(1, 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Specular lens glint + crimson eye glow
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(2, -4.5, 5, 1.4);
+    ctx.fillStyle = bossAura ? '#fbbf24' : '#f43f5e';
+    ctx.fillRect(9.5, -3.5, 3.8, 1.8);
+
+    // Intense Scowl / Grimace
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(3, 6.5);
+    ctx.quadraticCurveTo(8, 4.5, 12, 6);
+    ctx.stroke();
+
+    // Boss Helmet Crown Crest
+    if (bossAura) {
+      ctx.fillStyle = '#fbbf24';
+      ctx.strokeStyle = '#040a14';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-8, -14);
+      ctx.lineTo(-10, -24);
+      ctx.lineTo(-2, -17);
+      ctx.lineTo(3, -27);
+      ctx.lineTo(7, -17);
+      ctx.lineTo(13, -23);
+      ctx.lineTo(11, -13);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
   }
 
   ctx.restore(); // head
@@ -908,19 +1151,19 @@ export function drawStickmanCharacter(
   ctx.scale(facing, 1);
   const barY = -128;
   const pct = Math.max(0, Math.min(1, hp / Math.max(1, maxHp)));
-  const barW = 54;
-  ctx.fillStyle = 'rgba(7, 19, 36, 0.85)';
+  const barW = bossAura ? 68 : 54;
+  ctx.fillStyle = 'rgba(7, 19, 36, 0.88)';
   ctx.fillRect(-barW / 2 - 1, barY - 1, barW + 2, 8);
   ctx.fillStyle = pct > 0.5 ? '#22c55e' : pct > 0.25 ? '#f59e0b' : '#ef4444';
   ctx.fillRect(-barW / 2, barY, barW * pct, 6);
-  ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+  ctx.strokeStyle = bossAura ? 'rgba(251, 191, 36, 0.75)' : 'rgba(148, 163, 184, 0.5)';
   ctx.lineWidth = 1;
   ctx.strokeRect(-barW / 2 - 1, barY - 1, barW + 2, 8);
 
   if (label) {
     ctx.font = '700 11px Oxanium, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillStyle = isLofiYeti ? '#bae6fd' : '#fed7aa';
+    ctx.fillStyle = isLofiYeti ? '#bae6fd' : bossAura ? '#fde047' : '#fed7aa';
     ctx.fillText(label, 0, barY - 5);
   }
 
@@ -1164,120 +1407,155 @@ export function drawExtractionBunker(
 }
 
 /**
- * Built Interior Architecture for all 6 Frost Station Escape Rooms (1680x960 world)
+ * Built Interior Architecture for all 12 Frost Station Escape Rooms (2520x1540 world)
  */
 export function drawStationRoomArchitecture(
   ctx: CanvasRenderingContext2D,
   airlockOpen: boolean,
   timeSec: number
 ): void {
-  // 1. MEDBAY (80,80,460,370): Bio-Stasis Tanks, Cryo-Scan Bed, Wall Med Cabinet
-  // Bio-stasis cylinders (left wall)
-  [116, 152].forEach((tx, idx) => {
+  // 1. CRYO BAY (80..620, 80..500): Cryo Pods & Liquid Nitrogen Pipework
+  [125, 175, 225].forEach((px, idx) => {
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.18)';
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(px, 110, 34, 72, 10);
+    ctx.fill();
+    ctx.stroke();
+    const frostY = 172 - ((timeSec * 24 + idx * 17) % 48);
+    ctx.fillStyle = '#bae6fd';
+    ctx.beginPath();
+    ctx.arc(px + 17, frostY, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.fillStyle = '#0f2744';
+  ctx.strokeStyle = '#7dd3fc';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(410, 365, 165, 86, 12);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(56, 189, 248, 0.32)';
+  ctx.fillRect(426, 380, 133, 56);
+
+  // 2. MEDBAY (680..1220, 80..500): Bio-Stasis Tanks, Cryo-Scan Bed, Wall Med Cabinet
+  [720, 758].forEach((tx, idx) => {
     ctx.fillStyle = 'rgba(45, 212, 191, 0.22)';
     ctx.strokeStyle = '#2dd4bf';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.roundRect(tx, 255, 26, 68, 10);
+    ctx.roundRect(tx, 265, 28, 72, 10);
     ctx.fill();
     ctx.stroke();
-    const bubbleY = 310 - ((timeSec * 28 + idx * 19) % 44);
+    const bubbleY = 322 - ((timeSec * 28 + idx * 19) % 44);
     ctx.fillStyle = '#99f6e4';
     ctx.beginPath();
-    ctx.arc(tx + 13, bubbleY, 3.2, 0, Math.PI * 2);
+    ctx.arc(tx + 14, bubbleY, 3.2, 0, Math.PI * 2);
     ctx.fill();
   });
-  // Med Cabinet (north wall)
   ctx.fillStyle = '#0f2744';
   ctx.strokeStyle = '#38bdf8';
   ctx.lineWidth = 2;
-  ctx.fillRect(345, 92, 115, 34);
-  ctx.strokeRect(345, 92, 115, 34);
+  ctx.fillRect(980, 96, 125, 36);
+  ctx.strokeRect(980, 96, 125, 36);
   ctx.fillStyle = '#ef4444';
-  ctx.fillRect(398, 100, 8, 18);
-  ctx.fillRect(393, 105, 18, 8);
-  // Cryo-Scan Bed (south-center of Medbay, clear of clue 235,240 & vent 165,155)
+  ctx.fillRect(1038, 105, 8, 18);
+  ctx.fillRect(1033, 110, 18, 8);
   ctx.fillStyle = '#13314d';
   ctx.strokeStyle = '#2dd4bf';
   ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.roundRect(225, 342, 136, 56, 12);
+  ctx.roundRect(875, 372, 148, 58, 12);
   ctx.fill();
   ctx.stroke();
   ctx.fillStyle = 'rgba(45, 212, 191, 0.35)';
-  ctx.fillRect(245, 353, 96, 34);
+  ctx.fillRect(896, 384, 106, 34);
 
-  // 2. RESEARCH LAB (600,80,480,370): Server Racks, Specimen Table, Dual Terminals
-  for (let sx = 635; sx <= 765; sx += 44) {
+  // 3. RESEARCH LAB (1280..1820, 80..500): Server Racks & Specimen Bench
+  for (let sx = 1320; sx <= 1460; sx += 46) {
     ctx.fillStyle = '#091628';
     ctx.strokeStyle = '#818cf8';
     ctx.lineWidth = 2;
-    ctx.fillRect(sx, 94, 34, 52);
-    ctx.strokeRect(sx, 94, 34, 52);
+    ctx.fillRect(sx, 96, 34, 54);
+    ctx.strokeRect(sx, 96, 34, 54);
     ctx.fillStyle = Math.sin(timeSec * 5 + sx) > 0 ? '#38bdf8' : '#22c55e';
-    ctx.fillRect(sx + 7, 104, 6, 4);
+    ctx.fillRect(sx + 7, 106, 6, 4);
     ctx.fillStyle = '#fbbf24';
-    ctx.fillRect(sx + 18, 104, 6, 4);
+    ctx.fillRect(sx + 18, 106, 6, 4);
   }
-  // Lab workbench (bottom right of Lab)
   ctx.fillStyle = '#142b47';
   ctx.strokeStyle = '#60a5fa';
   ctx.lineWidth = 2.2;
-  ctx.fillRect(720, 352, 210, 44);
-  ctx.strokeRect(720, 352, 210, 44);
+  ctx.fillRect(1390, 380, 225, 48);
+  ctx.strokeRect(1390, 380, 225, 48);
   ctx.fillStyle = '#38bdf8';
-  ctx.fillRect(745, 362, 42, 24);
+  ctx.fillRect(1418, 392, 46, 24);
   ctx.fillStyle = '#c084fc';
-  ctx.fillRect(855, 362, 48, 24);
+  ctx.fillRect(1532, 392, 52, 24);
 
-  // 3. ELECTRICAL (1140,80,460,370): Breaker Cabinets, Twin Coils & Floor Conduits
-  for (let bx = 1170; bx <= 1350; bx += 60) {
+  // 4. ELECTRICAL (1880..2440, 80..500): Breaker Cabinets, Twin Coils & Floor Conduits
+  for (let bx = 1920; bx <= 2120; bx += 64) {
     ctx.fillStyle = '#1e293b';
     ctx.strokeStyle = '#fbbf24';
     ctx.lineWidth = 2;
-    ctx.fillRect(bx, 94, 46, 44);
-    ctx.strokeRect(bx, 94, 46, 44);
+    ctx.fillRect(bx, 96, 48, 44);
+    ctx.strokeRect(bx, 96, 48, 44);
     ctx.fillStyle = '#facc15';
-    ctx.fillRect(bx + 10, 106, 26, 6);
+    ctx.fillRect(bx + 10, 108, 28, 6);
   }
-  // Floor power conduit lines
   ctx.strokeStyle = 'rgba(250, 204, 21, 0.35)';
   ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(1235, 330);
-  ctx.lineTo(1505, 330);
+  ctx.moveTo(1990, 355);
+  ctx.lineTo(2320, 355);
   ctx.stroke();
-  [1235, 1505].forEach((tx) => {
+  [1990, 2320].forEach((tx) => {
     ctx.fillStyle = '#1e1b4b';
     ctx.strokeStyle = '#f59e0b';
     ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.arc(tx, 330, 24, 0, Math.PI * 2);
+    ctx.arc(tx, 355, 24, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#fde047';
     ctx.beginPath();
-    ctx.arc(tx, 330, 8 + Math.sin(timeSec * 8) * 2, 0, Math.PI * 2);
+    ctx.arc(tx, 355, 8 + Math.sin(timeSec * 8) * 2, 0, Math.PI * 2);
     ctx.fill();
   });
 
-  // 4. CAFETERIA HUB (80,510,460,390): Galley Counter, Vending Machine, Dining Tables, Meeting Table
+  // 5. CREW QUARTERS (80..620, 560..980): Bunks & Crew Footlockers
+  for (let by = 610; by <= 830; by += 110) {
+    ctx.fillStyle = '#162844';
+    ctx.strokeStyle = '#60a5fa';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(110, by, 118, 48, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(120, by + 10, 24, 28);
+  }
+  ctx.fillStyle = '#1e293b';
+  ctx.strokeStyle = '#38bdf8';
+  ctx.fillRect(465, 580, 115, 36);
+  ctx.strokeRect(465, 580, 115, 36);
+
+  // 6. CAFETERIA HUB (680..1220, 560..980): Galley Counter, Vending, Tables & Emergency Button
   ctx.fillStyle = '#122844';
   ctx.strokeStyle = '#38bdf8';
   ctx.lineWidth = 2;
-  ctx.fillRect(98, 526, 155, 42);
-  ctx.strokeRect(98, 526, 155, 42);
-  // Vending machine
+  ctx.fillRect(705, 580, 165, 42);
+  ctx.strokeRect(705, 580, 165, 42);
   ctx.fillStyle = '#0f304d';
   ctx.strokeStyle = '#22d3ee';
-  ctx.fillRect(466, 526, 54, 48);
-  ctx.strokeRect(466, 526, 54, 48);
+  ctx.fillRect(1115, 580, 58, 48);
+  ctx.strokeRect(1115, 580, 58, 48);
   ctx.fillStyle = '#67e8f9';
-  ctx.fillRect(476, 534, 24, 28);
-  // Side dining tables
+  ctx.fillRect(1126, 588, 26, 28);
   [
-    { x: 170, y: 635 },
-    { x: 445, y: 785 },
+    { x: 785, y: 865 },
+    { x: 1110, y: 865 },
   ].forEach((tb) => {
     ctx.fillStyle = '#1e3a5f';
     ctx.strokeStyle = '#64748b';
@@ -1287,86 +1565,160 @@ export function drawStationRoomArchitecture(
     ctx.fill();
     ctx.stroke();
   });
-  // Emergency Meeting Table (positioned cleanly next to spawn 290,700)
+  // Central Emergency Meeting Table (next to player spawn 950, 770)
   ctx.fillStyle = '#1e3a5f';
   ctx.strokeStyle = '#38bdf8';
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(372, 705, 36, 0, Math.PI * 2);
+  ctx.arc(1032, 770, 38, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
   ctx.fillStyle = '#ef4444';
   ctx.beginPath();
-  ctx.arc(372, 705, 11, 0, Math.PI * 2);
+  ctx.arc(1032, 770, 12, 0, Math.PI * 2);
   ctx.fill();
 
-  // 5. REACTOR CORE (600,510,480,390): Conduits + Glowing Reactor Turbine + Fuel Pylons
+  // 7. REACTOR CORE (1280..1820, 560..980): Conduits & Glowing Plasma Turbine
   ctx.strokeStyle = 'rgba(192, 132, 252, 0.35)';
   ctx.lineWidth = 10;
   ctx.beginPath();
-  ctx.moveTo(640, 705);
-  ctx.lineTo(1040, 705);
-  ctx.moveTo(840, 540);
-  ctx.lineTo(840, 865);
+  ctx.moveTo(1320, 770);
+  ctx.lineTo(1780, 770);
+  ctx.moveTo(1550, 595);
+  ctx.lineTo(1550, 945);
   ctx.stroke();
-
   ctx.fillStyle = '#2e1065';
   ctx.strokeStyle = '#c084fc';
   ctx.lineWidth = 3.5;
   ctx.beginPath();
-  ctx.arc(840, 705, 48, 0, Math.PI * 2);
+  ctx.arc(1550, 770, 50, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
   ctx.fillStyle = '#e879f9';
   ctx.beginPath();
-  ctx.arc(840, 705, 16 + Math.sin(timeSec * 6) * 3, 0, Math.PI * 2);
+  ctx.arc(1550, 770, 17 + Math.sin(timeSec * 6) * 3, 0, Math.PI * 2);
   ctx.fill();
 
-  // 6. AIRLOCK EXIT (1140,510,460,390): Crew Suit Lockers + Docked Escape Shuttle Craft
-  for (let lx = 1190; lx <= 1340; lx += 38) {
+  // 8. SECURITY HUB (1880..2440, 560..980): Surveillance Wall & Radar Dish Console
+  ctx.fillStyle = '#0b182c';
+  ctx.strokeStyle = '#f43f5e';
+  ctx.lineWidth = 2;
+  ctx.fillRect(1940, 576, 220, 38);
+  ctx.strokeRect(1940, 576, 220, 38);
+  for (let mx = 1952; mx <= 2120; mx += 44) {
+    ctx.fillStyle = Math.sin(timeSec * 4 + mx) > 0 ? '#22d3ee' : '#1e293b';
+    ctx.fillRect(mx, 584, 34, 22);
+  }
+  ctx.fillStyle = '#1f1636';
+  ctx.strokeStyle = '#fb7185';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(2310, 780, 42, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = '#fda4af';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(2310, 780);
+  ctx.lineTo(2310 + Math.cos(timeSec * 2.4) * 34, 780 + Math.sin(timeSec * 2.4) * 34);
+  ctx.stroke();
+
+  // 9. STORAGE BAY (80..620, 1040..1460): Steel Cargo Racks & Crates
+  [120, 180].forEach((ry, idx) => {
+    ctx.fillStyle = idx === 0 ? '#1e293b' : '#292524';
+    ctx.strokeStyle = '#fb923c';
+    ctx.lineWidth = 2;
+    ctx.fillRect(112, 1080 + (ry - 120) * 1.4, 150, 42);
+    ctx.strokeRect(112, 1080 + (ry - 120) * 1.4, 150, 42);
+  });
+  ctx.fillStyle = '#1e293b';
+  ctx.strokeStyle = '#94a3b8';
+  ctx.fillRect(465, 1345, 118, 68);
+  ctx.strokeRect(465, 1345, 118, 68);
+
+  // 10. COMMS ARRAY (680..1220, 1040..1460): Dish Dish & Telemetry Console
+  ctx.fillStyle = '#0f223b';
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(825, 1255, 44, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = '#7dd3fc';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(825, 1255, 22 + Math.sin(timeSec * 5) * 4, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#162c49';
+  ctx.strokeStyle = '#60a5fa';
+  ctx.fillRect(1025, 1065, 155, 42);
+  ctx.strokeRect(1025, 1065, 155, 42);
+
+  // 11. OXYGEN PLANT (1280..1820, 1040..1460): Twin O2 Scrubbers & Coolant Pipes
+  [1360, 1445].forEach((ox, idx) => {
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
+    ctx.strokeStyle = '#34d399';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(ox, 1150, 32, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#6ee7b7';
+    ctx.beginPath();
+    ctx.arc(ox, 1150, 10 + Math.sin(timeSec * 5 + idx) * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.strokeStyle = 'rgba(52, 211, 153, 0.32)';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(1360, 1185);
+  ctx.lineTo(1360, 1380);
+  ctx.lineTo(1700, 1380);
+  ctx.stroke();
+
+  // 12. AIRLOCK EXIT (1880..2440, 1040..1460): Crew Suit Lockers + Docked Escape Shuttle Craft
+  for (let lx = 1920; lx <= 2075; lx += 38) {
     ctx.fillStyle = '#142a44';
     ctx.strokeStyle = '#34d399';
     ctx.lineWidth = 1.8;
-    ctx.fillRect(lx, 526, 30, 42);
-    ctx.strokeRect(lx, 526, 30, 42);
+    ctx.fillRect(lx, 1392, 30, 42);
+    ctx.strokeRect(lx, 1392, 30, 42);
     ctx.fillStyle = '#38bdf8';
-    ctx.fillRect(lx + 7, 536, 16, 10);
+    ctx.fillRect(lx + 7, 1402, 16, 10);
   }
 
-  // Docked Escape Shuttle Craft
-  const podX = 1410;
-  const podY = 705;
+  // Docked Escape Shuttle Craft at (2230, 1250)
+  const podX = 2230;
+  const podY = 1250;
   ctx.fillStyle = airlockOpen ? 'rgba(16, 185, 129, 0.22)' : 'rgba(51, 65, 85, 0.45)';
   ctx.strokeStyle = airlockOpen ? '#34d399' : '#64748b';
   ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.arc(podX, podY, 64, 0, Math.PI * 2);
+  ctx.arc(podX, podY, 68, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
-  // Shuttle Wings & Hull
   ctx.fillStyle = '#0f2744';
   ctx.strokeStyle = airlockOpen ? '#6ee7b7' : '#94a3b8';
   ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.moveTo(podX + 46, podY);
-  ctx.lineTo(podX - 18, podY - 38);
-  ctx.lineTo(podX - 42, podY - 18);
-  ctx.lineTo(podX - 42, podY + 18);
-  ctx.lineTo(podX - 18, podY + 38);
+  ctx.moveTo(podX + 48, podY);
+  ctx.lineTo(podX - 18, podY - 40);
+  ctx.lineTo(podX - 44, podY - 19);
+  ctx.lineTo(podX - 44, podY + 19);
+  ctx.lineTo(podX - 18, podY + 40);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
-  // Cockpit visor
   ctx.fillStyle = airlockOpen ? '#34d399' : '#38bdf8';
   ctx.beginPath();
-  ctx.ellipse(podX + 12, podY, 15, 10, 0, 0, Math.PI * 2);
+  ctx.ellipse(podX + 12, podY, 16, 10, 0, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.font = '700 14px "Pixel Forge", Oxanium, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = airlockOpen ? '#6ee7b7' : '#cbd5e1';
-  ctx.fillText(airlockOpen ? 'ESCAPE POD OPEN!' : 'SHUTTLE LOCKED', podX, podY - 74);
+  ctx.fillText(airlockOpen ? 'ESCAPE POD OPEN!' : 'SHUTTLE LOCKED', podX, podY - 78);
 }
 
 /**

@@ -66,6 +66,7 @@ import {
   getMapModeDetails,
   getMapObstacles,
   getMapSpec,
+  getRaceTrackObstacles,
   getRaceTrackWaypoints,
   getYetiColorway,
   resolveArenaObstacleCollision,
@@ -275,6 +276,11 @@ interface KartRacer {
   shieldUntil: number;
   tripleUntil: number;
   magnetUntil: number;
+  missiles: number;
+  stunUntil: number;
+  hopHeight: number;
+  hopVel: number;
+  rampCdUntil: number;
   lap: number; // 1..3
   nextWp: number;
   nextCheckpoint: number; // 1..4
@@ -536,6 +542,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     racePos: 1,
     speedKmh: 0,
     nitroPct: 100,
+    carMissiles: 0,
     countdown: 0,
     offRoad: false,
     // Shooter telemetry
@@ -641,6 +648,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     karts: [] as KartRacer[],
     raceCountdown: 0,
     racePadsHit: 0,
+    smashedRaceObs: new Map<string, number>(),
     // Shooting simulation state
     shooterWave: 1,
     shooterElims: 0,
@@ -723,12 +731,12 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     const angle = Math.random() * Math.PI * 2;
     const dist = 105 + Math.random() * Math.max(150, simRef.current.ringRadius - 105);
     const roll = Math.random();
-    const gemLimit = mapId === 'aurora_summit' ? 0.72 : 0.68;
+    const gemLimit = mapId === 'aurora_summit' ? 0.68 : 0.64;
     let kind: Pickup['kind'] = 'drop';
-    if (roll < 0.42) kind = 'drop';
+    if (roll < 0.4) kind = 'drop';
     else if (roll < gemLimit) kind = 'gem';
-    else if (roll < 0.78) kind = 'shield';
-    else if (roll < 0.85) kind = 'boost';
+    else if (roll < 0.8) kind = 'shield';
+    else if (roll < 0.86) kind = 'boost';
     else if (roll < 0.91) kind = 'magnet';
     else if (roll < 0.96) kind = 'triple';
     else kind = 'medkit';
@@ -1021,8 +1029,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       queueRing(monster.x, monster.y, burstCol, monster.kind === 'boss' ? 3.8 : 2.2);
       soundEngine.playPickup(monster.kind === 'boss' ? 'gem' : 'drop');
 
-      if (Math.random() < (monster.kind === 'boss' ? 1 : 0.58)) {
-        const dropPool: Pickup['kind'][] = ['medkit', 'shield', 'boost', 'triple', 'gem', 'drop'];
+      if (Math.random() < (monster.kind === 'boss' ? 1 : 0.64)) {
+        const dropPool: Pickup['kind'][] = ['medkit', 'shield', 'shield', 'boost', 'triple', 'gem', 'drop'];
         s.pickups.push({
           id: `mk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           kind: dropPool[Math.floor(Math.random() * dropPool.length)],
@@ -1209,6 +1217,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           shieldUntil: 0,
           tripleUntil: 0,
           magnetUntil: 0,
+          missiles: 0,
+          stunUntil: 0,
+          hopHeight: 0,
+          hopVel: 0,
+          rampCdUntil: 0,
           lap: 1,
           nextWp: 1,
           nextCheckpoint: 1,
@@ -1226,23 +1239,39 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           aiLaneOffset: rs.lane * 0.45,
         }));
         s.entities = [playerYeti];
+        s.smashedRaceObs.clear();
 
-        // Spawn glowing Beach-Buggy Power-Up Orbs along the 14-waypoint long track
-        const racePowerKinds: Pickup['kind'][] = ['boost', 'triple', 'shield', 'magnet', 'gem', 'boost', 'triple', 'drop', 'shield'];
+        // Spawn abundant Special Racing Power-Up Orbs across wide 3-lane track
+        const racePowerKinds: Pickup['kind'][] = [
+          'boost',
+          'triple',
+          'shield',
+          'magnet',
+          'medkit',
+          'boost',
+          'gem',
+          'triple',
+          'shield',
+        ];
         const trackOrbs: Pickup[] = [];
         wps.forEach((wp, idx) => {
           if (idx === 0) return;
-          if (idx % 2 === 1 || wp.isCheckpoint) {
-            const pKind = racePowerKinds[idx % racePowerKinds.length];
-            trackOrbs.push({
-              id: `rk_${idx}_${Math.random().toString(36).slice(2, 5)}`,
-              kind: pKind,
-              x: wp.x + (idx % 2 === 0 ? 22 : -22),
-              y: wp.y + (idx % 3 === 0 ? 18 : -18),
-              bobOffset: idx * 0.7,
-              respawnAt: 0,
-            });
-          }
+          const next = wps[(idx + 1) % wps.length];
+          const dx = next.x - wp.x;
+          const dy = next.y - wp.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const px = -dy / len;
+          const py = dx / len;
+          const laneShift = idx % 3 === 0 ? -52 : idx % 3 === 1 ? 52 : 0;
+          const pKind = racePowerKinds[idx % racePowerKinds.length];
+          trackOrbs.push({
+            id: `rk_${idx}_${Math.random().toString(36).slice(2, 5)}`,
+            kind: pKind,
+            x: wp.x + px * laneShift,
+            y: wp.y + py * laneShift,
+            bobOffset: idx * 0.7,
+            respawnAt: 0,
+          });
         });
         s.pickups = trackOrbs;
         s.crates = [];
@@ -1526,6 +1555,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 gemsCollected: p.gemsCollected || 0,
                 aiSpeedBias: 1,
                 aiLaneOffset: 0,
+                missiles: 0,
+                stunUntil: 0,
+                hopHeight: 0,
+                hopVel: 0,
+                rampCdUntil: 0,
               }));
               const playerKart = s.karts.find((k) => k.id === tunnelPlayerIdRef.current);
               if (playerKart) {
@@ -2008,7 +2042,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               : 'Supply Crate';
           const dropLabel =
             droppedKind === 'shield'
-              ? 'Cryo Shield'
+              ? 'Frost Shield (10s)'
               : droppedKind === 'boost'
               ? 'Turbo Surge'
               : droppedKind === 'magnet'
@@ -2167,7 +2201,28 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
   const triggerThrowOrFire = useCallback((aimLogicalX?: number, aimLogicalY?: number) => {
     if (gameStateRef.current !== 'PLAYING') return;
-    if (gameModeRef.current === 'car_racing') return;
+    if (gameModeRef.current === 'car_racing') {
+      const s = simRef.current;
+      const pk = s.karts.find((k) => k.id === 'player');
+      if (!pk || s.raceCountdown > 0 || pk.missiles <= 0) return;
+      pk.missiles -= 1;
+      const sx = Math.cos(pk.angle);
+      const sy = Math.sin(pk.angle);
+      s.snowballs.push({
+        id: `race_msl_${Date.now()}_${Math.random()}`,
+        ownerId: 'player',
+        x: pk.x + sx * 26,
+        y: pk.y + sy * 26,
+        vx: sx * 920,
+        vy: sy * 920,
+        ttl: 1.9,
+        isBlaster: true,
+        weaponKind: 'rail_scatter',
+      });
+      soundEngine.playBoost();
+      queueBurst(pk.x + sx * 24, pk.y + sy * 24, '#c084fc', 8);
+      return;
+    }
 
     if (playModeRef.current === 'tunnel') {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -3030,11 +3085,19 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         if (gm === 'car_racing') {
           // ===== BEACH BUGGY CIRCUIT RACING SIMULATION =====
           const wps = getRaceTrackWaypoints(mapIdRef.current);
+          const raceObstacles = getRaceTrackObstacles(mapIdRef.current);
+          // Expire obstacle smash respawns cleanly
+          const activeSmashed = new Set<string>();
+          for (const [obsId, respAt] of s.smashedRaceObs.entries()) {
+            if (now >= respAt) s.smashedRaceObs.delete(obsId);
+            else activeSmashed.add(obsId);
+          }
+
           if (s.raceCountdown > 0) {
             s.raceCountdown = Math.max(0, s.raceCountdown - dt);
             if (s.raceCountdown === 0) {
               soundEngine.playLap(false);
-              flashBanner('GO! Clear Checkpoints 1–4 & Hit Power-Up Orbs!');
+              flashBanner('GO! Hit Ramps, Power-Up Orbs & Cross Checkpoints 1–4!');
             }
           } else {
             s.elapsed += dt;
@@ -3053,6 +3116,16 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           for (const k of s.karts) {
             if (k.finished || s.raceCountdown > 0) continue;
 
+            // Ramp airborne gravity simulation
+            if (k.hopHeight > 0 || k.hopVel > 0) {
+              k.hopHeight += k.hopVel * dt;
+              k.hopVel -= 26 * dt;
+              if (k.hopHeight <= 0) {
+                k.hopHeight = 0;
+                k.hopVel = 0;
+              }
+            }
+
             let throttle = 0;
             let steer = 0;
 
@@ -3062,7 +3135,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               if (keys['s'] || keys['arrowdown'] || touchDirRef.current.dy > 0.2) throttle -= 0.7;
               if (keys['a'] || keys['arrowleft'] || touchDirRef.current.dx < -0.2) steer -= 1;
               if (keys['d'] || keys['arrowright'] || touchDirRef.current.dx > 0.2) steer += 1;
-              k.nitro = Math.min(100, k.nitro + dt * (Math.abs(steer) > 0.4 ? 15 : 8));
+              k.nitro = Math.min(100, k.nitro + dt * (Math.abs(steer) > 0.4 ? 16 : 9));
             } else {
               const wp = wps[k.nextWp];
               const targetX = wp.x + k.aiLaneOffset * Math.cos(k.nextWp);
@@ -3082,17 +3155,20 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
             k.steerInput = steer;
             const boosting = now < k.boostUntil;
+            const shielded = now < k.shieldUntil;
+            const stunned = now < k.stunUntil;
             const distTrack = getDistanceToRaceTrack(k.x, k.y, mapIdRef.current);
-            const offRoad = distTrack > 105;
+            const offRoad = distTrack > 142;
             if (!k.isBot) playerOffRoad = offRoad;
-            const offRoadMult = offRoad && !boosting ? 0.76 : 1.0;
+            const offRoadMult = offRoad && !boosting ? 0.78 : 1.0;
 
             const maxSpd =
-              (k.isBot ? 430 * k.aiSpeedBias : 455) *
+              (k.isBot ? 435 * k.aiSpeedBias : 475) *
               mapSpec.speedMult *
-              (boosting ? 1.38 : 1.0) *
+              (boosting ? 1.4 : 1.0) *
+              (stunned ? 0.56 : 1.0) *
               offRoadMult;
-            const accelRate = (boosting ? 840 : 540) * mapSpec.speedMult;
+            const accelRate = (boosting ? 880 : 580) * mapSpec.speedMult;
 
             if (throttle !== 0) {
               k.speed = THREE.MathUtils.clamp(k.speed + throttle * accelRate * dt, -150, maxSpd);
@@ -3100,9 +3176,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               k.speed *= Math.exp(-1.85 * dt);
             }
 
-            const turnAuthority = THREE.MathUtils.clamp(Math.abs(k.speed) / 95, 0.28, 1.0);
+            const turnAuthority = THREE.MathUtils.clamp(Math.abs(k.speed) / 95, 0.3, 1.0);
             const reverseSign = k.speed >= -5 ? 1 : -1;
-            k.angle += steer * 2.6 * turnAuthority * reverseSign * dt;
+            k.angle += steer * 2.65 * turnAuthority * reverseSign * dt;
 
             const hx = Math.cos(k.angle) * k.speed;
             const hy = Math.sin(k.angle) * k.speed;
@@ -3114,17 +3190,89 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             k.x = THREE.MathUtils.clamp(k.x + k.vx * dt, RACE_BOUNDS.minX, RACE_BOUNDS.maxX);
             k.y = THREE.MathUtils.clamp(k.y + k.vy * dt, RACE_BOUNDS.minY, RACE_BOUNDS.maxY);
 
-            const obsHit = resolveRaceObstacleCollision(k.x, k.y, k.vx, k.vy, 17, mapIdRef.current);
-            if (obsHit.hit) {
-              k.x = obsHit.x;
-              k.y = obsHit.y;
-              k.vx = obsHit.vx;
-              k.vy = obsHit.vy;
-              k.speed *= 0.68;
-              if (!k.isBot) {
-                s.shake = Math.max(s.shake, 0.28);
-                soundEngine.playHit();
-                queueBurst(k.x, k.y, '#94a3b8', 7);
+            // Check Turbo Launch Ramps
+            if (now >= k.rampCdUntil) {
+              for (const ro of raceObstacles) {
+                if (ro.kind !== 'jump_ramp') continue;
+                if (Math.hypot(k.x - ro.x, k.y - ro.y) < 58) {
+                  k.rampCdUntil = now + 1500;
+                  k.hopVel = 9.4;
+                  k.boostUntil = Math.max(k.boostUntil, now + 1350);
+                  k.nitro = Math.min(100, k.nitro + 25);
+                  k.score += 80;
+                  if (!k.isBot) {
+                    soundEngine.playBoost();
+                    queueBurst(k.x, k.y, '#38bdf8', 12);
+                    queueRing(k.x, k.y, '#fbbf24', 2.6);
+                    flashBanner('RAMP LAUNCH! +80 Air Time');
+                  }
+                  break;
+                }
+              }
+            }
+
+            // Creative Track Obstacles: Shielded karts SMASH barriers/barrels/spinners cleanly!
+            const obsHit = resolveRaceObstacleCollision(
+              k.x,
+              k.y,
+              k.vx,
+              k.vy,
+              18,
+              mapIdRef.current,
+              activeSmashed
+            );
+            if (obsHit.hitObs) {
+              if (shielded) {
+                s.smashedRaceObs.set(obsHit.hitObs.id, now + 12000);
+                activeSmashed.add(obsHit.hitObs.id);
+                k.score += 110;
+                k.nitro = Math.min(100, k.nitro + 20);
+                if (!k.isBot) {
+                  soundEngine.playPickup('power');
+                  queueBurst(obsHit.hitObs.x, obsHit.hitObs.y, '#22d3ee', 14);
+                  queueRing(obsHit.hitObs.x, obsHit.hitObs.y, '#22d3ee', 3.0);
+                  flashBanner('Frost Shield Smash! +110 pts');
+                }
+              } else {
+                k.x = obsHit.x;
+                k.y = obsHit.y;
+                k.vx = obsHit.vx;
+                k.vy = obsHit.vy;
+                if (obsHit.hitObs.kind === 'fuel_barrel') {
+                  s.smashedRaceObs.set(obsHit.hitObs.id, now + 12000);
+                  activeSmashed.add(obsHit.hitObs.id);
+                  k.speed *= 0.52;
+                  k.stunUntil = now + 1100;
+                } else {
+                  k.speed *= 0.66;
+                }
+                if (!k.isBot) {
+                  s.shake = Math.max(s.shake, 0.3);
+                  soundEngine.playHit();
+                  queueBurst(
+                    obsHit.hitObs.x,
+                    obsHit.hitObs.y,
+                    obsHit.hitObs.kind === 'fuel_barrel' ? '#fb923c' : '#94a3b8',
+                    10
+                  );
+                }
+              }
+            }
+
+            // Frost Shield rival kart bump knockback
+            if (shielded) {
+              for (const other of s.karts) {
+                if (other.id === k.id || now < other.shieldUntil) continue;
+                const distR = Math.hypot(other.x - k.x, other.y - k.y);
+                if (distR < 48 && now >= other.stunUntil) {
+                  other.stunUntil = now + 1500;
+                  other.speed *= 0.5;
+                  k.score += 75;
+                  if (!k.isBot) {
+                    queueRing(other.x, other.y, '#22d3ee', 2.4);
+                    flashBanner(`Shield Rammed ${other.name}! +75 pts`);
+                  }
+                }
               }
             }
 
@@ -3132,56 +3280,78 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               queueBurst(k.x, k.y, '#22d3ee', 1);
             }
 
-            // Collect Beach-Buggy Track Power-Up Orbs (9s respawn)
-            const orbRadius = now < k.magnetUntil ? 78 : 42;
+            // Collect Special Racing Power-Up Orbs (8s respawn + Magnet attraction)
+            const orbRadius = now < k.magnetUntil ? 96 : 48;
             for (const pk of s.pickups) {
               if (pk.respawnAt && now < pk.respawnAt) continue;
-              if (Math.hypot(pk.x - k.x, pk.y - k.y) < orbRadius) {
-                pk.respawnAt = now + 9000;
+              const dPk = Math.hypot(pk.x - k.x, pk.y - k.y);
+              if (!k.isBot && now < k.magnetUntil && dPk < 210 && dPk > orbRadius) {
+                pk.x += ((k.x - pk.x) / dPk) * 320 * dt;
+                pk.y += ((k.y - pk.y) / dPk) * 320 * dt;
+              }
+              if (dPk < orbRadius) {
+                pk.respawnAt = now + 8000;
                 if (pk.kind === 'boost') {
-                  k.nitro = Math.min(100, k.nitro + 30);
-                  k.boostUntil = Math.max(k.boostUntil, now + 1350);
-                  k.score += 55;
+                  k.nitro = Math.min(100, k.nitro + 40);
+                  k.boostUntil = Math.max(k.boostUntil, now + 1600);
+                  k.score += 65;
+                  if (!k.isBot) flashBanner('Hyper Nitro Boost!');
                 } else if (pk.kind === 'triple') {
-                  k.nitro = 100;
-                  k.boostUntil = now + 2200;
-                  k.tripleUntil = now + 7000;
-                  k.score += 75;
+                  k.missiles = Math.min(6, k.missiles + 3);
+                  k.tripleUntil = now + 10000;
+                  k.score += 80;
+                  if (!k.isBot) flashBanner('3× Cryo Missiles Armed! [Click or J to Fire]');
                 } else if (pk.kind === 'shield') {
-                  k.shieldUntil = now + 9000;
-                  k.score += 45;
+                  k.shieldUntil = now + 10000;
+                  k.score += 60;
+                  if (!k.isBot) flashBanner('Frost Shield Active (10s) · Smash Obstacles!');
                 } else if (pk.kind === 'magnet') {
                   k.magnetUntil = now + 10000;
-                  k.score += 45;
+                  k.score += 55;
+                  if (!k.isBot) flashBanner('Orb Magnet Active (10s)!');
+                } else if (pk.kind === 'medkit') {
+                  // Cryo EMP Shockwave
+                  k.nitro = Math.min(100, k.nitro + 35);
+                  k.score += 95;
+                  for (const rival of s.karts) {
+                    if (rival.id === k.id) continue;
+                    if (Math.hypot(rival.x - k.x, rival.y - k.y) < 320) {
+                      rival.stunUntil = now + 2000;
+                    }
+                  }
+                  if (!k.isBot) {
+                    queueRing(k.x, k.y, '#34d399', 6.5);
+                    flashBanner('Cryo EMP Pulse! Nearby Rivals Slowed!');
+                  }
                 } else if (pk.kind === 'gem') {
                   k.gemsCollected += 2;
-                  k.score += 60;
+                  k.score += 75;
                 } else {
                   k.dropsCollected += 3;
-                  k.score += 45;
+                  k.score += 55;
                 }
                 if (!k.isBot) {
                   soundEngine.playPickup(pk.kind === 'gem' ? 'gem' : 'power');
-                  queueBurst(pk.x, pk.y, '#22d3ee', 8);
-                  queueRing(pk.x, pk.y, '#38bdf8', 2.2);
+                  queueBurst(pk.x, pk.y, '#22d3ee', 10);
+                  queueRing(pk.x, pk.y, '#38bdf8', 2.4);
                 }
               }
             }
 
-            // Waypoint + Sequential Checkpoints 1..4
+            // Waypoint + Full-Width Checkpoint Gate Crossing 1..4
             const wp = wps[k.nextWp];
             const dWp = Math.hypot(k.x - wp.x, k.y - wp.y);
-            if (dWp < 135) {
+            if (dWp < 195) {
               if (wp.hasBoostPad && now >= k.boostUntil) {
-                k.boostUntil = now + 1250;
+                k.boostUntil = now + 1350;
                 k.nitro = Math.min(100, k.nitro + 25);
                 k.dropsCollected += 2;
-                k.score += 50;
+                k.score += 55;
                 if (!k.isBot) {
                   s.racePadsHit += 1;
                   soundEngine.playBoost();
                   queueBurst(k.x, k.y, '#22d3ee', 10);
-                  queueRing(k.x, k.y, '#22d3ee', 2.6);
+                  queueRing(k.x, k.y, '#22d3ee', 2.8);
                   updateTaskProgress('race_pads', s.racePadsHit, s.entities[0]);
                 }
               }
@@ -3193,8 +3363,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 k.dropsCollected += 2;
                 if (!k.isBot) {
                   soundEngine.playPickup('gem');
-                  queueBurst(k.x, k.y, '#fbbf24', 10);
-                  queueRing(k.x, k.y, '#fbbf24', 3.0);
+                  queueBurst(k.x, k.y, '#fbbf24', 12);
+                  queueRing(k.x, k.y, '#fbbf24', 3.4);
                   flashBanner(`Checkpoint ${wp.checkpointNum}/4 Cleared! +90 pts`);
                 }
               }
@@ -3222,8 +3392,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   soundEngine.playLap(k.lap === 3);
                   flashBanner(
                     k.lap === 3
-                      ? 'FINAL LAP (3/3) · FULL HP RESTORED!'
-                      : `Lap ${k.lap}/3 · Full HP Restored!`
+                      ? 'FINAL LAP (3/3) · FULL HULL RESTORED!'
+                      : `Lap ${k.lap}/3 · Full Hull Restored!`
                   );
                 }
               }
@@ -3233,6 +3403,67 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             const distNext = Math.hypot(k.x - nextWpPos.x, k.y - nextWpPos.y);
             const wpIdxAdjusted = k.nextWp === 0 ? wps.length : k.nextWp;
             k.totalProgress = (k.lap - 1) * 3000 + wpIdxAdjusted * 180 - distNext * 0.12;
+          }
+
+          // Advance Homing Cryo Missiles in car_racing
+          for (let i = s.snowballs.length - 1; i >= 0; i--) {
+            const sb = s.snowballs[i];
+            sb.ttl -= dt;
+            // Gentle homing toward nearest rival kart ahead
+            let targetRival: KartRacer | null = null;
+            let bestDist = 420;
+            for (const rival of s.karts) {
+              if (rival.id === sb.ownerId) continue;
+              const d = Math.hypot(rival.x - sb.x, rival.y - sb.y);
+              if (d < bestDist) {
+                bestDist = d;
+                targetRival = rival;
+              }
+            }
+            if (targetRival) {
+              const spd = Math.hypot(sb.vx, sb.vy) || 920;
+              const desiredVx = ((targetRival.x - sb.x) / bestDist) * spd;
+              const desiredVy = ((targetRival.y - sb.y) / bestDist) * spd;
+              sb.vx += (desiredVx - sb.vx) * Math.min(1, dt * 6);
+              sb.vy += (desiredVy - sb.vy) * Math.min(1, dt * 6);
+            }
+            sb.x += sb.vx * dt;
+            sb.y += sb.vy * dt;
+
+            let exploded = sb.ttl <= 0;
+            for (const rival of s.karts) {
+              if (rival.id === sb.ownerId) continue;
+              if (Math.hypot(rival.x - sb.x, rival.y - sb.y) < 36) {
+                rival.stunUntil = now + 2000;
+                rival.speed *= 0.45;
+                const pkOwner = s.karts.find((k) => k.id === sb.ownerId);
+                if (pkOwner) pkOwner.score += 140;
+                queueBurst(rival.x, rival.y, '#c084fc', 14);
+                queueRing(rival.x, rival.y, '#c084fc', 3.0);
+                soundEngine.playHit();
+                flashBanner(`Cryo Missile Hit ${rival.name}! +140 pts`);
+                exploded = true;
+                break;
+              }
+            }
+            if (!exploded) {
+              for (const ro of raceObstacles) {
+                if (ro.kind === 'jump_ramp' || activeSmashed.has(ro.id)) continue;
+                if (Math.hypot(ro.x - sb.x, ro.y - sb.y) < ro.radius + 16) {
+                  s.smashedRaceObs.set(ro.id, now + 12000);
+                  activeSmashed.add(ro.id);
+                  const pkOwner = s.karts.find((k) => k.id === sb.ownerId);
+                  if (pkOwner) pkOwner.score += 95;
+                  queueBurst(ro.x, ro.y, '#fb923c', 12);
+                  queueRing(ro.x, ro.y, '#fb923c', 2.6);
+                  exploded = true;
+                  break;
+                }
+              }
+            }
+            if (exploded) {
+              s.snowballs.splice(i, 1);
+            }
           }
 
           const playerKart = s.karts.find((k) => k.id === 'player');
@@ -3257,10 +3488,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 racePos: posRank,
                 speedKmh: Math.round(Math.abs(playerKart.speed) * 0.36),
                 nitroPct: Math.round(playerKart.nitro),
+                carMissiles: playerKart.missiles,
                 shieldSec: playerKart.shieldUntil > now ? Math.ceil((playerKart.shieldUntil - now) / 1000) : 0,
                 boostSec: playerKart.boostUntil > now ? Math.ceil((playerKart.boostUntil - now) / 1000) : 0,
                 magnetSec: playerKart.magnetUntil > now ? Math.ceil((playerKart.magnetUntil - now) / 1000) : 0,
-                tripleSec: playerKart.tripleUntil > now ? Math.ceil((playerKart.tripleUntil - now) / 1000) : 0,
+                tripleSec: playerKart.missiles > 0 ? playerKart.missiles : 0,
                 shieldActive: now < playerKart.shieldUntil,
                 boostActive: now < playerKart.boostUntil,
                 countdown: Math.ceil(s.raceCountdown),
@@ -3398,9 +3630,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   player.score += 35;
                   soundEngine.playPickup('gem');
                 } else if (pk.kind === 'shield') {
-                  player.shieldUntil = now + 9000;
+                  player.shieldUntil = now + 10000;
                   soundEngine.playPickup('power');
-                  flashBanner('Cryo Shield Active (9s)!');
+                  queueRing(player.x, player.y, '#22d3ee', 2.8);
+                  flashBanner('Frost Shield Active (10s) — Invulnerable to Contact!');
                 } else if (pk.kind === 'boost') {
                   player.boostUntil = now + 7000;
                   soundEngine.playPickup('power');
@@ -3457,6 +3690,35 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   if (dCr < minD) {
                     en.x = cr.x + (dxCr / dCr) * minD;
                     en.y = cr.y + (dyCr / dCr) * minD;
+                  }
+                }
+
+                // Direct Enemy Contact Check (Frost Shield grants 10s invulnerability + deflect)
+                const postDx = player.x - en.x;
+                const postDy = player.y - en.y;
+                const postDist = Math.hypot(postDx, postDy) || 1;
+                const contactRadius = en.kind === 'boss_yeti' ? 38 : 29;
+                if (postDist < contactRadius) {
+                  const pnx = postDx / postDist;
+                  const pny = postDy / postDist;
+                  if (now < player.shieldUntil) {
+                    en.x = player.x - pnx * (contactRadius + 7);
+                    en.y = player.y - pny * (contactRadius + 7);
+                    en.vx = -pnx * 210;
+                    en.vy = -pny * 210;
+                    queueBurst(player.x, player.y, '#22d3ee', 10);
+                    queueRing(player.x, player.y, '#38bdf8', 2.1);
+                    soundEngine.playDash();
+                  } else if (now >= player.hurtUntil) {
+                    player.hp = Math.max(0, player.hp - (en.kind === 'boss_yeti' ? 20 : 14));
+                    player.hurtUntil = now + 800;
+                    player.vx += pnx * 210;
+                    player.vy += pny * 210;
+                    s.shooterCombo = 1;
+                    s.shake = 0.42;
+                    soundEngine.playHit();
+                    queueBurst(player.x, player.y, '#f43f5e', 10);
+                    if (player.hp === 0) player.eliminated = true;
                   }
                 }
 
@@ -3793,18 +4055,33 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             );
           }
 
-          // Periodic Randomized Arena Weapon Loot Air-Drops against larger monster waves
+          // Periodic Randomized Arena Loot Air-Drops (Weapons + Frost Shield power-ups)
           s.lootDropCd -= dt;
           if (s.lootDropCd <= 0) {
-            s.lootDropCd = 16 + Math.random() * 6;
+            s.lootDropCd = 15 + Math.random() * 6;
+            const ang = Math.random() * Math.PI * 2;
+            const dist = 140 + Math.random() * Math.max(180, s.ringRadius * 0.65 - 140);
+            const dropX = ARENA_CENTER_X + Math.cos(ang) * dist;
+            const dropY = ARENA_CENTER_Y + Math.sin(ang) * (dist * 0.8);
             if (s.weaponPods.length < 4) {
-              const ang = Math.random() * Math.PI * 2;
-              const dist = 140 + Math.random() * Math.max(180, s.ringRadius * 0.65 - 140);
-              spawnWeaponLootDrop(
-                ARENA_CENTER_X + Math.cos(ang) * dist,
-                ARENA_CENTER_Y + Math.sin(ang) * (dist * 0.8),
-                'Random Loot Air-Drop'
+              spawnWeaponLootDrop(dropX, dropY, 'Random Loot Air-Drop');
+            }
+            if (Math.random() < 0.45 && s.pickups.length < 28) {
+              const sPos = nudgeOutsideObstacles(
+                dropX + (Math.random() - 0.5) * 70,
+                dropY + (Math.random() - 0.5) * 70,
+                18,
+                mapIdRef.current
               );
+              s.pickups.push({
+                id: `pk_shield_${now}_${Math.random().toString(36).slice(2, 6)}`,
+                kind: 'shield',
+                x: sPos.x,
+                y: sPos.y,
+                bobOffset: Math.random() * Math.PI * 2,
+              });
+              queueBurst(sPos.x, sPos.y, '#22d3ee', 10);
+              queueRing(sPos.x, sPos.y, '#38bdf8', 2.4);
             }
           }
 
@@ -4048,11 +4325,12 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   ent.frostGems += 1;
                   if (!ent.isBot) soundEngine.playPickup('gem');
                 } else if (pk.kind === 'shield') {
-                  ent.shieldUntil = now + 9000;
-                  ent.score += 25;
+                  ent.shieldUntil = now + 10000;
+                  ent.score += 30;
                   if (!ent.isBot) {
                     soundEngine.playPickup('power');
-                    flashBanner('Cryo Shield Active (9s)!');
+                    queueRing(ent.x, ent.y, '#22d3ee', 2.8);
+                    flashBanner('Frost Shield Active (10s) — Invulnerable to Contact!');
                   }
                 } else if (pk.kind === 'boost') {
                   ent.boostUntil = now + 7000;
@@ -4247,6 +4525,23 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             mon.vx = mRes.vx;
             mon.vy = mRes.vy;
 
+            // Frost Shield Contact Deflect (blocks all contact damage & pushes overlapping monsters back)
+            if (distT < mon.radius + 17 && now < targetYeti.shieldUntil) {
+              const sep = mon.radius + 19;
+              mon.x = targetYeti.x - nx * sep;
+              mon.y = targetYeti.y - ny * sep;
+              mon.vx = -nx * 190;
+              mon.vy = -ny * 190;
+              if (mon.attackCd <= 0) {
+                mon.attackCd = 0.65;
+                queueBurst(targetYeti.x, targetYeti.y, '#22d3ee', 12);
+                queueRing(targetYeti.x, targetYeti.y, '#38bdf8', 2.2);
+                if (!targetYeti.isBot) {
+                  soundEngine.playDash();
+                }
+              }
+            }
+
             // Melee Claw / Greataxe / Maul Attack on contact
             if (distT < mon.radius + 20 && mon.attackCd <= 0) {
               mon.attackCd = mon.kind === 'stalker' ? 0.88 : mon.kind === 'boss' ? 1.05 : 1.15;
@@ -4284,14 +4579,19 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 for (const ent of s.entities) {
                   if (ent.eliminated) continue;
                   const sd = Math.hypot(ent.x - mon.x, ent.y - mon.y);
-                  if (sd < 130 && now >= ent.shieldUntil && now >= ent.hurtUntil) {
-                    ent.hp = Math.max(0, ent.hp - 24);
-                    ent.hurtUntil = now + 800;
-                    const sn = Math.max(1, sd);
-                    ent.vx += ((ent.x - mon.x) / sn) * 260;
-                    ent.vy += ((ent.y - mon.y) / sn) * 260;
-                    if (!ent.isBot) soundEngine.playHit();
-                    if (ent.hp === 0) ent.eliminated = true;
+                  if (sd < 130) {
+                    if (now < ent.shieldUntil) {
+                      queueBurst(ent.x, ent.y, '#22d3ee', 10);
+                      queueRing(ent.x, ent.y, '#38bdf8', 2.0);
+                    } else if (now >= ent.hurtUntil) {
+                      ent.hp = Math.max(0, ent.hp - 24);
+                      ent.hurtUntil = now + 800;
+                      const sn = Math.max(1, sd);
+                      ent.vx += ((ent.x - mon.x) / sn) * 260;
+                      ent.vy += ((ent.y - mon.y) / sn) * 260;
+                      if (!ent.isBot) soundEngine.playHit();
+                      if (ent.hp === 0) ent.eliminated = true;
+                    }
                   }
                 }
               }
@@ -4616,7 +4916,22 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         gm === 'survival' &&
         (tunnelSnap ? now < (tunnelSnap.blessingUntil || 0) : now < s.blessingUntil);
 
-      envHandles?.update(elapsedTime, dt, ringRadiusWorld, bankReady, blessingActive);
+      const playerRaceNextCp =
+        gm === 'car_racing' ? s.karts.find((k) => k.id === 'player')?.nextCheckpoint || 1 : 1;
+      const activeSmashedObsIds = new Set<string>();
+      for (const [obsId, respAt] of s.smashedRaceObs.entries()) {
+        if (now < respAt) activeSmashedObsIds.add(obsId);
+      }
+
+      envHandles?.update(
+        elapsedTime,
+        dt,
+        ringRadiusWorld,
+        bankReady,
+        blessingActive,
+        playerRaceNextCp,
+        activeSmashedObsIds
+      );
 
       // Toggle group visibility cleanly per GameMode
       const showYetis = gm !== 'car_racing';
@@ -4859,10 +5174,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           krig.root.rotation.y = yaw;
 
           const boosting = now < k.boostUntil;
+          const shielded = now < k.shieldUntil;
           animateYetiKart(krig, {
             speed: k.speed,
             steer: k.steerInput,
             boosting,
+            shielded,
+            hopHeight: k.hopHeight,
             dt,
             elapsedTime,
           });
@@ -5632,7 +5950,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 <div className="flex flex-wrap gap-1 pt-0.5">
                   {hud.shieldSec > 0 && (
                     <span className="inline-flex items-center gap-1 rounded bg-cyan-500/20 border border-cyan-400/50 px-1.5 py-0.5 text-[10px] font-bold text-cyan-200 tabular-nums">
-                      <Shield className="h-2.5 w-2.5" /> {hud.shieldSec}s
+                      <Shield className="h-2.5 w-2.5" /> Frost {hud.shieldSec}s
                     </span>
                   )}
                   {hud.boostSec > 0 && (
@@ -5647,7 +5965,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   )}
                   {hud.tripleSec > 0 && (
                     <span className="inline-flex items-center gap-1 rounded bg-purple-500/20 border border-purple-400/50 px-1.5 py-0.5 text-[10px] font-bold text-purple-200 tabular-nums">
-                      <Sparkles className="h-2.5 w-2.5" /> 3× {hud.tripleSec}s
+                      <Sparkles className="h-2.5 w-2.5" />{' '}
+                      {selectedGameMode === 'car_racing'
+                        ? `${hud.carMissiles}× Missiles`
+                        : `3× ${hud.tripleSec}s`}
                     </span>
                   )}
                 </div>
@@ -6289,6 +6610,19 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               : 'Dash'}
             <span className="arcade-kbd">SPACE</span>
           </button>
+
+          {selectedGameMode === 'car_racing' && (
+            <button
+              type="button"
+              onClick={() => triggerThrowOrFire()}
+              disabled={gameState !== 'PLAYING' || hud.carMissiles <= 0}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-purple-400/55 bg-purple-500/20 px-3 text-xs font-bold text-purple-200 hover:bg-purple-500/30 disabled:opacity-45 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Crosshair className="h-3.5 w-3.5" />
+              Missile ({hud.carMissiles})
+              <span className="arcade-kbd">J</span>
+            </button>
+          )}
 
           {selectedGameMode === 'survival' && (
             <button

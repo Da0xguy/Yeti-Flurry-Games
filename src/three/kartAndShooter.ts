@@ -13,6 +13,7 @@ export interface YetiKartRigParts {
   steeringWheel: THREE.Mesh;
   driverHead: THREE.Group;
   nitroRing: THREE.Mesh;
+  shieldBubble: THREE.Mesh;
 }
 
 export function buildYetiKartRig({
@@ -216,6 +217,22 @@ export function buildYetiKartRig({
   nitroRing.position.y = 0.03;
   root.add(nitroRing);
 
+  // Translucent 3D Frost Shield Bubble for power-up invulnerability & obstacle ramming
+  const shieldBubble = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.58, 1),
+    new THREE.MeshBasicMaterial({
+      color: '#22d3ee',
+      wireframe: true,
+      transparent: true,
+      opacity: 0.45,
+      depthWrite: false,
+    })
+  );
+  shieldBubble.position.y = 0.72;
+  shieldBubble.scale.set(0.95, 0.72, 1.24);
+  shieldBubble.visible = false;
+  root.add(shieldBubble);
+
   return {
     root,
     chassisPivot,
@@ -226,6 +243,7 @@ export function buildYetiKartRig({
     steeringWheel,
     driverHead: driverRig.headGroup,
     nitroRing,
+    shieldBubble,
   };
 }
 
@@ -235,11 +253,13 @@ export function animateYetiKart(
     speed: number;
     steer: number;
     boosting: boolean;
+    shielded?: boolean;
+    hopHeight?: number;
     dt: number;
     elapsedTime: number;
   }
 ): void {
-  const { speed, steer, boosting, dt, elapsedTime } = opts;
+  const { speed, steer, boosting, shielded = false, hopHeight = 0, dt, elapsedTime } = opts;
 
   // Spin wheels proportional to forward velocity
   const spinDelta = (speed / 25) * dt * 2.4;
@@ -253,10 +273,13 @@ export function animateYetiKart(
   rig.frontRightHub.rotation.y = THREE.MathUtils.damp(rig.frontRightHub.rotation.y, steerAngle, 14, dt);
   rig.steeringWheel.rotation.z = THREE.MathUtils.damp(rig.steeringWheel.rotation.z, -steerAngle * 1.4, 14, dt);
 
-  // Chassis body roll into turns + subtle engine rumble
+  // Chassis body roll into turns, ramp pitch & subtle engine rumble
   const rollTarget = THREE.MathUtils.clamp(-steer * Math.min(1, Math.abs(speed) / 260) * 0.14, -0.14, 0.14);
   rig.chassisPivot.rotation.z = THREE.MathUtils.damp(rig.chassisPivot.rotation.z, rollTarget, 10, dt);
-  rig.chassisPivot.position.y = Math.sin(elapsedTime * 26) * (Math.abs(speed) > 25 ? 0.012 : 0.004);
+  const pitchTarget = hopHeight > 0.05 ? -Math.min(0.24, hopHeight * 0.14) : 0;
+  rig.chassisPivot.rotation.x = THREE.MathUtils.damp(rig.chassisPivot.rotation.x, pitchTarget, 12, dt);
+  rig.chassisPivot.position.y =
+    hopHeight + Math.sin(elapsedTime * 26) * (Math.abs(speed) > 25 ? 0.012 : 0.004);
   rig.driverHead.rotation.y = THREE.MathUtils.damp(rig.driverHead.rotation.y, steerAngle * 0.45, 10, dt);
 
   // Boost flames flicker
@@ -268,9 +291,15 @@ export function animateYetiKart(
     }
   });
 
+  rig.shieldBubble.visible = shielded;
+  if (shielded) {
+    rig.shieldBubble.rotation.y += dt * 1.8;
+    rig.shieldBubble.position.y = 0.72 + hopHeight;
+  }
+
   const ringMat = rig.nitroRing.material as THREE.MeshBasicMaterial;
-  ringMat.color.set(boosting ? '#22d3ee' : '#38bdf8');
-  ringMat.opacity = boosting ? 0.82 : 0.45;
+  ringMat.color.set(shielded ? '#67e8f9' : boosting ? '#22d3ee' : '#38bdf8');
+  ringMat.opacity = shielded || boosting ? 0.85 : 0.45;
 }
 
 export interface ShooterTargetMesh {

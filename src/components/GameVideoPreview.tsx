@@ -13,6 +13,12 @@ import {
   type YetiKartRigParts,
 } from '../three/kartAndShooter';
 import {
+  animateQuestMonster,
+  animateWeaponPod,
+  buildQuestMonsterMesh,
+  buildWeaponPodMesh,
+} from '../three/questEntities';
+import {
   drawArcticOutpostParallax,
   drawExtractionBunker,
   drawPowerUpIcon,
@@ -281,14 +287,8 @@ class Shared3DPreviewManager {
       });
       scene.add(heroRig.root);
 
-      const bossRig: YetiRigParts = buildYetiRig({
-        colorwayId: 'golden_frost',
-        hatId: 'hat_crown',
-        scarfId: 'scarf_crimson',
-        isPlayer: false,
-        scale: 1.42,
-        weapon: 'sword',
-      });
+      const bossRig = buildQuestMonsterMesh('wraith', '#e879f9');
+      bossRig.hpBar.group.visible = false;
       scene.add(bossRig.root);
 
       const targets: { obj: ShooterTargetMesh; angleOff: number; radius: number }[] = [
@@ -331,7 +331,7 @@ class Shared3DPreviewManager {
 
         bossRig.root.position.set(-Math.cos(aimAngle) * 6.5, 0, -Math.sin(aimAngle) * 6.5);
         bossRig.root.rotation.y = Math.atan2(hx - bossRig.root.position.x, hz - bossRig.root.position.z);
-        animateYetiWalk(bossRig, { speed: 120, dt, elapsedTime: t + 1.2 });
+        animateQuestMonster(bossRig, { speed: 110, dt, elapsedTime: t + 1.2, attacking: Math.sin(t * 2.4) > 0.5 });
 
         targets.forEach((tg, i) => {
           const a = aimAngle + tg.angleOff;
@@ -378,6 +378,18 @@ class Shared3DPreviewManager {
         { rig: buildYetiRig({ colorwayId: 'aurora_violet', hatId: 'hat_crown', scarfId: 'scarf_lofi', isPlayer: false }), radius: 7.4, speed: 0.58, phase: 2.9 },
       ];
       rivals.forEach((rv) => scene.add(rv.rig.root));
+
+      const bossMonster = buildQuestMonsterMesh('boss', '#fb923c');
+      bossMonster.hpBar.group.visible = false;
+      scene.add(bossMonster.root);
+
+      const stalkerMonster = buildQuestMonsterMesh('stalker', '#38bdf8');
+      stalkerMonster.hpBar.group.visible = false;
+      scene.add(stalkerMonster.root);
+
+      const weaponPod = buildWeaponPodMesh('frost_spear');
+      weaponPod.root.position.set(2.5, 0, -2.5);
+      scene.add(weaponPod.root);
 
       const drops: { mesh: THREE.Mesh; offset: number }[] = [];
       const dropGeo = new THREE.OctahedronGeometry(0.35, 0);
@@ -429,6 +441,23 @@ class Shared3DPreviewManager {
           animateYetiWalk(rv.rig, { speed: 150, dt, elapsedTime: t + rv.phase });
         });
 
+        // Sculpted Boss & Stalker pursuing the squad!
+        const ba = ha - 0.95;
+        const bx = Math.cos(ba) * 6.8;
+        const bz = Math.sin(ba) * 6.8;
+        bossMonster.root.position.set(bx, 0, bz);
+        bossMonster.root.rotation.y = Math.atan2(hx - bx, hz - bz);
+        animateQuestMonster(bossMonster, { speed: 110, dt, elapsedTime: t, attacking: Math.sin(t * 2) > 0.6 });
+
+        const sa = ha + 1.5;
+        const sx = Math.cos(sa) * 5.8;
+        const sz = Math.sin(sa) * 5.8;
+        stalkerMonster.root.position.set(sx, 0, sz);
+        stalkerMonster.root.rotation.y = Math.atan2(hx - sx, hz - sz);
+        animateQuestMonster(stalkerMonster, { speed: 145, dt, elapsedTime: t + 1.1 });
+
+        animateWeaponPod(weaponPod, dt, t);
+
         drops.forEach((d) => {
           const a = t * 0.5 + d.offset;
           d.mesh.position.set(Math.cos(a) * 5.2, 0.72 + Math.sin(t * 3 + d.offset) * 0.2, Math.sin(a) * 5.2);
@@ -436,11 +465,10 @@ class Shared3DPreviewManager {
         });
 
         const sp = (t * 1.3) % 1;
-        const rvTarget = rivals[0].rig.root.position;
         snowball.position.set(
-          THREE.MathUtils.lerp(hx, rvTarget.x, sp),
+          THREE.MathUtils.lerp(hx, bx, sp),
           1.25 + Math.sin(sp * Math.PI) * 1.1,
-          THREE.MathUtils.lerp(hz, rvTarget.z, sp)
+          THREE.MathUtils.lerp(hz, bz, sp)
         );
 
         const camA = ha - 2.2;

@@ -401,7 +401,9 @@ export interface ArenaEnvironmentHandles {
     dt: number,
     ringRadiusWorld: number,
     bankReady?: boolean,
-    blessingActive?: boolean
+    blessingActive?: boolean,
+    raceNextCheckpoint?: number,
+    smashedRaceObsIds?: Set<string>
   ) => void;
 }
 
@@ -461,10 +463,10 @@ export function buildArcticEnvironment(
     const z = pos.getZ(i);
     if (isRacing) {
       const dTrack = distToTrackXZ(x, z);
-      if (dTrack < 6.4) {
-        pos.setY(i, -0.05);
+      if (dTrack < 8.6) {
+        pos.setY(i, -0.06);
       } else {
-        const bank = Math.min(1, (dTrack - 6.4) / 14.0);
+        const bank = Math.min(1, (dTrack - 8.6) / 14.0);
         const dune =
           mapId === 'volcanic_springs'
             ? Math.abs(Math.sin(x * 0.07) * Math.cos(z * 0.07)) * 4.8 + bank * 3.8
@@ -806,12 +808,12 @@ export function buildArcticEnvironment(
 
   let placedProps = 0;
   if (isRacing) {
-    for (let i = 0; i < 420 && placedProps < propCount; i++) {
+    for (let i = 0; i < 520 && placedProps < propCount; i++) {
       const rx = ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
       const rz = ((Math.sin(i * 78.233) * 19341.123) % 1 + 1) % 1;
-      const px = (rx - 0.5) * 168;
-      const pz = (rz - 0.5) * 108;
-      if (distToTrackXZ(px, pz) < 6.4) continue;
+      const px = (rx - 0.5) * 184;
+      const pz = (rz - 0.5) * 118;
+      if (distToTrackXZ(px, pz) < 9.2) continue;
       dummy.position.set(px, 0.15, pz);
       const sc = 1.05 + (placedProps % 5) * 0.24;
       dummy.scale.set(sc, sc * (0.95 + (placedProps % 3) * 0.2), sc);
@@ -1030,16 +1032,26 @@ export function buildArcticEnvironment(
     shaderMaterialsToTick.push(magmaRingMat);
   }
 
-  // 5d. Long Beach-Buggy Racing Ribbon, Start/Finish Checkered Arch, 4 Checkpoint Gates & Boost Pads
+  // 5d. Wide, High-Contrast Racing Circuit, Checkpoints 1..4, Houses/Outposts, Billboards & Creative Obstacles
+  const raceSpinnerRotors: THREE.Object3D[] = [];
+  const raceObstacleGroups = new Map<string, THREE.Group>();
+  const raceCheckpointHandles: {
+    num: number;
+    archMat: THREE.MeshStandardMaterial;
+    stripMat: THREE.MeshBasicMaterial;
+    beaconMesh: THREE.Mesh;
+  }[] = [];
+
   if (isRacing && raceCurve) {
     const wps = raceWaypoints;
-    const roadSamples = 320;
-    const roadHalfW = 3.25;
-    const curbHalfW = 3.65;
+    const roadSamples = 360;
+    const roadHalfW = 5.2;
+    const curbHalfW = 6.05;
     const roadPositions: number[] = [];
     const roadUvs: number[] = [];
     const roadIndices: number[] = [];
     const curbPositions: number[] = [];
+    const curbUvs: number[] = [];
     const curbIndices: number[] = [];
 
     for (let i = 0; i <= roadSamples; i++) {
@@ -1050,12 +1062,13 @@ export function buildArcticEnvironment(
 
       const left = pt.clone().addScaledVector(perp, roadHalfW);
       const right = pt.clone().addScaledVector(perp, -roadHalfW);
-      roadPositions.push(left.x, 0.024, left.z, right.x, 0.024, right.z);
-      roadUvs.push(0, t * 44, 1, t * 44);
+      roadPositions.push(left.x, 0.028, left.z, right.x, 0.028, right.z);
+      roadUvs.push(0, t * 56, 1, t * 56);
 
       const cLeft = pt.clone().addScaledVector(perp, curbHalfW);
       const cRight = pt.clone().addScaledVector(perp, -curbHalfW);
       curbPositions.push(cLeft.x, 0.014, cLeft.z, cRight.x, 0.014, cRight.z);
+      curbUvs.push(0, t * 90, 1, t * 90);
 
       if (i < roadSamples) {
         const base = i * 2;
@@ -1064,31 +1077,77 @@ export function buildArcticEnvironment(
       }
     }
 
+    // Alternating Grand Prix Rumble Curb Texture
+    const curbCanvas = document.createElement('canvas');
+    curbCanvas.width = 128;
+    curbCanvas.height = 128;
+    const cbCtx = curbCanvas.getContext('2d')!;
+    const curbPrimary =
+      mapId === 'volcanic_springs' ? '#f97316' : mapId === 'aurora_summit' ? '#2dd4bf' : '#ef4444';
+    cbCtx.fillStyle = curbPrimary;
+    cbCtx.fillRect(0, 0, 128, 64);
+    cbCtx.fillStyle = '#f8fafc';
+    cbCtx.fillRect(0, 64, 128, 64);
+    const curbTex = new THREE.CanvasTexture(curbCanvas);
+    curbTex.colorSpace = THREE.SRGBColorSpace;
+    curbTex.wrapS = THREE.RepeatWrapping;
+    curbTex.wrapT = THREE.RepeatWrapping;
+    curbTex.anisotropy = maxAnisotropy;
+
     const curbGeo = new THREE.BufferGeometry();
     curbGeo.setAttribute('position', new THREE.Float32BufferAttribute(curbPositions, 3));
+    curbGeo.setAttribute('uv', new THREE.Float32BufferAttribute(curbUvs, 2));
     curbGeo.setIndex(curbIndices);
     curbGeo.computeVertexNormals();
     const curbMesh = new THREE.Mesh(
       curbGeo,
       new THREE.MeshStandardMaterial({
-        color:
-          mapId === 'volcanic_springs'
-            ? '#ea580c'
-            : mapId === 'aurora_summit'
-            ? '#2dd4bf'
-            : '#38bdf8',
-        emissive:
-          mapId === 'volcanic_springs'
-            ? '#9a3412'
-            : mapId === 'aurora_summit'
-            ? '#0f766e'
-            : '#0369a1',
-        emissiveIntensity: 0.35,
-        roughness: 0.6,
+        map: curbTex,
+        emissive: curbPrimary,
+        emissiveIntensity: 0.16,
+        roughness: 0.5,
       })
     );
     curbMesh.receiveShadow = true;
     group.add(curbMesh);
+
+    // High-Clarity Circuit Road CanvasTexture (Crisp Shoulders + Dashed Centerline + Asphalt Grain)
+    const roadCanvas = document.createElement('canvas');
+    roadCanvas.width = 256;
+    roadCanvas.height = 256;
+    const rctx = roadCanvas.getContext('2d')!;
+    rctx.fillStyle =
+      mapId === 'volcanic_springs' ? '#1c1917' : mapId === 'aurora_summit' ? '#161b33' : '#0f2238';
+    rctx.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 420; i++) {
+      rctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.08)';
+      rctx.fillRect((i * 73) % 256, (i * 137) % 256, 3, 3);
+    }
+    const edgeCol =
+      mapId === 'volcanic_springs' ? '#fb923c' : mapId === 'aurora_summit' ? '#2dd4bf' : '#38bdf8';
+    // Bright outer edge boundary lines + dual inner lane guide lines
+    rctx.fillStyle = '#f8fafc';
+    rctx.fillRect(8, 0, 7, 256);
+    rctx.fillRect(241, 0, 7, 256);
+    rctx.fillStyle = edgeCol;
+    rctx.fillRect(17, 0, 4, 256);
+    rctx.fillRect(235, 0, 4, 256);
+    // Dashed center line
+    rctx.fillStyle = 'rgba(248, 250, 252, 0.72)';
+    rctx.fillRect(125, 16, 6, 92);
+    rctx.fillRect(125, 144, 6, 92);
+    // Subtle outer lane dashes
+    rctx.fillStyle = 'rgba(148, 163, 184, 0.25)';
+    rctx.fillRect(72, 24, 3, 68);
+    rctx.fillRect(72, 152, 3, 68);
+    rctx.fillRect(181, 24, 3, 68);
+    rctx.fillRect(181, 152, 3, 68);
+
+    const roadTex = new THREE.CanvasTexture(roadCanvas);
+    roadTex.colorSpace = THREE.SRGBColorSpace;
+    roadTex.wrapS = THREE.RepeatWrapping;
+    roadTex.wrapT = THREE.RepeatWrapping;
+    roadTex.anisotropy = maxAnisotropy;
 
     const roadGeo = new THREE.BufferGeometry();
     roadGeo.setAttribute('position', new THREE.Float32BufferAttribute(roadPositions, 3));
@@ -1097,25 +1156,42 @@ export function buildArcticEnvironment(
     roadGeo.computeVertexNormals();
 
     const roadMat = new THREE.MeshStandardMaterial({
-      color: mapId === 'volcanic_springs' ? '#1c1917' : mapId === 'aurora_summit' ? '#1e1b4b' : '#0c2742',
-      roughness: 0.42,
-      metalness: 0.18,
+      map: roadTex,
+      roughness: 0.44,
+      metalness: 0.14,
     });
     const roadMesh = new THREE.Mesh(roadGeo, roadMat);
     roadMesh.receiveShadow = true;
     group.add(roadMesh);
 
-    // Glowing Center Racing Line
-    const centerLinePts = raceCurve.getPoints(280).map((p) => new THREE.Vector3(p.x, 0.04, p.z));
-    const centerLineGeo = new THREE.BufferGeometry().setFromPoints(centerLinePts);
-    const centerLineMat = new THREE.LineBasicMaterial({
-      color: mapId === 'volcanic_springs' ? '#fb923c' : mapId === 'aurora_summit' ? '#2dd4bf' : '#38bdf8',
-      transparent: true,
-      opacity: 0.72,
-    });
-    group.add(new THREE.LineLoop(centerLineGeo, centerLineMat));
+    // Helper for crisp procedural LED signs & trackside sponsor billboards
+    const makeSignTexture = (title: string, subtitle: string, bg: string, accent: string) => {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 160;
+      const ctx = c.getContext('2d')!;
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, 512, 160);
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 8;
+      ctx.strokeRect(8, 8, 496, 144);
+      ctx.fillStyle = accent;
+      ctx.fillRect(16, 16, 18, 128);
+      ctx.fillRect(478, 16, 18, 128);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 46px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(title, 256, 66);
+      ctx.fillStyle = accent;
+      ctx.font = 'bold 26px sans-serif';
+      ctx.fillText(subtitle, 256, 118);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    };
 
-    // Checkered Start / Finish Archway at Waypoint 0
+    // Checkered Start / Finish Archway at Waypoint 0 (spans full 10.4-unit road!)
     const checkerCanvas = document.createElement('canvas');
     checkerCanvas.width = 256;
     checkerCanvas.height = 64;
@@ -1138,47 +1214,35 @@ export function buildArcticEnvironment(
 
     const pillarMat = new THREE.MeshStandardMaterial({ color: '#e2e8f0', metalness: 0.65, roughness: 0.25 });
     const neonHex = mapId === 'volcanic_springs' ? '#fb923c' : '#22d3ee';
-    const bannerMat = new THREE.MeshStandardMaterial({
-      map: checkerTex,
+    const startBannerTex = makeSignTexture('START / FINISH', 'LOFI GRAND PRIX · 3 LAPS', '#081527', neonHex);
+    const startBannerMat = new THREE.MeshStandardMaterial({
+      map: startBannerTex,
       emissive: neonHex,
-      emissiveIntensity: 0.25,
-      roughness: 0.3,
+      emissiveIntensity: 0.35,
+      roughness: 0.25,
     });
-    [-3.45, 3.45].forEach((px) => {
-      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 4.1, 10), pillarMat);
-      pillar.position.set(px, 2.05, 0);
+    [-5.55, 5.55].forEach((px) => {
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.34, 4.9, 10), pillarMat);
+      pillar.position.set(px, 2.45, 0);
       pillar.castShadow = !isSoftwareGl;
       gateGroup.add(pillar);
     });
-    const crossbar = new THREE.Mesh(new THREE.BoxGeometry(7.3, 0.8, 0.36), bannerMat);
-    crossbar.position.set(0, 3.85, 0);
+    const crossbar = new THREE.Mesh(new THREE.BoxGeometry(11.6, 1.35, 0.48), startBannerMat);
+    crossbar.position.set(0, 4.65, 0);
     gateGroup.add(crossbar);
 
     const startLine = new THREE.Mesh(
-      new THREE.PlaneGeometry(6.4, 0.95),
+      new THREE.PlaneGeometry(10.5, 1.45),
       new THREE.MeshBasicMaterial({ map: checkerTex, side: THREE.DoubleSide })
     );
     startLine.rotation.x = -Math.PI / 2;
-    startLine.position.y = 0.044;
+    startLine.position.y = 0.048;
     gateGroup.add(startLine);
     group.add(gateGroup);
 
-    // 4 Sequential 3D Checkpoint Arches (amber/cyan beacons along the long track)
-    const cpArchMat = new THREE.MeshStandardMaterial({
-      color: '#0f172a',
-      emissive: '#fbbf24',
-      emissiveIntensity: 0.72,
-      roughness: 0.25,
-    });
-    const cpStripMat = new THREE.MeshBasicMaterial({
-      color: '#fde047',
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.75,
-    });
-
+    // 4 High-Visibility Numbered Checkpoint Lines + Overhead Gantries + Active Beacon Beams
     wps.forEach((wp, idx) => {
-      if (wp.isCheckpoint) {
+      if (wp.isCheckpoint && wp.checkpointNum) {
         const prev = wps[(idx - 1 + wps.length) % wps.length];
         const next = wps[(idx + 1) % wps.length];
         const yaw = Math.atan2(next.x - prev.x, next.y - prev.y);
@@ -1186,102 +1250,414 @@ export function buildArcticEnvironment(
         cpGate.position.set((wp.x - ARENA_CENTER_X) / 25, 0, (wp.y - ARENA_CENTER_Y) / 25);
         cpGate.rotation.y = yaw;
 
-        [-3.45, 3.45].forEach((px) => {
-          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 3.7, 8), cpArchMat);
-          post.position.set(px, 1.85, 0);
+        const cpArchMat = new THREE.MeshStandardMaterial({
+          color: '#0f172a',
+          emissive: '#fbbf24',
+          emissiveIntensity: 0.72,
+          roughness: 0.25,
+        });
+        const cpStripMat = new THREE.MeshBasicMaterial({
+          color: '#fde047',
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.88,
+        });
+        const cpSignTex = makeSignTexture(
+          `CHECKPOINT ${wp.checkpointNum}`,
+          'CROSS LINE TO ADVANCE',
+          '#0a192f',
+          '#fbbf24'
+        );
+        const cpSignMat = new THREE.MeshStandardMaterial({
+          map: cpSignTex,
+          emissive: '#f59e0b',
+          emissiveIntensity: 0.35,
+          roughness: 0.25,
+        });
+
+        [-5.5, 5.5].forEach((px) => {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 4.5, 10), cpArchMat);
+          post.position.set(px, 2.25, 0);
           post.castShadow = !isSoftwareGl;
           cpGate.add(post);
         });
-        const topBeam = new THREE.Mesh(new THREE.BoxGeometry(7.1, 0.38, 0.26), cpArchMat);
-        topBeam.position.set(0, 3.55, 0);
+        const topBeam = new THREE.Mesh(new THREE.BoxGeometry(11.4, 1.15, 0.38), cpSignMat);
+        topBeam.position.set(0, 4.3, 0);
         cpGate.add(topBeam);
 
-        const floorStrip = new THREE.Mesh(new THREE.PlaneGeometry(6.3, 0.55), cpStripMat);
+        // Glowing wide threshold line right on the road surface
+        const floorStrip = new THREE.Mesh(new THREE.PlaneGeometry(10.5, 1.35), cpStripMat);
         floorStrip.rotation.x = -Math.PI / 2;
-        floorStrip.position.y = 0.044;
+        floorStrip.position.y = 0.048;
         cpGate.add(floorStrip);
+
+        // Tall vertical light curtain marking the active checkpoint from afar
+        const beaconMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(10.2, 6.5),
+          new THREE.MeshBasicMaterial({
+            color: '#34d399',
+            transparent: true,
+            opacity: 0.16,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+          })
+        );
+        beaconMesh.position.y = 3.25;
+        cpGate.add(beaconMesh);
+
         group.add(cpGate);
+        raceCheckpointHandles.push({
+          num: wp.checkpointNum,
+          archMat: cpArchMat,
+          stripMat: cpStripMat,
+          beaconMesh,
+        });
       }
 
       if (wp.hasBoostPad) {
         const next = wps[(idx + 1) % wps.length];
-        const pad = new THREE.Mesh(
-          new THREE.PlaneGeometry(2.5, 3.1),
-          new THREE.MeshBasicMaterial({
-            color: '#22d3ee',
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.86,
-          })
-        );
-        pad.rotation.x = -Math.PI / 2;
-        pad.rotation.z = -Math.atan2(next.x - wp.x, next.y - wp.y);
-        pad.position.set((wp.x - ARENA_CENTER_X) / 25, 0.045, (wp.y - ARENA_CENTER_Y) / 25);
-        group.add(pad);
+        const padGroup = new THREE.Group();
+        padGroup.position.set((wp.x - ARENA_CENTER_X) / 25, 0.048, (wp.y - ARENA_CENTER_Y) / 25);
+        padGroup.rotation.y = Math.atan2(next.x - wp.x, next.y - wp.y);
+
+        const padMat = new THREE.MeshBasicMaterial({
+          color: '#22d3ee',
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.9,
+        });
+        const padBase = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 4.4), padMat);
+        padBase.rotation.x = -Math.PI / 2;
+        padGroup.add(padBase);
+
+        [-1.1, 0, 1.1].forEach((cz) => {
+          const chev = new THREE.Mesh(
+            new THREE.PlaneGeometry(3.2, 0.45),
+            new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide })
+          );
+          chev.rotation.x = -Math.PI / 2;
+          chev.position.set(0, 0.01, cz);
+          padGroup.add(chev);
+        });
+        group.add(padGroup);
       }
     });
 
-    // Real 3D Trackside Boulders & Chicane Cryo Pylons along the racing circuit
-    const raceObsRockMat = new THREE.MeshStandardMaterial({
-      color: mapId === 'volcanic_springs' ? '#292524' : '#334155',
-      roughness: 0.9,
-      metalness: 0.12,
+    // Scenic Trackside Buildings (Cabins/Chalets, Magma Outposts, Aurora Domes), Grandstands & Side Billboards
+    const wallMatA = new THREE.MeshStandardMaterial({
+      color: mapId === 'volcanic_springs' ? '#334155' : mapId === 'aurora_summit' ? '#1e293b' : '#78350f',
+      roughness: 0.78,
     });
-    const raceObsPylonMat = new THREE.MeshStandardMaterial({
-      color: '#1e293b',
-      emissive: mapId === 'volcanic_springs' ? '#f97316' : '#f43f5e',
-      emissiveIntensity: 0.65,
-      roughness: 0.3,
-      metalness: 0.45,
+    const roofMatA = new THREE.MeshStandardMaterial({
+      color: mapId === 'volcanic_springs' ? '#1c1917' : mapId === 'aurora_summit' ? '#38bdf8' : '#f1f5f9',
+      roughness: 0.55,
+      metalness: mapId === 'aurora_summit' ? 0.35 : 0.05,
     });
-    const raceObsWarnMat = new THREE.MeshBasicMaterial({
-      color: '#fbbf24',
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.72,
-      depthWrite: false,
+    const windowGlowMat = new THREE.MeshStandardMaterial({
+      color: '#fef08a',
+      emissive: mapId === 'volcanic_springs' ? '#f97316' : mapId === 'aurora_summit' ? '#2dd4bf' : '#fbbf24',
+      emissiveIntensity: 0.95,
+      roughness: 0.2,
     });
+    const steelPostMat = new THREE.MeshStandardMaterial({ color: '#334155', metalness: 0.7, roughness: 0.35 });
 
-    getRaceTrackObstacles(mapId).forEach((ro, rIdx) => {
+    const buildTracksideHouse = (idx: number): THREE.Group => {
+      const hg = new THREE.Group();
+      const sc = 1.1 + (idx % 3) * 0.28;
+      if (mapId === 'volcanic_springs') {
+        // Geothermal Bunker + Fuel Silo + Glow Vent
+        const bunker = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.4, 3.6), wallMatA);
+        bunker.position.y = 1.2;
+        bunker.castShadow = !isSoftwareGl;
+        bunker.receiveShadow = true;
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.45, 4.0), roofMatA);
+        roof.position.y = 2.55;
+        const silo = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.05, 3.8, 12), steelPostMat);
+        silo.position.set(2.8, 1.9, 0);
+        silo.castShadow = !isSoftwareGl;
+        const vent = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.55, 0.16), windowGlowMat);
+        vent.position.set(0, 1.45, 1.82);
+        hg.add(bunker, roof, silo, vent);
+      } else if (mapId === 'aurora_summit') {
+        // Illuminated Observatory Cabin + Crystal Dome
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.6, 2.2, 8), wallMatA);
+        base.position.y = 1.1;
+        base.castShadow = !isSoftwareGl;
+        const dome = new THREE.Mesh(
+          new THREE.SphereGeometry(2.1, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
+          roofMatA
+        );
+        dome.position.y = 2.1;
+        const ringWin = new THREE.Mesh(new THREE.CylinderGeometry(2.35, 2.35, 0.48, 8), windowGlowMat);
+        ringWin.position.y = 1.45;
+        hg.add(base, dome, ringWin);
+      } else {
+        // Nordic Snow-Roof Alpine Chalet / House with glowing warm windows & chimney
+        const body = new THREE.Mesh(new THREE.BoxGeometry(4.4, 2.5, 3.6), wallMatA);
+        body.position.y = 1.25;
+        body.castShadow = !isSoftwareGl;
+        body.receiveShadow = true;
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(3.55, 2.1, 4), roofMatA);
+        roof.rotation.y = Math.PI / 4;
+        roof.position.y = 3.5;
+        roof.castShadow = !isSoftwareGl;
+        const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.5, 0.6), steelPostMat);
+        chimney.position.set(1.15, 3.6, -0.6);
+        [-1.0, 1.0].forEach((wx) => {
+          const win = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.72, 0.12), windowGlowMat);
+          win.position.set(wx, 1.35, 1.82);
+          hg.add(win);
+        });
+        const door = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.25, 0.14), steelPostMat);
+        door.position.set(0, 0.64, 1.82);
+        hg.add(body, roof, chimney, door);
+      }
+      hg.scale.setScalar(sc);
+      return hg;
+    };
+
+    // Spectator Grandstand overlooking Start/Finish Straight
+    const grandstand = new THREE.Group();
+    const gsBase = new THREE.Mesh(new THREE.BoxGeometry(16, 1.2, 4.5), steelPostMat);
+    gsBase.position.y = 0.6;
+    const gsTier2 = new THREE.Mesh(new THREE.BoxGeometry(16, 1.1, 3.0), wallMatA);
+    gsTier2.position.set(0, 1.75, -0.65);
+    const gsTier3 = new THREE.Mesh(new THREE.BoxGeometry(16, 1.0, 1.8), roofMatA);
+    gsTier3.position.set(0, 2.8, -1.2);
+    const gsBanner = new THREE.Mesh(
+      new THREE.BoxGeometry(15.6, 1.1, 0.2),
+      new THREE.MeshStandardMaterial({
+        map: makeSignTexture('YETI FLURRY CIRCUIT', 'GLACIAL GRANDSTAND', '#081527', neonHex),
+        emissive: neonHex,
+        emissiveIntensity: 0.25,
+      })
+    );
+    gsBanner.position.set(0, 4.1, -1.6);
+    grandstand.add(gsBase, gsTier2, gsTier3, gsBanner);
+    const gsPt = startPt.clone().add(new THREE.Vector3(0, 0, 10.6));
+    if (distToTrackXZ(gsPt.x, gsPt.z) > 8.6) {
+      grandstand.position.copy(gsPt);
+      grandstand.rotation.y = Math.PI;
+      group.add(grandstand);
+    }
+
+    // Place Houses/Cabins, Billboards & Trackside Floodlights neatly flanking the entire circuit
+    const billboardCatalog = [
+      { title: 'LOFI GRAND PRIX', sub: 'TURBO CIRCUIT', accent: '#38bdf8' },
+      { title: 'FROST SHIELD', sub: '10S INVINCIBLE RAM', accent: '#22d3ee' },
+      { title: 'APEX DRIFT >>>', sub: 'HOLD SPACE FOR NITRO', accent: '#fbbf24' },
+      { title: 'CRYO MISSILES', sub: 'HIT PURPLE ORBS', accent: '#c084fc' },
+    ];
+    const billboardMats = billboardCatalog.map(
+      (b) =>
+        new THREE.MeshStandardMaterial({
+          map: makeSignTexture(b.title, b.sub, '#071324', b.accent),
+          emissive: b.accent,
+          emissiveIntensity: 0.28,
+          roughness: 0.3,
+        })
+    );
+    const lampGlowMat = new THREE.MeshBasicMaterial({ color: '#e0f2fe' });
+
+    const scenicSamples = 36;
+    let houseCount = 0;
+    let boardCount = 0;
+    for (let i = 0; i < scenicSamples; i++) {
+      const t = i / scenicSamples;
+      const pt = raceCurve.getPointAt(t);
+      const tan = raceCurve.getTangentAt(t).normalize();
+      const perp = new THREE.Vector3(-tan.z, 0, tan.x);
+      const side = i % 2 === 0 ? 1 : -1;
+
+      // Trackside Light Pole every sample on alternating sides
+      const lampPos = pt.clone().addScaledVector(perp, side * 6.8);
+      if (distToTrackXZ(lampPos.x, lampPos.z) > 6.4) {
+        const pole = new THREE.Group();
+        pole.position.set(lampPos.x, 0, lampPos.z);
+        pole.rotation.y = Math.atan2(-perp.x * side, -perp.z * side);
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 4.2, 6), steelPostMat);
+        mast.position.y = 2.1;
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 1.3), steelPostMat);
+        arm.position.set(0, 4.15, 0.55);
+        const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.12, 0.48), lampGlowMat);
+        bulb.position.set(0, 4.08, 1.05);
+        pole.add(mast, arm, bulb);
+        group.add(pole);
+      }
+
+      // Trackside Houses & Lodges at safe scenic distance
+      const housePos = pt.clone().addScaledVector(perp, side * 11.8);
+      if (distToTrackXZ(housePos.x, housePos.z) > 9.4) {
+        const house = buildTracksideHouse(houseCount++);
+        house.position.set(housePos.x, 0, housePos.z);
+        house.rotation.y = Math.atan2(pt.x - housePos.x, pt.z - housePos.z);
+        group.add(house);
+      }
+
+      // Sponsor / Directional Side Images (Billboards) every 3rd sample
+      if (i % 3 === 1) {
+        const boardSide = -side;
+        const boardPos = pt.clone().addScaledVector(perp, boardSide * 8.4);
+        if (distToTrackXZ(boardPos.x, boardPos.z) > 7.6) {
+          const bg = new THREE.Group();
+          bg.position.set(boardPos.x, 0, boardPos.z);
+          bg.rotation.y = Math.atan2(pt.x - boardPos.x, pt.z - boardPos.z);
+          [-1.8, 1.8].forEach((px) => {
+            const pMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.14, 3.6, 8), steelPostMat);
+            pMesh.position.set(px, 1.8, 0);
+            bg.add(pMesh);
+          });
+          const panel = new THREE.Mesh(
+            new THREE.BoxGeometry(4.8, 1.7, 0.22),
+            billboardMats[boardCount++ % billboardMats.length]
+          );
+          panel.position.set(0, 2.75, 0);
+          panel.castShadow = !isSoftwareGl;
+          bg.add(panel);
+          group.add(bg);
+        }
+      }
+    }
+
+    // Creative Obstacles: Striped Jersey Barriers, Rotating Cryo Spinners, Volatile Fuel Barrels & Launch Ramps
+    const barrierCanvas = document.createElement('canvas');
+    barrierCanvas.width = 128;
+    barrierCanvas.height = 64;
+    const bctx = barrierCanvas.getContext('2d')!;
+    bctx.fillStyle = '#0f172a';
+    bctx.fillRect(0, 0, 128, 64);
+    bctx.fillStyle = '#fbbf24';
+    for (let sx = -64; sx < 160; sx += 32) {
+      bctx.beginPath();
+      bctx.moveTo(sx, 0);
+      bctx.lineTo(sx + 18, 0);
+      bctx.lineTo(sx + 40, 64);
+      bctx.lineTo(sx + 22, 64);
+      bctx.closePath();
+      bctx.fill();
+    }
+    const barrierTex = new THREE.CanvasTexture(barrierCanvas);
+    barrierTex.colorSpace = THREE.SRGBColorSpace;
+
+    const barrierMat = new THREE.MeshStandardMaterial({ map: barrierTex, roughness: 0.45 });
+    const spinnerHubMat = new THREE.MeshStandardMaterial({
+      color: '#1e293b',
+      metalness: 0.6,
+      roughness: 0.3,
+    });
+    const spinnerBladeMat = new THREE.MeshStandardMaterial({
+      color: '#f43f5e',
+      emissive: '#e11d48',
+      emissiveIntensity: 0.72,
+      roughness: 0.22,
+    });
+    const barrelBodyMat = new THREE.MeshStandardMaterial({
+      color: '#f97316',
+      emissive: '#9a3412',
+      emissiveIntensity: 0.35,
+      metalness: 0.4,
+      roughness: 0.35,
+    });
+    const barrelBandMat = new THREE.MeshStandardMaterial({ color: '#fde047', roughness: 0.3 });
+    const rampDeckMat = new THREE.MeshStandardMaterial({
+      color: '#0ea5e9',
+      emissive: '#0284c7',
+      emissiveIntensity: 0.55,
+      roughness: 0.2,
+    });
+    const rampChevMat = new THREE.MeshBasicMaterial({ color: '#fef08a', side: THREE.DoubleSide });
+
+    getRaceTrackObstacles(mapId).forEach((ro) => {
       const wr = ro.radius / 25;
       const rg = new THREE.Group();
       rg.position.set((ro.x - ARENA_CENTER_X) / 25, 0, (ro.y - ARENA_CENTER_Y) / 25);
+      rg.rotation.y = ro.yaw;
 
-      const warnRing = new THREE.Mesh(
-        new THREE.RingGeometry(wr * 0.88, wr * 1.06, 20),
-        raceObsWarnMat
-      );
-      warnRing.rotation.x = -Math.PI / 2;
-      warnRing.position.y = 0.046;
-      rg.add(warnRing);
+      if (ro.kind === 'jump_ramp') {
+        const rampDeck = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.22, 3.2), rampDeckMat);
+        rampDeck.position.set(0, 0.38, 0);
+        rampDeck.rotation.x = -0.24;
+        rampDeck.castShadow = !isSoftwareGl;
+        const sideRailL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.65, 3.1), barrierMat);
+        sideRailL.position.set(-1.35, 0.32, 0);
+        const sideRailR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.65, 3.1), barrierMat);
+        sideRailR.position.set(1.35, 0.32, 0);
+        const strip = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.6), rampChevMat);
+        strip.rotation.x = -Math.PI / 2 - 0.24;
+        strip.position.set(0, 0.51, 0);
+        rg.add(rampDeck, sideRailL, sideRailR, strip);
+      } else if (ro.kind === 'cryo_spinner') {
+        const warnRing = new THREE.Mesh(
+          new THREE.RingGeometry(wr * 0.92, wr * 1.12, 24),
+          new THREE.MeshBasicMaterial({
+            color: '#f43f5e',
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.72,
+            depthWrite: false,
+          })
+        );
+        warnRing.rotation.x = -Math.PI / 2;
+        warnRing.position.y = 0.048;
 
-      if (ro.kind === 'rock') {
-        const boulder = new THREE.Mesh(new THREE.DodecahedronGeometry(wr * 0.78, 0), raceObsRockMat);
-        boulder.position.y = wr * 0.56;
-        boulder.rotation.set(rIdx * 0.4, rIdx * 1.1, 0.2);
-        boulder.scale.set(1.1, 0.92, 1.0);
-        boulder.castShadow = !isSoftwareGl;
-        boulder.receiveShadow = true;
-        const sideBoulder = new THREE.Mesh(new THREE.DodecahedronGeometry(wr * 0.42, 0), raceObsRockMat);
-        sideBoulder.position.set(wr * 0.42, wr * 0.28, wr * 0.22);
-        sideBoulder.castShadow = !isSoftwareGl;
-        rg.add(boulder, sideBoulder);
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.72, 0.5, 10), spinnerHubMat);
+        base.position.y = 0.25;
+        base.castShadow = !isSoftwareGl;
+
+        const rotor = new THREE.Group();
+        rotor.position.y = 0.72;
+        const bladeA = new THREE.Mesh(new THREE.BoxGeometry(wr * 2.1, 0.26, 0.34), spinnerBladeMat);
+        bladeA.castShadow = !isSoftwareGl;
+        const bladeB = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.26, wr * 2.1), spinnerBladeMat);
+        bladeB.castShadow = !isSoftwareGl;
+        const cap = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.75, 6), spinnerBladeMat);
+        cap.position.y = 0.42;
+        rotor.add(bladeA, bladeB, cap);
+        raceSpinnerRotors.push(rotor);
+        rg.add(warnRing, base, rotor);
+      } else if (ro.kind === 'fuel_barrel') {
+        const warnRing = new THREE.Mesh(
+          new THREE.RingGeometry(wr * 0.9, wr * 1.1, 20),
+          new THREE.MeshBasicMaterial({
+            color: '#fb923c',
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.75,
+            depthWrite: false,
+          })
+        );
+        warnRing.rotation.x = -Math.PI / 2;
+        warnRing.position.y = 0.048;
+        rg.add(warnRing);
+
+        [
+          { x: 0, z: -0.35 },
+          { x: -0.45, z: 0.38 },
+          { x: 0.45, z: 0.38 },
+        ].forEach((bp) => {
+          const b = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 1.05, 12), barrelBodyMat);
+          b.position.set(bp.x, 0.525, bp.z);
+          b.castShadow = !isSoftwareGl;
+          const band = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.18, 12), barrelBandMat);
+          band.position.set(bp.x, 0.55, bp.z);
+          rg.add(b, band);
+        });
       } else {
-        const plinth = new THREE.Mesh(
-          new THREE.CylinderGeometry(wr * 0.75, wr * 0.9, 0.35, 8),
-          raceObsRockMat
-        );
-        plinth.position.y = 0.175;
-        plinth.castShadow = !isSoftwareGl;
-        const spire = new THREE.Mesh(
-          new THREE.ConeGeometry(wr * 0.52, 1.85, 6),
-          raceObsPylonMat
-        );
-        spire.position.y = 1.2;
-        spire.castShadow = !isSoftwareGl;
-        rg.add(plinth, spire);
+        // jersey_barrier: Heavy striped concrete chicane block with hazard beacons
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(wr * 2.1, 0.95, 0.92), barrierMat);
+        wall.position.y = 0.48;
+        wall.castShadow = !isSoftwareGl;
+        wall.receiveShadow = true;
+        [-wr * 0.78, wr * 0.78].forEach((bx) => {
+          const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), windowGlowMat);
+          lamp.position.set(bx, 1.08, 0);
+          rg.add(lamp);
+        });
+        rg.add(wall);
       }
 
+      raceObstacleGroups.set(ro.id, rg);
       group.add(rg);
     });
   }
@@ -1526,11 +1902,41 @@ export function buildArcticEnvironment(
     waterDisc,
     depositRing,
     skyColorHex,
-    update(time, dt, ringRadiusWorld, bankReady, blessingActive = false) {
+    update(
+      time,
+      dt,
+      ringRadiusWorld,
+      bankReady,
+      blessingActive = false,
+      raceNextCheckpoint = 1,
+      smashedRaceObsIds
+    ) {
       ringWall.visible = gameMode === 'survival';
       ringFloor.visible = gameMode === 'survival';
       ringWall.scale.set(ringRadiusWorld, 1, ringRadiusWorld);
       ringFloor.scale.set(ringRadiusWorld, ringRadiusWorld, 1);
+
+      for (const rotor of raceSpinnerRotors) {
+        rotor.rotation.y = time * 2.4;
+      }
+
+      for (const [id, rg] of raceObstacleGroups.entries()) {
+        rg.visible = !smashedRaceObsIds?.has(id);
+      }
+
+      for (const cp of raceCheckpointHandles) {
+        const isActive = cp.num === raceNextCheckpoint;
+        const isDone = cp.num < raceNextCheckpoint;
+        cp.archMat.emissive.set(isActive ? '#34d399' : isDone ? '#38bdf8' : '#fbbf24');
+        cp.archMat.emissiveIntensity = isActive ? 0.85 + Math.sin(time * 6) * 0.25 : isDone ? 0.25 : 0.65;
+        cp.stripMat.color.set(isActive ? '#34d399' : isDone ? '#38bdf8' : '#fde047');
+        cp.stripMat.opacity = isActive ? 0.92 : isDone ? 0.35 : 0.72;
+        cp.beaconMesh.visible = isActive;
+        if (isActive) {
+          (cp.beaconMesh.material as THREE.MeshBasicMaterial).opacity =
+            0.14 + Math.sin(time * 5.2) * 0.07;
+        }
+      }
 
       blessingStrength = THREE.MathUtils.damp(blessingStrength, blessingActive ? 1 : 0, 5.5, dt);
       blessingGroup.visible = blessingStrength > 0.015;

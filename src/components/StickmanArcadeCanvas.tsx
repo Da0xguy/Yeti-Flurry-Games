@@ -74,9 +74,12 @@ const CANVAS_W = 1200;
 const CANVAS_H = 675;
 const RAID_FLOOR = 565;
 
-// Top-Down Station Map Constants (Among Us Style Multi-Room Escape)
-const STATION_W = 1680;
-const STATION_H = 980;
+// Top-Down Station Map Constants (Among Us Style 12-Room Facility Escape)
+const STATION_W = 2520;
+const STATION_H = 1540;
+const WING_B_CLUES_REQUIRED = 2;
+const AIRLOCK_POD_X = 2230;
+const AIRLOCK_POD_Y = 1250;
 
 interface StationRoom {
   id: string;
@@ -97,53 +100,204 @@ interface WallRect {
   doorId?: 'wing_b' | 'airlock';
 }
 
+interface StationEdge {
+  to: string;
+  doorX: number;
+  doorY: number;
+  requires?: 'wing_b' | 'airlock';
+}
+
 const STATION_ROOMS: StationRoom[] = [
-  { id: 'medbay', name: 'MEDBAY', x: 80, y: 80, w: 460, h: 370, floor: '#0f273d', accent: '#2dd4bf' },
-  { id: 'lab', name: 'RESEARCH LAB', x: 600, y: 80, w: 480, h: 370, floor: '#132444', accent: '#38bdf8' },
-  { id: 'electrical', name: 'ELECTRICAL', x: 1140, y: 80, w: 460, h: 370, floor: '#251d3a', accent: '#f59e0b' },
-  { id: 'cafeteria', name: 'CAFETERIA HUB', x: 80, y: 510, w: 460, h: 390, floor: '#11253e', accent: '#38bdf8' },
-  { id: 'reactor', name: 'REACTOR CORE', x: 600, y: 510, w: 480, h: 390, floor: '#1c1b38', accent: '#c084fc' },
-  { id: 'airlock', name: 'AIRLOCK EXIT', x: 1140, y: 510, w: 460, h: 390, floor: '#0d2b30', accent: '#34d399' },
+  { id: 'cryo_bay', name: 'CRYO BAY', x: 80, y: 80, w: 540, h: 420, floor: '#0d2238', accent: '#38bdf8' },
+  { id: 'medbay', name: 'MEDBAY', x: 680, y: 80, w: 540, h: 420, floor: '#0f273d', accent: '#2dd4bf' },
+  { id: 'lab', name: 'RESEARCH LAB', x: 1280, y: 80, w: 540, h: 420, floor: '#132444', accent: '#60a5fa' },
+  { id: 'electrical', name: 'ELECTRICAL', x: 1880, y: 80, w: 560, h: 420, floor: '#251d3a', accent: '#f59e0b' },
+  { id: 'quarters', name: 'CREW QUARTERS', x: 80, y: 560, w: 540, h: 420, floor: '#12203b', accent: '#818cf8' },
+  { id: 'cafeteria', name: 'CAFETERIA HUB', x: 680, y: 560, w: 540, h: 420, floor: '#11253e', accent: '#38bdf8' },
+  { id: 'reactor', name: 'REACTOR CORE', x: 1280, y: 560, w: 540, h: 420, floor: '#1c1b38', accent: '#c084fc' },
+  { id: 'security', name: 'SECURITY HUB', x: 1880, y: 560, w: 560, h: 420, floor: '#231730', accent: '#fb7185' },
+  { id: 'storage', name: 'STORAGE BAY', x: 80, y: 1040, w: 540, h: 420, floor: '#182234', accent: '#fb923c' },
+  { id: 'comms', name: 'COMMS ARRAY', x: 680, y: 1040, w: 540, h: 420, floor: '#0e253f', accent: '#38bdf8' },
+  { id: 'oxygen', name: 'OXYGEN PLANT', x: 1280, y: 1040, w: 540, h: 420, floor: '#0e2a35', accent: '#34d399' },
+  { id: 'airlock', name: 'AIRLOCK EXIT', x: 1880, y: 1040, w: 560, h: 420, floor: '#0d2b30', accent: '#34d399' },
 ];
 
 const STATION_VENTS = [
-  { id: 'v_med', x: 165, y: 155, room: 'MEDBAY' },
-  { id: 'v_lab', x: 985, y: 155, room: 'RESEARCH LAB' },
-  { id: 'v_elec', x: 1495, y: 155, room: 'ELECTRICAL' },
-  { id: 'v_react', x: 985, y: 815, room: 'REACTOR CORE' },
+  { id: 'v_cryo', x: 520, y: 155, room: 'cryo_bay' },
+  { id: 'v_med', x: 760, y: 155, room: 'medbay' },
+  { id: 'v_lab', x: 1735, y: 150, room: 'lab' },
+  { id: 'v_elec', x: 2350, y: 155, room: 'electrical' },
+  { id: 'v_react', x: 1735, y: 905, room: 'reactor' },
+  { id: 'v_stor', x: 155, y: 1385, room: 'storage' },
+  { id: 'v_oxy', x: 1735, y: 1110, room: 'oxygen' },
 ];
 
-// Solid bulkheads + 2 dynamic locked Blast Doors ('wing_b' and 'airlock')
+// Solid bulkheads + locked Blast Doors ('wing_b' at x=1820 and 'airlock' guarding Airlock Exit)
 const STATION_WALLS: WallRect[] = [
-  // Outer Hull
-  { x: 40, y: 40, w: 1600, h: 40 },
-  { x: 40, y: 900, w: 1600, h: 40 },
-  { x: 40, y: 80, w: 40, h: 820 },
-  { x: 1600, y: 80, w: 40, h: 820 },
+  // Outer Hull (2520x1540)
+  { x: 40, y: 40, w: 2440, h: 40 },
+  { x: 40, y: 1460, w: 2440, h: 40 },
+  { x: 40, y: 80, w: 40, h: 1380 },
+  { x: 2440, y: 80, w: 40, h: 1380 },
 
-  // Vertical Divider 1 (x: 540..600) with top doorway (210..330) & bottom doorway (650..770)
-  { x: 540, y: 80, w: 60, h: 130 },
-  { x: 540, y: 330, w: 60, h: 320 },
-  { x: 540, y: 770, w: 60, h: 130 },
+  // Vertical Divider 1 (x: 620..680) with 140px doorways (220..360, 700..840, 1180..1320)
+  { x: 620, y: 80, w: 60, h: 140 },
+  { x: 620, y: 360, w: 60, h: 340 },
+  { x: 620, y: 840, w: 60, h: 340 },
+  { x: 620, y: 1320, w: 60, h: 140 },
 
-  // Vertical Divider 2 (x: 1080..1140) with top Wing B door (210..330) & bottom Airlock door (650..770)
-  { x: 1080, y: 80, w: 60, h: 130 },
-  { x: 1080, y: 210, w: 60, h: 120, doorId: 'wing_b' },
-  { x: 1080, y: 330, w: 60, h: 320 },
-  { x: 1080, y: 650, w: 60, h: 120, doorId: 'airlock' },
-  { x: 1080, y: 770, w: 60, h: 130 },
+  // Vertical Divider 2 (x: 1220..1280) with 140px doorways (220..360, 700..840, 1180..1320)
+  { x: 1220, y: 80, w: 60, h: 140 },
+  { x: 1220, y: 360, w: 60, h: 340 },
+  { x: 1220, y: 840, w: 60, h: 340 },
+  { x: 1220, y: 1320, w: 60, h: 140 },
 
-  // Horizontal Divider (y: 450..510) with Col 1 doorway (250..370) & Col 2 doorway (780..900)
-  { x: 80, y: 450, w: 170, h: 60 },
-  { x: 370, y: 450, w: 410, h: 60 },
-  { x: 900, y: 450, w: 700, h: 60 },
+  // Vertical Divider 3 (x: 1820..1880): East Wing Blast Doors ('wing_b') & Airlock Door ('airlock')
+  { x: 1820, y: 80, w: 60, h: 140 },
+  { x: 1820, y: 220, w: 60, h: 140, doorId: 'wing_b' },
+  { x: 1820, y: 360, w: 60, h: 340 },
+  { x: 1820, y: 700, w: 60, h: 140, doorId: 'wing_b' },
+  { x: 1820, y: 840, w: 60, h: 340 },
+  { x: 1820, y: 1180, w: 60, h: 140, doorId: 'airlock' },
+  { x: 1820, y: 1320, w: 60, h: 140 },
+
+  // Horizontal Divider 1 (y: 500..560) with 140px doorways (280..420, 880..1020, 1480..1620, 2090..2230)
+  { x: 80, y: 500, w: 200, h: 60 },
+  { x: 420, y: 500, w: 460, h: 60 },
+  { x: 1020, y: 500, w: 460, h: 60 },
+  { x: 1620, y: 500, w: 470, h: 60 },
+  { x: 2230, y: 500, w: 210, h: 60 },
+
+  // Horizontal Divider 2 (y: 980..1040) with 140px doorways + South Airlock Blast Door
+  { x: 80, y: 980, w: 200, h: 60 },
+  { x: 420, y: 980, w: 460, h: 60 },
+  { x: 1020, y: 980, w: 460, h: 60 },
+  { x: 1620, y: 980, w: 470, h: 60 },
+  { x: 2090, y: 980, w: 140, h: 60, doorId: 'airlock' },
+  { x: 2230, y: 980, w: 210, h: 60 },
 ];
+
+const STATION_GRAPH: Record<string, StationEdge[]> = {
+  cryo_bay: [
+    { to: 'medbay', doorX: 650, doorY: 290 },
+    { to: 'quarters', doorX: 350, doorY: 530 },
+  ],
+  medbay: [
+    { to: 'cryo_bay', doorX: 650, doorY: 290 },
+    { to: 'lab', doorX: 1250, doorY: 290 },
+    { to: 'cafeteria', doorX: 950, doorY: 530 },
+  ],
+  lab: [
+    { to: 'medbay', doorX: 1250, doorY: 290 },
+    { to: 'electrical', doorX: 1850, doorY: 290, requires: 'wing_b' },
+    { to: 'reactor', doorX: 1550, doorY: 530 },
+  ],
+  electrical: [
+    { to: 'lab', doorX: 1850, doorY: 290, requires: 'wing_b' },
+    { to: 'security', doorX: 2160, doorY: 530 },
+  ],
+  quarters: [
+    { to: 'cryo_bay', doorX: 350, doorY: 530 },
+    { to: 'cafeteria', doorX: 650, doorY: 770 },
+    { to: 'storage', doorX: 350, doorY: 1010 },
+  ],
+  cafeteria: [
+    { to: 'medbay', doorX: 950, doorY: 530 },
+    { to: 'quarters', doorX: 650, doorY: 770 },
+    { to: 'reactor', doorX: 1250, doorY: 770 },
+    { to: 'comms', doorX: 950, doorY: 1010 },
+  ],
+  reactor: [
+    { to: 'lab', doorX: 1550, doorY: 530 },
+    { to: 'cafeteria', doorX: 1250, doorY: 770 },
+    { to: 'security', doorX: 1850, doorY: 770, requires: 'wing_b' },
+    { to: 'oxygen', doorX: 1550, doorY: 1010 },
+  ],
+  security: [
+    { to: 'electrical', doorX: 2160, doorY: 530 },
+    { to: 'reactor', doorX: 1850, doorY: 770, requires: 'wing_b' },
+    { to: 'airlock', doorX: 2160, doorY: 1010, requires: 'airlock' },
+  ],
+  storage: [
+    { to: 'quarters', doorX: 350, doorY: 1010 },
+    { to: 'comms', doorX: 650, doorY: 1250 },
+  ],
+  comms: [
+    { to: 'cafeteria', doorX: 950, doorY: 1010 },
+    { to: 'storage', doorX: 650, doorY: 1250 },
+    { to: 'oxygen', doorX: 1250, doorY: 1250 },
+  ],
+  oxygen: [
+    { to: 'reactor', doorX: 1550, doorY: 1010 },
+    { to: 'comms', doorX: 1250, doorY: 1250 },
+    { to: 'airlock', doorX: 1850, doorY: 1250, requires: 'airlock' },
+  ],
+  airlock: [
+    { to: 'oxygen', doorX: 1850, doorY: 1250, requires: 'airlock' },
+    { to: 'security', doorX: 2160, doorY: 1010, requires: 'airlock' },
+  ],
+};
+
+function getStationRoomAt(x: number, y: number): StationRoom {
+  const exact = STATION_ROOMS.find((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
+  if (exact) return exact;
+  let best = STATION_ROOMS[0];
+  let bestD = Infinity;
+  for (const r of STATION_ROOMS) {
+    const d = Math.hypot(x - (r.x + r.w * 0.5), y - (r.y + r.h * 0.5));
+    if (d < bestD) {
+      bestD = d;
+      best = r;
+    }
+  }
+  return best;
+}
+
+function getNextStationWaypoint(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  wingBOpen: boolean,
+  airlockOpen: boolean
+): { x: number; y: number; sameRoom: boolean; reachable: boolean } {
+  const startRoom = getStationRoomAt(fromX, fromY);
+  const goalRoom = getStationRoomAt(toX, toY);
+  if (startRoom.id === goalRoom.id) {
+    return { x: toX, y: toY, sameRoom: true, reachable: true };
+  }
+  const visited = new Set<string>([startRoom.id]);
+  const queue: { id: string; firstDoor?: { x: number; y: number } }[] = [{ id: startRoom.id }];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    const edges = STATION_GRAPH[cur.id] || [];
+    for (const edge of edges) {
+      if (edge.requires === 'wing_b' && !wingBOpen) continue;
+      if (edge.requires === 'airlock' && !airlockOpen) continue;
+      if (visited.has(edge.to)) continue;
+      const firstDoor = cur.firstDoor || { x: edge.doorX, y: edge.doorY };
+      if (edge.to === goalRoom.id) {
+        return { x: firstDoor.x, y: firstDoor.y, sameRoom: false, reachable: true };
+      }
+      visited.add(edge.to);
+      queue.push({ id: edge.to, firstDoor });
+    }
+  }
+  return {
+    x: startRoom.x + startRoom.w * 0.5,
+    y: startRoom.y + startRoom.h * 0.5,
+    sameRoom: false,
+    reachable: false,
+  };
+}
 
 interface FighterEntity {
   x: number;
   y: number;
   vx: number;
   vy: number;
+  knockVx?: number;
+  knockVy?: number;
   facing: 1 | -1;
   aimY?: number;
   hp: number;
@@ -184,6 +338,8 @@ interface FighterEntity {
   summonedHalf?: boolean;
   patrolMinX?: number;
   patrolMaxX?: number;
+  patrolTargetX?: number;
+  patrolTargetY?: number;
   alertedUntil?: number;
   ventCooldown?: number;
 }
@@ -502,13 +658,16 @@ function buildRaidStage(stage: number, colorwayForBoss: YetiColorId) {
 
 function buildEscapeSector(sector: number) {
   const clueTemplates: { x: number; y: number; room: string; label: string }[] = [
-    { x: 235, y: 240, room: 'MEDBAY', label: 'Biometric Scan Key' },
-    { x: 830, y: 760, room: 'REACTOR CORE', label: 'Core Override Code' },
-    { x: 840, y: 210, room: 'RESEARCH LAB', label: 'Cryo Access Pad' },
-    { x: 1390, y: 245, room: 'ELECTRICAL', label: 'Breaker Fuse Chip' },
-    { x: 200, y: 785, room: 'CAFETERIA HUB', label: 'Captain Vault Card' },
+    { x: 270, y: 280, room: 'CRYO BAY', label: 'Biometric Cryo Key' },
+    { x: 1410, y: 650, room: 'REACTOR CORE', label: 'Core Override Code' },
+    { x: 1045, y: 1295, room: 'COMMS ARRAY', label: 'Encrypted Uplink Chip' },
+    { x: 340, y: 1250, room: 'STORAGE BAY', label: 'Cargo Vault Pass' },
+    { x: 2160, y: 245, room: 'ELECTRICAL', label: 'High-Volt Breaker Key' },
+    { x: 1680, y: 225, room: 'RESEARCH LAB', label: 'Cryo Access Pad' },
+    { x: 2040, y: 805, room: 'SECURITY HUB', label: 'Warden Override Seal' },
+    { x: 1650, y: 1255, room: 'OXYGEN PLANT', label: 'Atmos Purge Token' },
   ];
-  const cluesNeeded = Math.min(5, 2 + sector); // Stage 1 -> 3 clues, Stage 2 -> 4, Stage 3 -> 5
+  const cluesNeeded = Math.min(8, 4 + sector); // Sector 1 -> 5 clues, Sector 2 -> 6, Sector 3 -> 7
   const clues: EscapeClue[] = clueTemplates.slice(0, cluesNeeded).map((c, idx) => ({
     id: `clue_${sector}_${idx}`,
     x: c.x,
@@ -520,21 +679,26 @@ function buildEscapeSector(sector: number) {
   }));
 
   const imposterSpawns = [
-    { x: 380, y: 240, name: 'Red Imposter' },
-    { x: 860, y: 290, name: 'Vent Stalker' },
-    { x: 880, y: 720, name: 'Shadow Crew' },
-    { x: 1380, y: 270, name: 'Dark Saboteur' },
+    { x: 350, y: 290, name: 'Red Imposter' },
+    { x: 1620, y: 260, name: 'Vent Stalker' },
+    { x: 1660, y: 690, name: 'Reactor Phantom' },
+    { x: 960, y: 1320, name: 'Comms Saboteur' },
+    { x: 350, y: 1250, name: 'Cargo Lurker' },
+    { x: 2160, y: 250, name: 'Volt Assassin' },
+    { x: 2120, y: 780, name: 'Security Enforcer' },
   ];
-  const impCount = Math.min(4, 1 + sector);
+  const impCount = Math.min(imposterSpawns.length, 4 + sector); // 5, 6, 7 imposters
   const imposters: FighterEntity[] = imposterSpawns.slice(0, impCount).map((sp, idx) => ({
     x: sp.x,
     y: sp.y,
     vx: 0,
     vy: 0,
-    facing: -1,
-    hp: 95,
-    maxHp: 95,
-    pose: 'run',
+    knockVx: 0,
+    knockVy: 0,
+    facing: idx % 2 === 0 ? -1 : 1,
+    hp: 105 + sector * 22,
+    maxHp: 105 + sector * 22,
+    pose: 'idle',
     actionTimer: 0,
     actionDuration: 0.25,
     dashTimer: 0,
@@ -558,22 +722,25 @@ function buildEscapeSector(sector: number) {
     name: sp.name,
     stroke: '#ef4444',
     accent: '#fb7185',
-    speed: 155 + sector * 18 + idx * 8,
-    aggro: 0.8,
-    aiCooldown: 0.5,
-    ventCooldown: 7 + idx * 3,
+    speed: 172 + sector * 18 + (idx % 3) * 8,
+    aggro: 0.85,
+    aiCooldown: 0.8 + (idx % 3) * 0.25,
+    bossPhaseCd: 3.5 + idx * 0.7,
+    ventCooldown: 8 + idx * 2.5,
   }));
 
-  // Hard End-of-Level Boss guarding the Airlock Escape Shuttle!
+  // Hard End-of-Level Boss guarding the Airlock Escape Shuttle inside Room 12 (AIRLOCK EXIT)
   imposters.push({
-    x: 1355,
-    y: 705,
+    x: 2050,
+    y: 1250,
     vx: 0,
     vy: 0,
+    knockVx: 0,
+    knockVy: 0,
     facing: -1,
-    hp: 260 + sector * 75,
-    maxHp: 260 + sector * 75,
-    pose: 'guard',
+    hp: 340 + sector * 110,
+    maxHp: 340 + sector * 110,
+    pose: 'idle',
     actionTimer: 0,
     actionDuration: 0.3,
     dashTimer: 0,
@@ -598,32 +765,39 @@ function buildEscapeSector(sector: number) {
     name: sector === 3 ? 'Apex Imposter Overlord' : `Airlock Warden Lv.${sector}`,
     stroke: '#f43f5e',
     accent: '#fde047',
-    speed: 195 + sector * 16,
-    aggro: 0.96,
+    speed: 210 + sector * 18,
+    aggro: 0.98,
     aiCooldown: 1.0,
-    bossPhaseCd: 2.6,
+    bossPhaseCd: 2.5,
     summonedHalf: false,
     ventCooldown: 999,
   });
 
-  // Sabotaged Room/Corridor Obstacles & Traps
+  // Sabotaged Room/Corridor Obstacles & Traps across the 12-Room Facility
   const hazards: StationHazard[] = [
-    { id: `sh_1_${sector}`, x: 310, y: 400, radius: 42, kind: 'cryo_spill', hp: 99, maxHp: 99 },
-    { id: `sh_2_${sector}`, x: 705, y: 265, radius: 26, kind: 'cargo_block', hp: 45, maxHp: 45 },
-    { id: `sh_3_${sector}`, x: 965, y: 245, radius: 32, kind: 'shock_wire', hp: 99, maxHp: 99 },
-    { id: `sh_4_${sector}`, x: 710, y: 710, radius: 44, kind: 'cryo_spill', hp: 99, maxHp: 99 },
-    { id: `sh_5_${sector}`, x: 950, y: 690, radius: 26, kind: 'cargo_block', hp: 45, maxHp: 45 },
-    { id: `sh_6_${sector}`, x: 1320, y: 360, radius: 32, kind: 'shock_wire', hp: 99, maxHp: 99 },
-    { id: `sh_7_${sector}`, x: 1245, y: 710, radius: 22, kind: 'sabotage_mine', hp: 20, maxHp: 20 },
+    { id: `sh_1_${sector}`, x: 460, y: 245, radius: 44, kind: 'cryo_spill', hp: 99, maxHp: 99 },
+    { id: `sh_2_${sector}`, x: 950, y: 265, radius: 26, kind: 'cargo_block', hp: 50, maxHp: 50 },
+    { id: `sh_3_${sector}`, x: 1620, y: 295, radius: 34, kind: 'shock_wire', hp: 99, maxHp: 99 },
+    { id: `sh_4_${sector}`, x: 2150, y: 315, radius: 34, kind: 'shock_wire', hp: 99, maxHp: 99 },
+    { id: `sh_5_${sector}`, x: 350, y: 690, radius: 44, kind: 'cryo_spill', hp: 99, maxHp: 99 },
+    { id: `sh_6_${sector}`, x: 1410, y: 840, radius: 26, kind: 'cargo_block', hp: 50, maxHp: 50 },
+    { id: `sh_7_${sector}`, x: 1690, y: 830, radius: 22, kind: 'sabotage_mine', hp: 20, maxHp: 20 },
+    { id: `sh_8_${sector}`, x: 2120, y: 695, radius: 24, kind: 'sabotage_mine', hp: 20, maxHp: 20 },
+    { id: `sh_9_${sector}`, x: 420, y: 1180, radius: 26, kind: 'cargo_block', hp: 50, maxHp: 50 },
+    { id: `sh_10_${sector}`, x: 950, y: 1140, radius: 44, kind: 'cryo_spill', hp: 99, maxHp: 99 },
+    { id: `sh_11_${sector}`, x: 1550, y: 1320, radius: 34, kind: 'shock_wire', hp: 99, maxHp: 99 },
+    { id: `sh_12_${sector}`, x: 1990, y: 1250, radius: 22, kind: 'sabotage_mine', hp: 20, maxHp: 20 },
   ];
 
   const pickups: Pickup2D[] = [
-    { id: `ep_1_${sector}`, x: 420, y: 630, vy: 0, kind: 'drop' },
-    { id: `ep_2_${sector}`, x: 185, y: 340, vy: 0, kind: 'shield' },
-    { id: `ep_3_${sector}`, x: 710, y: 615, vy: 0, kind: 'gem' },
-    { id: `ep_4_${sector}`, x: 965, y: 315, vy: 0, kind: 'medkit' },
-    { id: `ep_5_${sector}`, x: 1340, y: 345, vy: 0, kind: 'rage' },
-    { id: `ep_6_${sector}`, x: 1460, y: 185, vy: 0, kind: 'gem' },
+    { id: `ep_1_${sector}`, x: 760, y: 740, vy: 0, kind: 'drop' },
+    { id: `ep_2_${sector}`, x: 195, y: 400, vy: 0, kind: 'shield' },
+    { id: `ep_3_${sector}`, x: 1120, y: 240, vy: 0, kind: 'medkit' },
+    { id: `ep_4_${sector}`, x: 1410, y: 220, vy: 0, kind: 'gem' },
+    { id: `ep_5_${sector}`, x: 2280, y: 190, vy: 0, kind: 'rage' },
+    { id: `ep_6_${sector}`, x: 480, y: 860, vy: 0, kind: 'magnet' },
+    { id: `ep_7_${sector}`, x: 1670, y: 1140, vy: 0, kind: 'shield' },
+    { id: `ep_8_${sector}`, x: 2040, y: 890, vy: 0, kind: 'medkit' },
   ];
 
   return { clues, imposters, hazards, pickups };
@@ -829,7 +1003,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         stationHazards = built.hazards;
         enemies = built.imposters;
         pickups = built.pickups;
-        player = makeInitialFighter(true, 290, 700);
+        player = makeInitialFighter(true, 930, 770);
       } else {
         player = makeInitialFighter(true, 240, 470);
         runnerPlatforms = [
@@ -840,7 +1014,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         ];
       }
 
-      const totalTime = mode === 'stickman_wrestling' ? 210 : mode === 'stickman_brawl' ? 200 : 180;
+      const totalTime = mode === 'stickman_wrestling' ? 210 : mode === 'stickman_brawl' ? 260 : 180;
 
       stateRef.current = {
         phase: 'PLAYING',
@@ -858,8 +1032,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         comboTimer: 0,
         waveOrBout: 1,
         shake: 0,
-        cameraX: 0,
-        cameraY: mode === 'stickman_brawl' ? Math.max(0, player.y - CANVAS_H * 0.5) : 0,
+        cameraX: mode === 'stickman_brawl' ? Math.max(0, Math.min(STATION_W - CANVAS_W, player.x - CANVAS_W * 0.5)) : 0,
+        cameraY: mode === 'stickman_brawl' ? Math.max(0, Math.min(STATION_H - CANVAS_H, player.y - CANVAS_H * 0.5)) : 0,
         levelEndX,
         slowMoUntil: 0,
         radarPingUntil: performance.now() + 2600,
@@ -895,10 +1069,10 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
       } else if (mode === 'stickman_brawl') {
         soundEngine.playBell(1);
         showBanner(
-          'SECTOR 1: FIND 3 CLUES TO ESCAPE',
-          'Search rooms, analyze Clues (E/J), stun Imposters (K), reach Airlock!',
+          'SECTOR 1: FIND 5 CLUES ACROSS 12 ROOMS',
+          'Find 2 Clues to unlock East Wing, stun Imposters (K), reach Airlock!',
           '#2dd4bf',
-          2600
+          2800
         );
       } else {
         soundEngine.playBoost();
@@ -1017,12 +1191,17 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
 
     const found = st.escapeClues.filter((c) => c.collected).length;
     const total = st.escapeClues.length;
-    if (found === 1 && total > 1) {
+    if (found === WING_B_CLUES_REQUIRED && total > WING_B_CLUES_REQUIRED) {
       soundEngine.playBoost();
-      showBanner(`CLUE 1/${total}: ${clue.label.toUpperCase()}`, 'ELECTRICAL WING UNLOCKED!', '#38bdf8', 2000);
+      showBanner(
+        `CLUE ${found}/${total}: ${clue.label.toUpperCase()}`,
+        'EAST SECURITY WING UNLOCKED!',
+        '#38bdf8',
+        2100
+      );
     } else if (found >= total) {
       soundEngine.playBell(2);
-      showBanner('ALL CLUES FOUND!', 'AIRLOCK ESCAPE DOOR OPEN! RUN TO AIRLOCK!', '#34d399', 2600);
+      showBanner('ALL CLUES FOUND!', 'AIRLOCK ESCAPE DOOR OPEN! DEFEAT WARDEN & ESCAPE!', '#34d399', 2600);
     } else {
       showBanner(`CLUE ${found}/${total} FOUND!`, `${clue.label} uploaded`, '#fde047', 1500);
     }
@@ -1408,10 +1587,16 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
       const dealt = Math.round(dmg * mult);
       e.hp = Math.max(0, e.hp - dealt);
       e.flashTimer = 0.16;
-      e.vx = knockX;
-      if (st.mode !== 'stickman_brawl' && knockY < -50) {
-        e.vy = knockY;
-        e.grounded = false;
+      if (st.mode === 'stickman_brawl') {
+        e.knockVx = knockX;
+        e.knockVy = Math.max(-180, Math.min(180, knockY));
+        e.alertedUntil = now + 4500;
+      } else {
+        e.vx = knockX;
+        if (knockY < -50) {
+          e.vy = knockY;
+          e.grounded = false;
+        }
       }
       e.pose = e.hp <= 0 ? 'down' : 'hurt';
       e.actionTimer = 0.24;
@@ -1439,7 +1624,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         });
       }
       if (includePowerUp) {
-        const kinds: Pickup2D['kind'][] = ['medkit', 'shield', 'rage', 'magnet'];
+        const kinds: Pickup2D['kind'][] = ['medkit', 'shield', 'shield', 'rage', 'magnet'];
         st.pickups.push({
           id: `pu_${Math.random().toString(36).slice(2, 8)}`,
           x,
@@ -1460,7 +1645,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
 
     const collidesStationWall = (cx: number, cy: number, radius: number, st: NonNullable<typeof stateRef.current>) => {
       const cluesFound = st.escapeClues.filter((c) => c.collected).length;
-      const wingBOpen = cluesFound >= 1;
+      const wingBOpen = cluesFound >= WING_B_CLUES_REQUIRED;
       const airlockOpen = cluesFound >= st.escapeClues.length;
       for (const w of STATION_WALLS) {
         if (w.doorId === 'wing_b' && wingBOpen) continue;
@@ -1483,6 +1668,85 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         }
       }
       return false;
+    };
+
+    const hasStationLineOfSight = (
+      x1: number,
+      y1: number,
+      x2: number,
+      y2: number,
+      st: NonNullable<typeof stateRef.current>
+    ) => {
+      const d = Math.hypot(x2 - x1, y2 - y1);
+      if (d < 24) return true;
+      const steps = Math.ceil(d / 24);
+      for (let sIdx = 1; sIdx < steps; sIdx++) {
+        const t = sIdx / steps;
+        if (collidesStationWall(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, 6, st)) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    const moveStationEntity = (
+      ent: FighterEntity,
+      dxStep: number,
+      dyStep: number,
+      radius: number,
+      st: NonNullable<typeof stateRef.current>
+    ) => {
+      let blockedX = false;
+      let blockedY = false;
+
+      if (Math.abs(dxStep) > 0.001) {
+        const candX = ent.x + dxStep;
+        if (!collidesStationWall(candX, ent.y, radius, st)) {
+          ent.x = candX;
+        } else {
+          // Smooth corner slide around doorway frames
+          let slid = false;
+          for (const nudge of [6, -6, 12, -12]) {
+            if (!collidesStationWall(candX, ent.y + nudge, radius, st)) {
+              ent.x = candX;
+              ent.y += nudge * 0.45;
+              slid = true;
+              break;
+            }
+          }
+          if (!slid) blockedX = true;
+        }
+      }
+
+      if (Math.abs(dyStep) > 0.001) {
+        const candY = ent.y + dyStep;
+        if (!collidesStationWall(ent.x, candY, radius, st)) {
+          ent.y = candY;
+        } else {
+          let slid = false;
+          for (const nudge of [6, -6, 12, -12]) {
+            if (!collidesStationWall(ent.x + nudge, candY, radius, st)) {
+              ent.y = candY;
+              ent.x += nudge * 0.45;
+              slid = true;
+              break;
+            }
+          }
+          if (!slid) blockedY = true;
+        }
+      }
+
+      // Unstick safeguard if entity ever overlaps a wall or newly dropped crate
+      if (collidesStationWall(ent.x, ent.y, radius - 1, st)) {
+        const room = getStationRoomAt(ent.x, ent.y);
+        const rx = room.x + room.w * 0.5;
+        const ry = room.y + room.h * 0.5;
+        const rd = Math.hypot(rx - ent.x, ry - ent.y) || 1;
+        ent.x += ((rx - ent.x) / rd) * 8;
+        ent.y += ((ry - ent.y) / rd) * 8;
+      }
+
+      return { blockedX, blockedY };
     };
 
     const stepPhysics = (dt: number) => {
@@ -1524,6 +1788,49 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
       }
 
       st.runnerHeavyCd = Math.max(0, st.runnerHeavyCd - dt);
+
+      // Periodic randomized power-up loot drops (including Frost Shield) in Raid & Clue Escape
+      if (st.mode === 'stickman_wrestling' || st.mode === 'stickman_brawl') {
+        st.pickupSpawnTimer -= dt;
+        if (st.pickupSpawnTimer <= 0) {
+          st.pickupSpawnTimer = 11 + Math.random() * 5;
+          if (st.pickups.length < 18) {
+            const dropPool: Pickup2D['kind'][] = ['shield', 'medkit', 'rage', 'magnet', 'shield'];
+            const kind = dropPool[Math.floor(Math.random() * dropPool.length)];
+            if (st.mode === 'stickman_wrestling') {
+              const dropX = Math.max(
+                140,
+                Math.min(st.levelEndX - 180, p.x + p.facing * (140 + Math.random() * 140))
+              );
+              st.pickups.push({
+                id: `lpu_${Math.random().toString(36).slice(2, 8)}`,
+                x: dropX,
+                y: 80,
+                vy: 40,
+                kind,
+              });
+            } else {
+              for (let attempt = 0; attempt < 8; attempt++) {
+                const ang = Math.random() * Math.PI * 2;
+                const r = 130 + Math.random() * 170;
+                const candX = Math.max(90, Math.min(STATION_W - 90, p.x + Math.cos(ang) * r));
+                const candY = Math.max(90, Math.min(STATION_H - 90, p.y + Math.sin(ang) * r));
+                if (!collidesStationWall(candX, candY, 22, st)) {
+                  st.pickups.push({
+                    id: `spu_${Math.random().toString(36).slice(2, 8)}`,
+                    x: candX,
+                    y: candY,
+                    vy: 0,
+                    kind,
+                  });
+                  spawnParticles(candX, candY, '#38bdf8', 8, 130);
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
 
       // === MODE 1: KILLER BEAN-STYLE SIDE-SCROLLING LEVEL RAID ('stickman_wrestling') ===
       if (st.mode === 'stickman_wrestling') {
@@ -1625,8 +1932,10 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               p.y - 72 < obs.y
             ) {
               handlePlayerDamage(18, (p.x >= obs.x ? 1 : -1) * 240);
-              p.slowUntil = now + 1300;
-              showBanner('AIR-DROP IMPACT! SLOWED', undefined, '#fb923c', 850);
+              if (now >= p.shieldUntil) {
+                p.slowUntil = now + 1300;
+                showBanner('AIR-DROP IMPACT! SLOWED', undefined, '#fb923c', 850);
+              }
             }
             if (obs.y >= obs.targetY) {
               obs.y = obs.targetY;
@@ -1647,8 +1956,10 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
             ) {
               obs.hitCooldown = 0.75;
               handlePlayerDamage(14, (p.x >= obs.x ? 1 : -1) * 260);
-              p.slowUntil = now + 900;
-              showBanner('LASER SHOCK! SHOOT OR KICK (K)', undefined, '#fb7185', 850);
+              if (now >= p.shieldUntil) {
+                p.slowUntil = now + 900;
+                showBanner('LASER SHOCK! SHOOT OR KICK (K)', undefined, '#fb7185', 850);
+              }
             }
           } else if (obs.kind === 'airdrop_crate' && !obs.falling) {
             const halfW = obs.w * 0.5 + 16;
@@ -1668,12 +1979,14 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           } else if (obs.kind === 'cryo_mine' && !obs.falling) {
             if (Math.abs(p.x - obs.x) < obs.w * 0.5 + 16 && Math.abs(p.y - obs.y) < 34) {
               handlePlayerDamage(16, (p.x >= obs.x ? 1 : -1) * 280);
-              p.vy = -340;
-              p.grounded = false;
-              p.slowUntil = now + 1800;
+              if (now >= p.shieldUntil) {
+                p.vy = -340;
+                p.grounded = false;
+                p.slowUntil = now + 1800;
+                showBanner('CRYO MINE DETONATED! SLOWED', undefined, '#38bdf8', 950);
+              }
               spawnParticles(obs.x, obs.y - 12, '#38bdf8', 18, 250);
               soundEngine.playSlam();
-              showBanner('CRYO MINE DETONATED! SLOWED', undefined, '#38bdf8', 950);
               st.raidObstacles.splice(oi, 1);
             }
           }
@@ -1928,7 +2241,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               soundEngine.playSlam();
               if (Math.abs(p.x - e.x) < 145 && Math.abs(p.y - e.y) < 85) {
                 handlePlayerDamage(20, (p.x >= e.x ? 1 : -1) * 310);
-                p.slowUntil = now + 1100;
+                if (now >= p.shieldUntil) p.slowUntil = now + 1100;
               }
             }
           }
@@ -1941,6 +2254,19 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           }
           if (e.patrolMinX !== undefined && e.patrolMaxX !== undefined) {
             e.x = Math.max(e.patrolMinX, Math.min(e.patrolMaxX, e.x));
+          }
+
+          // Enemy Contact Check (Frost Shield deflects contact for 10s)
+          if (Math.abs(p.x - e.x) < (e.isBoss ? 40 : 30) && Math.abs(p.y - e.y) < 62) {
+            const pushDir = p.x >= e.x ? 1 : -1;
+            if (now < p.shieldUntil) {
+              e.vx = -pushDir * 260;
+              e.x += -pushDir * 14;
+              spawnParticles(p.x, p.y - 42, '#38bdf8', 10, 180);
+              soundEngine.playDash();
+            } else if (p.dashTimer <= 0) {
+              handlePlayerDamage(e.isBoss ? 16 : 12, pushDir * 230);
+            }
           }
         }
 
@@ -2016,19 +2342,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           }
         }
 
-        // Axis-separated wall, locked-door & cargo_block sliding collision
-        const nextX = p.x + p.vx * dt;
-        if (!collidesStationWall(nextX, p.y, 20, st)) {
-          p.x = nextX;
-        } else {
-          p.vx = 0;
-        }
-        const nextY = p.y + p.vy * dt;
-        if (!collidesStationWall(p.x, nextY, 20, st)) {
-          p.y = nextY;
-        } else {
-          p.vy = 0;
-        }
+        // Wall-sliding + doorway corner-nudge collision (keeps player gliding cleanly through 140px doors)
+        moveStationEntity(p, p.vx * dt, p.vy * dt, 20, st);
 
         // Step Station Floor Obstacles (Cryo Spills, Shock Wires, Sabotage Mines)
         for (let hi = st.stationHazards.length - 1; hi >= 0; hi--) {
@@ -2069,41 +2384,49 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         st.cameraX += (targetCamX - st.cameraX) * Math.min(1, dt * 7);
         st.cameraY += (targetCamY - st.cameraY) * Math.min(1, dt * 7);
 
-        // Quick Proximity Scan on Clues (auto-scans within 48px OR instant on E/J)
+        const cluesFoundNow = st.escapeClues.filter((c) => c.collected).length;
+        const wingBOpen = cluesFoundNow >= WING_B_CLUES_REQUIRED;
+        const allCluesCollected = cluesFoundNow >= st.escapeClues.length;
+        const playerRoom = getStationRoomAt(p.x, p.y);
+
+        // Quick Proximity Scan on Clues (auto-scans within 52px OR instant on E/J)
         for (const clue of st.escapeClues) {
           if (clue.collected) continue;
           const dist = Math.hypot(clue.x - p.x, clue.y - p.y);
-          if (dist < 48) {
-            clue.scanProgress = Math.min(1, clue.scanProgress + dt * 2.2);
+          if (dist < 52) {
+            clue.scanProgress = Math.min(1, clue.scanProgress + dt * 1.65);
             if (clue.scanProgress >= 1) {
               collectEscapeClue(clue);
             }
           } else {
-            clue.scanProgress = Math.max(0, clue.scanProgress - dt * 1.4);
+            clue.scanProgress = Math.max(0, clue.scanProgress - dt * 1.2);
           }
         }
 
-        const allCluesCollected = st.escapeClues.every((c) => c.collected);
-
-        // Update Imposter & Airlock Warden Boss AI
+        // Update Imposter & Airlock Warden Boss AI (BFS doorway routing + zero wall-glitching)
         for (let i = st.enemies.length - 1; i >= 0; i--) {
           const imp = st.enemies[i];
           imp.flashTimer = Math.max(0, imp.flashTimer - dt);
           if (imp.actionTimer > 0) imp.actionTimer = Math.max(0, imp.actionTimer - dt);
           imp.aiCooldown = Math.max(0, (imp.aiCooldown || 0) - dt);
+          imp.hitCooldown = Math.max(0, (imp.hitCooldown || 0) - dt);
           imp.ventCooldown = Math.max(0, (imp.ventCooldown || 6) - dt);
           imp.bossPhaseCd = Math.max(0, (imp.bossPhaseCd ?? 2.8) - dt);
+          imp.knockVx = (imp.knockVx || 0) * Math.pow(0.015, dt);
+          imp.knockVy = (imp.knockVy || 0) * Math.pow(0.015, dt);
+          if (Math.abs(imp.knockVx) < 4) imp.knockVx = 0;
+          if (Math.abs(imp.knockVy) < 4) imp.knockVy = 0;
 
           if (imp.hp <= 0) {
             st.knockouts += 1;
-            st.drops += imp.isBoss ? 8 : 2;
-            st.gems += imp.isBoss ? 4 : 1;
-            st.score += imp.isBoss ? 420 : 140;
-            spawnDropBurst(imp.x, imp.y, imp.isBoss ? 4 : 2, imp.isBoss || Math.random() < 0.4);
+            st.drops += imp.isBoss ? 10 : 2;
+            st.gems += imp.isBoss ? 5 : 1;
+            st.score += imp.isBoss ? 480 : 150;
+            spawnDropBurst(imp.x, imp.y, imp.isBoss ? 5 : 2, imp.isBoss || Math.random() < 0.45);
             spawnParticles(imp.x, imp.y - 24, '#ef4444', 18, 220);
             if (imp.isBoss) {
               showBanner('AIRLOCK WARDEN DEFEATED!', 'ESCAPE POD READY IN AIRLOCK!', '#34d399', 2200);
-            } else if (st.stationHazards.length < 14 && Math.random() < 0.6) {
+            } else if (st.stationHazards.length < 18 && Math.random() < 0.55) {
               st.stationHazards.push({
                 id: `sm_${Math.random().toString(36).slice(2, 7)}`,
                 x: imp.x,
@@ -2121,62 +2444,75 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           const stunned = now < imp.stunnedUntil;
           if (stunned) {
             imp.pose = 'hurt';
-            imp.vx *= Math.pow(0.05, dt);
-            imp.vy *= Math.pow(0.05, dt);
+            imp.vx = 0;
+            imp.vy = 0;
+            moveStationEntity(imp, (imp.knockVx || 0) * dt, (imp.knockVy || 0) * dt, 18, st);
             continue;
           }
 
           const dist = Math.hypot(p.x - imp.x, p.y - imp.y);
+          const impRoom = getStationRoomAt(imp.x, imp.y);
+          const hasLoS = dist < 520 && hasStationLineOfSight(imp.x, imp.y, p.x, p.y, st);
 
           if (imp.isBoss) {
-            // Airlock Warden Boss Phase Logic
-            const bossActive = allCluesCollected || dist < 480;
-            if (imp.hp <= imp.maxHp * 0.5 && !imp.summonedHalf) {
+            // Airlock Warden Boss stays inside AIRLOCK EXIT until Airlock blast door is unlocked!
+            const bossActive = allCluesCollected || playerRoom.id === 'airlock';
+            if (imp.hp <= imp.maxHp * 0.5 && !imp.summonedHalf && bossActive) {
               imp.summonedHalf = true;
-              showBanner('AIRLOCK BOSS ENRAGED!', 'Stalker & Sabotage Mines Deployed!', '#f43f5e', 1700);
-              st.enemies.push({
-                x: 1260,
-                y: 820,
-                vx: 0,
-                vy: 0,
-                facing: -1,
-                hp: 85,
-                maxHp: 85,
-                pose: 'idle',
-                actionTimer: 0,
-                actionDuration: 0.25,
-                dashTimer: 0,
-                dashCooldown: 0,
-                coyoteTimer: 0,
-                jumpBufferTimer: 0,
-                hitCooldown: 0,
-                invulnTimer: 0,
-                flashTimer: 0,
-                grounded: true,
-                jumpsLeft: 1,
-                stamina: 100,
-                finisher: 0,
-                shieldUntil: 0,
-                rageUntil: 0,
-                magnetUntil: 0,
-                dropThroughUntil: 0,
-                stunnedUntil: 0,
-                ropeBoostUntil: 0,
-                hasHitCurrentSwing: false,
-                id: `imp_add_${Math.random().toString(36).slice(2, 7)}`,
-                name: 'Vent Enforcer',
-                stroke: '#ef4444',
-                accent: '#38bdf8',
-                speed: 195,
-                aggro: 1,
-                aiCooldown: 1.0,
-                ventCooldown: 8,
-              });
-              for (const mx of [1250, 1460]) {
+              showBanner('AIRLOCK BOSS ENRAGED!', 'Reinforcements & Sabotage Mines Deployed!', '#f43f5e', 1800);
+              const minionSpots = [
+                { x: 1975, y: 1140, name: 'Vent Enforcer' },
+                { x: 2335, y: 1355, name: 'Airlock Guard' },
+              ];
+              for (const ms of minionSpots) {
+                if (!collidesStationWall(ms.x, ms.y, 18, st)) {
+                  st.enemies.push({
+                    x: ms.x,
+                    y: ms.y,
+                    vx: 0,
+                    vy: 0,
+                    knockVx: 0,
+                    knockVy: 0,
+                    facing: -1,
+                    hp: 95 + st.waveOrBout * 18,
+                    maxHp: 95 + st.waveOrBout * 18,
+                    pose: 'idle',
+                    actionTimer: 0,
+                    actionDuration: 0.25,
+                    dashTimer: 0,
+                    dashCooldown: 0,
+                    coyoteTimer: 0,
+                    jumpBufferTimer: 0,
+                    hitCooldown: 0,
+                    invulnTimer: 0,
+                    flashTimer: 0,
+                    grounded: true,
+                    jumpsLeft: 1,
+                    stamina: 100,
+                    finisher: 0,
+                    shieldUntil: 0,
+                    rageUntil: 0,
+                    magnetUntil: 0,
+                    dropThroughUntil: 0,
+                    stunnedUntil: 0,
+                    ropeBoostUntil: 0,
+                    hasHitCurrentSwing: false,
+                    id: `imp_add_${Math.random().toString(36).slice(2, 7)}`,
+                    name: ms.name,
+                    stroke: '#ef4444',
+                    accent: '#38bdf8',
+                    speed: 195 + st.waveOrBout * 14,
+                    aggro: 1,
+                    aiCooldown: 1.0,
+                    ventCooldown: 99,
+                  });
+                }
+              }
+              for (const mx of [1990, 2310]) {
                 st.stationHazards.push({
                   id: `bm_${Math.random().toString(36).slice(2, 7)}`,
                   x: mx,
-                  y: 660 + Math.random() * 120,
+                  y: 1180 + Math.random() * 140,
                   radius: 16,
                   kind: 'sabotage_mine',
                   hp: 15,
@@ -2186,35 +2522,48 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
             }
 
             if (bossActive) {
-              const d = dist || 1;
-              const spd = (imp.speed || 205) * (imp.bossPhaseCd < 0.6 ? 1.55 : 1.0);
-              imp.vx = ((p.x - imp.x) / d) * spd;
-              imp.vy = ((p.y - imp.y) / d) * spd;
-              imp.facing = p.x >= imp.x ? 1 : -1;
-              imp.pose = 'run';
+              const wp = getNextStationWaypoint(imp.x, imp.y, p.x, p.y, wingBOpen, allCluesCollected);
+              if (wp.reachable) {
+                const dxW = wp.x - imp.x;
+                const dyW = wp.y - imp.y;
+                const dw = Math.hypot(dxW, dyW) || 1;
+                const surging = (imp.bossPhaseCd || 0) < 0.65;
+                const spd = (imp.speed || 215) * (surging ? 1.45 : 1.0);
+                imp.vx = (dxW / dw) * spd;
+                imp.vy = (dyW / dw) * spd;
+                if (Math.abs(dxW) > 12) imp.facing = dxW >= 0 ? 1 : -1;
+              } else {
+                imp.vx = 0;
+                imp.vy = 0;
+              }
 
-              if ((imp.aiCooldown || 0) <= 0 && dist < 500) {
-                imp.aiCooldown = Math.max(1.15, 1.85 - st.waveOrBout * 0.2);
+              if ((imp.aiCooldown || 0) <= 0 && dist < 540 && hasLoS) {
+                imp.aiCooldown = Math.max(1.05, 1.7 - st.waveOrBout * 0.18);
+                imp.pose = 'jab';
+                imp.actionTimer = 0.24;
+                imp.actionDuration = 0.24;
+                if (Math.abs(p.x - imp.x) > 10) imp.facing = p.x >= imp.x ? 1 : -1;
                 const baseAng = Math.atan2(p.y - imp.y, p.x - imp.x);
-                for (const off of [-0.26, 0, 0.26]) {
+                const fanOffsets = st.waveOrBout >= 2 ? [-0.32, -0.16, 0, 0.16, 0.32] : [-0.24, 0, 0.24];
+                for (const off of fanOffsets) {
                   st.projectiles.push({
                     x: imp.x,
                     y: imp.y - 24,
-                    vx: Math.cos(baseAng + off) * 430,
-                    vy: Math.sin(baseAng + off) * 430,
+                    vx: Math.cos(baseAng + off) * 440,
+                    vy: Math.sin(baseAng + off) * 440,
                     owner: 'enemy',
                     color: '#f43f5e',
                     radius: 8,
-                    damage: 13,
-                    life: 1.3,
+                    damage: 14,
+                    life: 1.35,
                   });
                 }
                 soundEngine.playThrow();
               }
 
               if ((imp.bossPhaseCd || 0) <= 0) {
-                imp.bossPhaseCd = 3.6;
-                if (st.stationHazards.length < 16) {
+                imp.bossPhaseCd = 3.5;
+                if (st.stationHazards.length < 20 && !collidesStationWall(imp.x, imp.y, 16, st)) {
                   st.stationHazards.push({
                     id: `bm_${Math.random().toString(36).slice(2, 7)}`,
                     x: imp.x,
@@ -2227,85 +2576,230 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                 }
               }
             } else {
-              imp.vx *= Math.pow(0.08, dt);
-              imp.vy *= Math.pow(0.08, dt);
-              imp.pose = 'idle';
+              // Calm patrol inside Airlock while Blast Door is locked
+              const cx = 2050 + Math.cos(st.elapsed * 0.8) * 90;
+              const cy = 1250 + Math.sin(st.elapsed * 0.8) * 85;
+              const dxC = cx - imp.x;
+              const dyC = cy - imp.y;
+              const dc = Math.hypot(dxC, dyC) || 1;
+              if (dc > 12) {
+                imp.vx = (dxC / dc) * 95;
+                imp.vy = (dyC / dc) * 95;
+                if (Math.abs(dxC) > 8) imp.facing = dxC >= 0 ? 1 : -1;
+              } else {
+                imp.vx = 0;
+                imp.vy = 0;
+              }
             }
           } else {
-            const chasing = dist < 340;
-            if (chasing) {
-              imp.alertedUntil = now + 1200;
-              const d = dist || 1;
-              const spd = (imp.speed || 165) * 1.12;
-              imp.vx = ((p.x - imp.x) / d) * spd;
-              imp.vy = ((p.y - imp.y) / d) * spd;
-              imp.facing = p.x >= imp.x ? 1 : -1;
-              imp.pose = 'run';
+            // Regular Imposter AI: line-of-sight detection OR proximity chase using BFS room-doorway routing!
+            if (hasLoS && dist < 460) {
+              imp.alertedUntil = now + 3800;
+            } else if (dist < 260) {
+              imp.alertedUntil = now + 2200;
+            }
 
-              if ((imp.bossPhaseCd || 0) <= 0 && st.stationHazards.length < 12) {
-                imp.bossPhaseCd = 5.5 + Math.random() * 2.5;
-                st.stationHazards.push({
-                  id: `sm_${Math.random().toString(36).slice(2, 7)}`,
-                  x: imp.x,
-                  y: imp.y,
-                  radius: 16,
-                  kind: 'sabotage_mine',
-                  hp: 15,
-                  maxHp: 15,
-                });
-              }
-            } else {
-              // Patrol room smoothly & bounce off walls
-              if ((imp.aiCooldown || 0) <= 0 || Math.hypot(imp.vx, imp.vy) < 20) {
-                const ang = Math.random() * Math.PI * 2;
-                const spd = (imp.speed || 150) * 0.65;
-                imp.vx = Math.cos(ang) * spd;
-                imp.vy = Math.sin(ang) * spd;
-                imp.facing = imp.vx >= 0 ? 1 : -1;
-                imp.aiCooldown = 1.6 + Math.random() * 1.6;
-              }
-              imp.pose = 'run';
+            const alerted = now < (imp.alertedUntil || 0);
+            let chasingActive = false;
 
-              // Occasionally pop between Floor Vents when out of sight!
-              if ((imp.ventCooldown || 0) <= 0 && dist > 360) {
-                imp.ventCooldown = 9 + Math.random() * 5;
-                const destVent = STATION_VENTS[Math.floor(Math.random() * STATION_VENTS.length)];
-                if (!collidesStationWall(destVent.x, destVent.y, 18, st)) {
-                  spawnParticles(imp.x, imp.y - 24, '#ef4444', 10, 150);
-                  imp.x = destVent.x;
-                  imp.y = destVent.y;
-                  spawnParticles(imp.x, imp.y - 24, '#ef4444', 12, 170);
+            if (alerted) {
+              const wp = getNextStationWaypoint(imp.x, imp.y, p.x, p.y, wingBOpen, allCluesCollected);
+              if (wp.reachable) {
+                chasingActive = true;
+                const dxW = wp.x - imp.x;
+                const dyW = wp.y - imp.y;
+                const dw = Math.hypot(dxW, dyW) || 1;
+                const spd = (imp.speed || 175) * (impRoom.id === playerRoom.id ? 1.12 : 1.04);
+                imp.vx = (dxW / dw) * spd;
+                imp.vy = (dyW / dw) * spd;
+                if (Math.abs(dxW) > 12) imp.facing = dxW >= 0 ? 1 : -1;
+
+                // Ranged Sabotage Plasma Bolt when line-of-sight is clear
+                if ((imp.aiCooldown || 0) <= 0 && dist < 430 && dist > 64 && hasLoS) {
+                  imp.aiCooldown = Math.max(1.25, 2.15 - st.waveOrBout * 0.22);
+                  imp.pose = 'jab';
+                  imp.actionTimer = 0.2;
+                  imp.actionDuration = 0.2;
+                  if (Math.abs(p.x - imp.x) > 10) imp.facing = p.x >= imp.x ? 1 : -1;
+                  const ang = Math.atan2(p.y - imp.y, p.x - imp.x);
+                  st.projectiles.push({
+                    x: imp.x + Math.cos(ang) * 20,
+                    y: imp.y - 24 + Math.sin(ang) * 20,
+                    vx: Math.cos(ang) * (385 + st.waveOrBout * 28),
+                    vy: Math.sin(ang) * (385 + st.waveOrBout * 28),
+                    owner: 'enemy',
+                    color: '#fb7185',
+                    radius: 6.5,
+                    damage: 10 + st.waveOrBout * 2,
+                    life: 1.25,
+                  });
+                  soundEngine.playThrow();
+                }
+
+                // Occasional Sabotage Mine drop in player's wake
+                if ((imp.bossPhaseCd || 0) <= 0 && st.stationHazards.length < 18 && !collidesStationWall(imp.x, imp.y, 16, st)) {
+                  imp.bossPhaseCd = 6.2 + Math.random() * 2.5;
+                  st.stationHazards.push({
+                    id: `sm_${Math.random().toString(36).slice(2, 7)}`,
+                    x: imp.x,
+                    y: imp.y,
+                    radius: 16,
+                    kind: 'sabotage_mine',
+                    hp: 15,
+                    maxHp: 15,
+                  });
+                }
+              } else {
+                imp.alertedUntil = 0;
+              }
+            }
+
+            if (!chasingActive) {
+              // Patrol inside walkable points in current or adjacent unlocked room
+              const needNewTarget =
+                imp.patrolTargetX === undefined ||
+                imp.patrolTargetY === undefined ||
+                Math.hypot(imp.patrolTargetX - imp.x, imp.patrolTargetY - imp.y) < 28 ||
+                (imp.aiCooldown || 0) <= 0;
+
+              if (needNewTarget) {
+                imp.aiCooldown = 2.4 + Math.random() * 1.8;
+                const candRoom =
+                  Math.random() < 0.35
+                    ? (() => {
+                        const edges = (STATION_GRAPH[impRoom.id] || []).filter(
+                          (e) =>
+                            !(e.requires === 'wing_b' && !wingBOpen) &&
+                            !(e.requires === 'airlock' && !allCluesCollected) &&
+                            e.to !== 'airlock'
+                        );
+                        if (edges.length > 0) {
+                          const picked = edges[Math.floor(Math.random() * edges.length)];
+                          return STATION_ROOMS.find((r) => r.id === picked.to) || impRoom;
+                        }
+                        return impRoom;
+                      })()
+                    : impRoom;
+
+                for (let tries = 0; tries < 6; tries++) {
+                  const tx = candRoom.x + 85 + Math.random() * Math.max(80, candRoom.w - 170);
+                  const ty = candRoom.y + 85 + Math.random() * Math.max(80, candRoom.h - 170);
+                  if (!collidesStationWall(tx, ty, 22, st)) {
+                    imp.patrolTargetX = tx;
+                    imp.patrolTargetY = ty;
+                    break;
+                  }
+                }
+              }
+
+              if (imp.patrolTargetX !== undefined && imp.patrolTargetY !== undefined) {
+                const wp = getNextStationWaypoint(
+                  imp.x,
+                  imp.y,
+                  imp.patrolTargetX,
+                  imp.patrolTargetY,
+                  wingBOpen,
+                  allCluesCollected
+                );
+                if (wp.reachable) {
+                  const dxP = wp.x - imp.x;
+                  const dyP = wp.y - imp.y;
+                  const dp = Math.hypot(dxP, dyP) || 1;
+                  const pSpd = (imp.speed || 165) * 0.68;
+                  imp.vx = (dxP / dp) * pSpd;
+                  imp.vy = (dyP / dp) * pSpd;
+                  if (Math.abs(dxP) > 12) imp.facing = dxP >= 0 ? 1 : -1;
+                } else {
+                  imp.patrolTargetX = undefined;
+                  imp.vx = 0;
+                  imp.vy = 0;
+                }
+              }
+
+              // Occasionally vent ONLY to unlocked, non-airlock rooms when far from player
+              if ((imp.ventCooldown || 0) <= 0 && dist > 520) {
+                imp.ventCooldown = 10 + Math.random() * 6;
+                const allowedVents = STATION_VENTS.filter(
+                  (v) => v.room !== 'airlock' && (v.room !== 'electrical' || wingBOpen)
+                );
+                if (allowedVents.length > 0) {
+                  const destVent = allowedVents[Math.floor(Math.random() * allowedVents.length)];
+                  if (!collidesStationWall(destVent.x, destVent.y, 20, st)) {
+                    spawnParticles(imp.x, imp.y - 24, '#ef4444', 10, 150);
+                    imp.x = destVent.x;
+                    imp.y = destVent.y;
+                    imp.patrolTargetX = undefined;
+                    imp.patrolTargetY = undefined;
+                    spawnParticles(imp.x, imp.y - 24, '#ef4444', 12, 170);
+                  }
                 }
               }
             }
           }
 
-          const nx = imp.x + imp.vx * dt;
-          if (!collidesStationWall(nx, imp.y, 18, st)) imp.x = nx;
-          else imp.vx *= -1;
-          const ny = imp.y + imp.vy * dt;
-          if (!collidesStationWall(imp.x, ny, 18, st)) imp.y = ny;
-          else imp.vy *= -1;
+          // Smooth NPC separation so imposters never stack & glitch on top of each other
+          let sepX = 0;
+          let sepY = 0;
+          for (let j = 0; j < st.enemies.length; j++) {
+            if (i === j) continue;
+            const other = st.enemies[j];
+            const sdx = imp.x - other.x;
+            const sdy = imp.y - other.y;
+            const sd = Math.hypot(sdx, sdy);
+            if (sd > 0.1 && sd < 36) {
+              sepX += (sdx / sd) * (36 - sd) * 3.5;
+              sepY += (sdy / sd) * (36 - sd) * 3.5;
+            }
+          }
+
+          const prevX = imp.x;
+          const prevY = imp.y;
+          const totalVx = imp.vx + (imp.knockVx || 0) + sepX;
+          const totalVy = imp.vy + (imp.knockVy || 0) + sepY;
+          const moveRes = moveStationEntity(imp, totalVx * dt, totalVy * dt, 18, st);
+          if ((moveRes.blockedX || moveRes.blockedY) && now >= (imp.alertedUntil || 0)) {
+            imp.patrolTargetX = undefined;
+          }
+
+          const movedDist = Math.hypot(imp.x - prevX, imp.y - prevY);
+          if (imp.actionTimer <= 0) {
+            imp.pose = movedDist > 0.35 ? 'run' : 'idle';
+          }
 
           if (dist < (imp.isBoss ? 50 : 44)) {
             const d = dist || 1;
-            handlePlayerDamage(imp.isBoss ? 22 : 18, ((p.x - imp.x) / d) * 260, ((p.y - imp.y) / d) * 260);
+            if (now < p.shieldUntil) {
+              const kx = (imp.x - p.x) / d;
+              const ky = (imp.y - p.y) / d;
+              imp.knockVx = kx * 310;
+              imp.knockVy = ky * 310;
+              moveStationEntity(imp, kx * 12, ky * 12, 18, st);
+              if (imp.hitCooldown <= 0) {
+                imp.hitCooldown = 0.45;
+                spawnParticles(p.x, p.y - 34, '#38bdf8', 10, 180);
+                soundEngine.playDash();
+              }
+            } else if (imp.hitCooldown <= 0) {
+              imp.hitCooldown = 0.65;
+              imp.pose = 'jab';
+              imp.actionTimer = 0.22;
+              imp.actionDuration = 0.22;
+              handlePlayerDamage(imp.isBoss ? 22 : 18, ((p.x - imp.x) / d) * 260, ((p.y - imp.y) / d) * 260);
+            }
           }
         }
 
-        // Check Reaching Airlock Escape Pod inside Room 5 (after Clues collected & Warden Boss beaten!)
+        // Check Reaching Airlock Escape Pod inside Room 12 (after Clues collected & Warden Boss beaten!)
         const airlockBossAlive = st.enemies.some((e) => e.isBoss);
-        const podX = 1410;
-        const podY = 705;
-        if (allCluesCollected && Math.hypot(p.x - podX, p.y - podY) < 68) {
+        if (allCluesCollected && Math.hypot(p.x - AIRLOCK_POD_X, p.y - AIRLOCK_POD_Y) < 70) {
           if (airlockBossAlive) {
             if (!st.banner || now >= st.banner.until) {
               showBanner('DEFEAT THE AIRLOCK WARDEN TO ESCAPE!', 'Shoot with J or K!', '#f43f5e', 1100);
             }
           } else {
-            st.score += 360;
-            st.drops += 6;
-            st.gems += 2;
+            st.score += 420;
+            st.drops += 8;
+            st.gems += 3;
             soundEngine.playBell(2);
             if (st.waveOrBout >= 3) {
               finishMatch(true);
@@ -2318,8 +2812,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               st.enemies = nextSec.imposters;
               st.pickups = nextSec.pickups;
               st.projectiles = [];
-              p.x = 290;
-              p.y = 700;
+              p.x = 930;
+              p.y = 770;
               p.vx = 0;
               p.vy = 0;
               p.slowUntil = 0;
@@ -2424,7 +2918,13 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
             b.x -= 640 * dt;
             b.pose = 'heavy';
             if (Math.abs(b.x - p.x) < 42 && Math.abs(b.y - p.y) < 76) {
-              handlePlayerDamage(18, -160);
+              if (now < p.shieldUntil) {
+                b.bossState = 'idle';
+                spawnParticles(p.x, p.y - 42, '#38bdf8', 12, 220);
+                soundEngine.playDash();
+              } else {
+                handlePlayerDamage(18, -160);
+              }
             }
             if (b.x < 170) b.bossState = 'idle';
           } else {
@@ -2538,8 +3038,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               });
             }
           }
-          if (Math.random() < 0.3) {
-            const kinds: Pickup2D['kind'][] = ['medkit', 'shield', 'rage', 'magnet'];
+          if (Math.random() < 0.34) {
+            const kinds: Pickup2D['kind'][] = ['medkit', 'shield', 'shield', 'rage', 'magnet'];
             st.pickups.push({
               id: `rpu_${Math.random()}`,
               x: nx + nw * 0.5,
@@ -2627,9 +3127,11 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               return false;
             }
             handlePlayerDamage(hz.kind === 'crate' ? 12 : 18, -140);
-            p.slowUntil = now + (hz.kind === 'crate' ? 1100 : 1350);
-            p.vy = Math.min(p.vy, -230);
-            spawnParticles(hz.x, hz.y - 20, '#ef4444', 10, 170);
+            if (now >= p.shieldUntil) {
+              p.slowUntil = now + (hz.kind === 'crate' ? 1100 : 1350);
+              p.vy = Math.min(p.vy, -230);
+            }
+            spawnParticles(hz.x, hz.y - 20, now < p.shieldUntil ? '#38bdf8' : '#ef4444', 10, 170);
             return false;
           }
           return true;
@@ -2847,9 +3349,10 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
             soundEngine.playPickup('power');
             showBanner('+35 HP MEDKIT!', undefined, '#22c55e', 900);
           } else if (pk.kind === 'shield') {
-            p.shieldUntil = now + 7000;
+            p.shieldUntil = now + 10000;
             soundEngine.playPickup('power');
-            showBanner('CRYO SHIELD (7s)', undefined, '#38bdf8', 900);
+            spawnParticles(pk.x, pk.y, '#38bdf8', 14, 210);
+            showBanner('FROST SHIELD ACTIVE (10s)', 'Invulnerable to enemy contact!', '#38bdf8', 1100);
           } else if (pk.kind === 'rage') {
             p.rageUntil = now + 7000;
             soundEngine.playPickup('power');
@@ -2899,8 +3402,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         ctx.fillStyle = '#050d1a';
         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-        const camX = st ? st.cameraX : 0;
-        const camY = st ? st.cameraY : 250;
+        const camX = st ? st.cameraX : 330;
+        const camY = st ? st.cameraY : 430;
         ctx.save();
         ctx.translate(-camX, -camY);
 
@@ -2938,13 +3441,13 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         }
 
         const cluesFound = st ? st.escapeClues.filter((c) => c.collected).length : 0;
-        const totalClues = st ? st.escapeClues.length : 3;
-        const wingBOpen = cluesFound >= 1;
+        const totalClues = st ? st.escapeClues.length : 5;
+        const wingBOpen = cluesFound >= WING_B_CLUES_REQUIRED;
         const airlockOpen = cluesFound >= totalClues;
-        const podX = 1410;
-        const podY = 705;
+        const podX = AIRLOCK_POD_X;
+        const podY = AIRLOCK_POD_Y;
 
-        // Built Room Interiors (Medbay Cryo-Pod & Tanks, Lab Servers & Benches, Electrical Coils, Cafeteria Kitchen & Tables, Reactor Turbine, Airlock Suit Lockers & Escape Shuttle)
+        // Built Room Interiors for all 12 Frost Station rooms
         drawStationRoomArchitecture(ctx, airlockOpen, nowMs * 0.001);
 
         // Floor Vents
@@ -2965,28 +3468,39 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
 
         // Walls & Locked/Unlocked Blast Doors
         for (const w of STATION_WALLS) {
+          const isHorizontal = w.w > w.h;
           if (w.doorId === 'wing_b') {
             ctx.fillStyle = wingBOpen ? 'rgba(56, 189, 248, 0.14)' : 'rgba(245, 158, 11, 0.72)';
             ctx.strokeStyle = wingBOpen ? '#38bdf8' : '#fbbf24';
             ctx.lineWidth = 3;
-            ctx.fillRect(w.x + 18, w.y, 24, w.h);
-            ctx.strokeRect(w.x + 18, w.y, 24, w.h);
+            if (isHorizontal) {
+              ctx.fillRect(w.x, w.y + 18, w.w, 24);
+              ctx.strokeRect(w.x, w.y + 18, w.w, 24);
+            } else {
+              ctx.fillRect(w.x + 18, w.y, 24, w.h);
+              ctx.strokeRect(w.x + 18, w.y, 24, w.h);
+            }
             ctx.font = '700 11px Oxanium, sans-serif';
             ctx.textAlign = 'center';
             ctx.fillStyle = '#ffffff';
-            ctx.fillText(wingBOpen ? 'OPEN' : '1 CLUE', w.x + 30, w.y + w.h / 2 + 4);
+            ctx.fillText(wingBOpen ? 'OPEN' : `${WING_B_CLUES_REQUIRED} CLUES`, w.x + w.w / 2, w.y + w.h / 2 + 4);
             continue;
           }
           if (w.doorId === 'airlock') {
             ctx.fillStyle = airlockOpen ? 'rgba(52, 211, 153, 0.14)' : 'rgba(244, 63, 94, 0.76)';
             ctx.strokeStyle = airlockOpen ? '#34d399' : '#fb7185';
             ctx.lineWidth = 3;
-            ctx.fillRect(w.x + 18, w.y, 24, w.h);
-            ctx.strokeRect(w.x + 18, w.y, 24, w.h);
+            if (isHorizontal) {
+              ctx.fillRect(w.x, w.y + 18, w.w, 24);
+              ctx.strokeRect(w.x, w.y + 18, w.w, 24);
+            } else {
+              ctx.fillRect(w.x + 18, w.y, 24, w.h);
+              ctx.strokeRect(w.x + 18, w.y, 24, w.h);
+            }
             ctx.font = '700 11px Oxanium, sans-serif';
             ctx.textAlign = 'center';
             ctx.fillStyle = '#ffffff';
-            ctx.fillText(airlockOpen ? 'OPEN' : `${totalClues} CLUES`, w.x + 30, w.y + w.h / 2 + 4);
+            ctx.fillText(airlockOpen ? 'OPEN' : `${totalClues} CLUES`, w.x + w.w / 2, w.y + w.h / 2 + 4);
             continue;
           }
 
@@ -3045,6 +3559,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               facing: imp.facing,
               pose: imp.pose,
               animTime: st.elapsed + imp.x * 0.01,
+              actionProgress: imp.actionDuration > 0 ? 1 - imp.actionTimer / imp.actionDuration : 0,
               scale: imp.isBoss ? 1.32 : 0.96,
               isLofiYeti: false,
               imposterVisor: true,
@@ -3139,8 +3654,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         } else {
           // Menu preview actors
           drawStickmanCharacter(ctx, {
-            x: 340,
-            y: 700,
+            x: 930,
+            y: 770,
             facing: 1,
             pose: 'run',
             animTime: nowMs * 0.001,
@@ -3159,8 +3674,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
 
         // === LIVE STATION MINI-MAP (Bottom Right Inside Canvas, above controls) ===
         if (st) {
-          const mmW = 210;
-          const mmH = 124;
+          const mmW = 228;
+          const mmH = 138;
           const mmX = CANVAS_W - mmW - 18;
           const mmY = CANVAS_H - mmH - 64;
           const sx = mmW / STATION_W;
@@ -3191,11 +3706,11 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           }
           ctx.fillStyle = airlockOpen ? '#34d399' : '#64748b';
           ctx.beginPath();
-          ctx.arc(mmX + 1410 * sx, mmY + 705 * sy, 4.5, 0, Math.PI * 2);
+          ctx.arc(mmX + AIRLOCK_POD_X * sx, mmY + AIRLOCK_POD_Y * sy, 4.5, 0, Math.PI * 2);
           ctx.fill();
 
           for (const imp of st.enemies) {
-            if (Math.hypot(imp.x - st.player.x, imp.y - st.player.y) < 420) {
+            if (Math.hypot(imp.x - st.player.x, imp.y - st.player.y) < 580) {
               ctx.fillStyle = '#ef4444';
               ctx.beginPath();
               ctx.arc(mmX + imp.x * sx, mmY + imp.y * sy, 3.2, 0, Math.PI * 2);
@@ -3539,7 +4054,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           cluesFound,
           cluesTotal,
           currentRoom: room,
-          wingBOpen: cluesFound >= 1,
+          wingBOpen: cluesFound >= WING_B_CLUES_REQUIRED,
           airlockOpen: cluesTotal > 0 && cluesFound >= cluesTotal,
           exitProgress: Math.min(100, Math.max(0, Math.round((p.x / Math.max(1, st.levelEndX)) * 100))),
           nearClueLabel: nearClue?.label || '',
@@ -3655,7 +4170,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                 <div className="flex flex-wrap gap-2 pt-0.5 text-[10px] font-bold">
                   {hud.shieldLeft > 0 && (
                     <span className="inline-flex items-center gap-1 text-sky-300">
-                      <Shield className="h-3 w-3" /> {hud.shieldLeft}s
+                      <Shield className="h-3 w-3" /> Frost {hud.shieldLeft}s
                     </span>
                   )}
                   {hud.rageLeft > 0 && (

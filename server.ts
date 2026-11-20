@@ -658,8 +658,8 @@ function stepRoom(room: TunnelRoom, dt: number): void {
         } else if (pk.kind === 'gem') {
           p.score += 30;
         } else if (pk.kind === 'shield') {
-          p.shieldUntil = now + 9000;
-          p.score += 20;
+          p.shieldUntil = now + 10000;
+          p.score += 25;
         } else if (pk.kind === 'boost') {
           p.boostUntil = now + 7000;
           p.score += 20;

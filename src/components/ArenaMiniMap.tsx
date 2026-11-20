@@ -133,19 +133,19 @@ export const ArenaMiniMap: React.FC<ArenaMiniMapProps> = ({
                 points={pts}
                 fill="none"
                 stroke="#1e3a5f"
-                strokeWidth={9}
+                strokeWidth={13}
                 strokeLinejoin="round"
               />
               <polygon
                 points={pts}
                 fill="none"
                 stroke={mapSpec.accentHex}
-                strokeOpacity={0.62}
+                strokeOpacity={0.68}
                 strokeWidth={2.2}
                 strokeLinejoin="round"
               />
 
-              {/* Trackside Rock & Cryo Pylon Obstacles */}
+              {/* Track Obstacles & Launch Ramps */}
               {raceObstacles.map((ro) => {
                 const p = mapPoint(ro.x, ro.y);
                 return (
@@ -153,8 +153,16 @@ export const ArenaMiniMap: React.FC<ArenaMiniMapProps> = ({
                     key={ro.id}
                     cx={p.cx}
                     cy={p.cy}
-                    r={2.1}
-                    fill={ro.kind === 'rock' ? '#94a3b8' : '#fb7185'}
+                    r={ro.kind === 'jump_ramp' ? 2.6 : 2.1}
+                    fill={
+                      ro.kind === 'jump_ramp'
+                        ? '#22d3ee'
+                        : ro.kind === 'cryo_spinner'
+                        ? '#f43f5e'
+                        : ro.kind === 'fuel_barrel'
+                        ? '#fb923c'
+                        : '#fbbf24'
+                    }
                     stroke="#061120"
                     strokeWidth={0.6}
                   />
