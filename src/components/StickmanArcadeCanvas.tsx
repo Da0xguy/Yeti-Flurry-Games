@@ -1,20 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Crosshair,
   Droplets,
   Flame,
   Gem,
   Heart,
   Home,
+  KeyRound,
   Maximize2,
   Menu,
   Minimize2,
   Pause,
   Play,
+  Radar,
   RotateCcw,
   Shield,
-  Sparkles,
-  Swords,
-  Trophy,
   Volume2,
   VolumeX,
   Zap,
@@ -36,7 +36,16 @@ import {
 } from '../data/gameCatalog';
 import { soundEngine } from '../lib/sound';
 import {
+  drawArcticOutpostParallax,
+  drawExtractionBunker,
   drawPowerUpIcon,
+  drawRaidObstacle2D,
+  drawRaidParallaxBuildings,
+  drawRaidPlatformSupports,
+  drawRunnerHazard2D,
+  drawRunnerPlatformFoundations,
+  drawStationHazard2D,
+  drawStationRoomArchitecture,
   drawStickmanCharacter,
   type StickmanPose,
 } from '../lib/stickmanRenderer';
@@ -63,21 +72,71 @@ type ArcadePhase = 'MENU' | 'PLAYING' | 'PAUSED' | 'GAME_OVER';
 
 const CANVAS_W = 1200;
 const CANVAS_H = 675;
-const RING_LEFT = 175;
-const RING_RIGHT = 1025;
-const RING_FLOOR = 535;
-const BRAWL_FLOOR = 565;
+const RAID_FLOOR = 565;
 
-const BRAWL_PLATFORMS = [
-  { x: 170, y: 425, w: 230 },
-  { x: 485, y: 335, w: 230 },
-  { x: 800, y: 425, w: 230 },
+// Top-Down Station Map Constants (Among Us Style Multi-Room Escape)
+const STATION_W = 1680;
+const STATION_H = 980;
+
+interface StationRoom {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  floor: string;
+  accent: string;
+}
+
+interface WallRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  doorId?: 'wing_b' | 'airlock';
+}
+
+const STATION_ROOMS: StationRoom[] = [
+  { id: 'medbay', name: 'MEDBAY', x: 80, y: 80, w: 460, h: 370, floor: '#0f273d', accent: '#2dd4bf' },
+  { id: 'lab', name: 'RESEARCH LAB', x: 600, y: 80, w: 480, h: 370, floor: '#132444', accent: '#38bdf8' },
+  { id: 'electrical', name: 'ELECTRICAL', x: 1140, y: 80, w: 460, h: 370, floor: '#251d3a', accent: '#f59e0b' },
+  { id: 'cafeteria', name: 'CAFETERIA HUB', x: 80, y: 510, w: 460, h: 390, floor: '#11253e', accent: '#38bdf8' },
+  { id: 'reactor', name: 'REACTOR CORE', x: 600, y: 510, w: 480, h: 390, floor: '#1c1b38', accent: '#c084fc' },
+  { id: 'airlock', name: 'AIRLOCK EXIT', x: 1140, y: 510, w: 460, h: 390, floor: '#0d2b30', accent: '#34d399' },
 ];
 
-const WRESTLE_CHALLENGERS = [
-  { name: 'Baron Basalt', stroke: '#fb923c', accent: '#facc15', maxHp: 115, speed: 235, aggro: 0.7 },
-  { name: 'Kodiak Frost', stroke: '#38bdf8', accent: '#c084fc', maxHp: 135, speed: 265, aggro: 0.84 },
-  { name: 'Mask of Aurora', stroke: '#f43f5e', accent: '#fde047', maxHp: 165, speed: 290, aggro: 0.96 },
+const STATION_VENTS = [
+  { id: 'v_med', x: 165, y: 155, room: 'MEDBAY' },
+  { id: 'v_lab', x: 985, y: 155, room: 'RESEARCH LAB' },
+  { id: 'v_elec', x: 1495, y: 155, room: 'ELECTRICAL' },
+  { id: 'v_react', x: 985, y: 815, room: 'REACTOR CORE' },
+];
+
+// Solid bulkheads + 2 dynamic locked Blast Doors ('wing_b' and 'airlock')
+const STATION_WALLS: WallRect[] = [
+  // Outer Hull
+  { x: 40, y: 40, w: 1600, h: 40 },
+  { x: 40, y: 900, w: 1600, h: 40 },
+  { x: 40, y: 80, w: 40, h: 820 },
+  { x: 1600, y: 80, w: 40, h: 820 },
+
+  // Vertical Divider 1 (x: 540..600) with top doorway (210..330) & bottom doorway (650..770)
+  { x: 540, y: 80, w: 60, h: 130 },
+  { x: 540, y: 330, w: 60, h: 320 },
+  { x: 540, y: 770, w: 60, h: 130 },
+
+  // Vertical Divider 2 (x: 1080..1140) with top Wing B door (210..330) & bottom Airlock door (650..770)
+  { x: 1080, y: 80, w: 60, h: 130 },
+  { x: 1080, y: 210, w: 60, h: 120, doorId: 'wing_b' },
+  { x: 1080, y: 330, w: 60, h: 320 },
+  { x: 1080, y: 650, w: 60, h: 120, doorId: 'airlock' },
+  { x: 1080, y: 770, w: 60, h: 130 },
+
+  // Horizontal Divider (y: 450..510) with Col 1 doorway (250..370) & Col 2 doorway (780..900)
+  { x: 80, y: 450, w: 170, h: 60 },
+  { x: 370, y: 450, w: 410, h: 60 },
+  { x: 900, y: 450, w: 700, h: 60 },
 ];
 
 interface FighterEntity {
@@ -86,6 +145,7 @@ interface FighterEntity {
   vx: number;
   vy: number;
   facing: 1 | -1;
+  aimY?: number;
   hp: number;
   maxHp: number;
   pose: StickmanPose;
@@ -108,6 +168,7 @@ interface FighterEntity {
   dropThroughUntil: number;
   stunnedUntil: number;
   ropeBoostUntil: number;
+  slowUntil?: number;
   hasHitCurrentSwing: boolean;
   id?: string;
   name?: string;
@@ -118,6 +179,62 @@ interface FighterEntity {
   aggro?: number;
   isBoss?: boolean;
   aiCooldown?: number;
+  bossPhaseCd?: number;
+  bossState?: 'idle' | 'leap' | 'dash' | 'guard';
+  summonedHalf?: boolean;
+  patrolMinX?: number;
+  patrolMaxX?: number;
+  alertedUntil?: number;
+  ventCooldown?: number;
+}
+
+interface RaidPlatform {
+  x: number;
+  y: number;
+  w: number;
+}
+
+interface RaidBarrel {
+  id: string;
+  x: number;
+  y: number;
+  hp: number;
+}
+
+interface RaidObstacle {
+  id: string;
+  x: number;
+  y: number;
+  targetY: number;
+  vy: number;
+  w: number;
+  h: number;
+  kind: 'laser_barrier' | 'airdrop_crate' | 'cryo_mine';
+  hp: number;
+  maxHp: number;
+  falling?: boolean;
+  hitCooldown?: number;
+}
+
+interface EscapeClue {
+  id: string;
+  x: number;
+  y: number;
+  room: string;
+  label: string;
+  collected: boolean;
+  scanProgress: number;
+}
+
+interface StationHazard {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  kind: 'cryo_spill' | 'shock_wire' | 'cargo_block' | 'sabotage_mine';
+  hp: number;
+  maxHp: number;
+  cooldownUntil?: number;
 }
 
 interface Pickup2D {
@@ -136,6 +253,10 @@ interface Projectile2D {
   owner: 'player' | 'enemy';
   color: string;
   radius: number;
+  damage?: number;
+  piercing?: boolean;
+  stunOnly?: boolean;
+  life?: number;
 }
 
 interface Particle2D {
@@ -168,8 +289,11 @@ interface RunnerHazard {
   y: number;
   w: number;
   h: number;
-  kind: 'spike' | 'icicle' | 'crate';
+  kind: 'spike' | 'icicle' | 'crate' | 'falling_boulder' | 'sludge';
   hp: number;
+  vy?: number;
+  targetY?: number;
+  landed?: boolean;
 }
 
 function getMapBackdropColors(mapId: MapId) {
@@ -207,6 +331,302 @@ function getMapBackdropColors(mapId: MapId) {
     accent: '#38bdf8',
     particle: '#bae6fd',
   };
+}
+
+function buildRaidStage(stage: number, colorwayForBoss: YetiColorId) {
+  const levelEndX = 4150 + (stage - 1) * 650;
+  const platforms: RaidPlatform[] = [];
+  const barrels: RaidBarrel[] = [];
+  const obstacles: RaidObstacle[] = [];
+  const enemies: FighterEntity[] = [];
+  const pickups: Pickup2D[] = [];
+
+  for (let x = 520; x < levelEndX - 420; x += 480) {
+    const h = 425 - ((Math.floor(x / 480) % 2) * 85);
+    const w = 230 + (Math.floor(x / 300) % 2) * 60;
+    platforms.push({ x, y: h, w });
+
+    if (Math.random() < 0.75) {
+      barrels.push({
+        id: `br_${stage}_${x}`,
+        x: x + w * 0.55,
+        y: Math.random() < 0.45 ? h : RAID_FLOOR,
+        hp: 25,
+      });
+    }
+
+    const obsRoll = Math.floor(x / 480) % 3;
+    if (obsRoll === 0) {
+      obstacles.push({
+        id: `ro_${stage}_${x}`,
+        x: x + 90,
+        y: RAID_FLOOR,
+        targetY: RAID_FLOOR,
+        vy: 0,
+        w: 30,
+        h: 92,
+        kind: 'laser_barrier',
+        hp: 50,
+        maxHp: 50,
+      });
+    } else if (obsRoll === 1) {
+      obstacles.push({
+        id: `ro_${stage}_${x}`,
+        x: x + w * 0.3,
+        y: RAID_FLOOR,
+        targetY: RAID_FLOOR,
+        vy: 0,
+        w: 56,
+        h: 54,
+        kind: 'airdrop_crate',
+        hp: 45,
+        maxHp: 45,
+      });
+    } else {
+      obstacles.push({
+        id: `ro_${stage}_${x}`,
+        x: x + 135,
+        y: RAID_FLOOR,
+        targetY: RAID_FLOOR,
+        vy: 0,
+        w: 36,
+        h: 16,
+        kind: 'cryo_mine',
+        hp: 20,
+        maxHp: 20,
+      });
+    }
+
+    const puKinds: Pickup2D['kind'][] = ['drop', 'gem', 'medkit', 'shield', 'rage', 'magnet'];
+    pickups.push({
+      id: `rpk_${stage}_${x}`,
+      x: x + w * 0.4,
+      y: h - 32,
+      vy: 0,
+      kind: puKinds[Math.floor(x / 480) % puKinds.length],
+    });
+  }
+
+  const gruntCount = 6 + stage * 2;
+  for (let i = 0; i < gruntCount; i++) {
+    const ex = 640 + i * ((levelEndX - 1050) / gruntCount);
+    const onPlat = i % 3 === 1;
+    const ey = onPlat ? 425 : RAID_FLOOR;
+    enemies.push({
+      x: ex,
+      y: ey,
+      vx: 0,
+      vy: 0,
+      facing: -1,
+      hp: 48 + stage * 14,
+      maxHp: 48 + stage * 14,
+      pose: 'idle',
+      actionTimer: 0,
+      actionDuration: 0.25,
+      dashTimer: 0,
+      dashCooldown: 0,
+      coyoteTimer: 0,
+      jumpBufferTimer: 0,
+      hitCooldown: 0,
+      invulnTimer: 0,
+      flashTimer: 0,
+      grounded: true,
+      jumpsLeft: 1,
+      stamina: 100,
+      finisher: 0,
+      shieldUntil: 0,
+      rageUntil: 0,
+      magnetUntil: 0,
+      dropThroughUntil: 0,
+      stunnedUntil: 0,
+      ropeBoostUntil: 0,
+      hasHitCurrentSwing: false,
+      name: i % 2 === 0 ? 'Syndicate Hitman' : 'Bean Enforcer',
+      stroke: i % 2 === 0 ? '#fb7185' : '#fb923c',
+      accent: '#facc15',
+      speed: 185 + stage * 22,
+      aggro: 0.78 + stage * 0.08,
+      aiCooldown: 0.7 + (i % 3) * 0.25,
+      patrolMinX: ex - 160,
+      patrolMaxX: ex + 160,
+    });
+  }
+
+  // Hard Multi-Phase End-of-Level Syndicate Boss guarding Extraction Bunker
+  enemies.push({
+    x: levelEndX - 280,
+    y: RAID_FLOOR,
+    vx: 0,
+    vy: 0,
+    facing: -1,
+    hp: 280 + stage * 80,
+    maxHp: 280 + stage * 80,
+    pose: 'guard',
+    actionTimer: 0,
+    actionDuration: 0.35,
+    dashTimer: 0,
+    dashCooldown: 0,
+    coyoteTimer: 0,
+    jumpBufferTimer: 0,
+    hitCooldown: 0,
+    invulnTimer: 0,
+    flashTimer: 0,
+    grounded: true,
+    jumpsLeft: 1,
+    stamina: 100,
+    finisher: 0,
+    shieldUntil: 0,
+    rageUntil: 0,
+    magnetUntil: 0,
+    dropThroughUntil: 0,
+    stunnedUntil: 0,
+    ropeBoostUntil: 0,
+    hasHitCurrentSwing: false,
+    isBoss: true,
+    name: stage === 3 ? 'Shadow Bean Overlord' : `Gate Warlord Lv.${stage}`,
+    stroke: '#f43f5e',
+    accent: '#fde047',
+    colorway: colorwayForBoss,
+    speed: 245 + stage * 22,
+    aggro: 0.98,
+    aiCooldown: 0.65,
+    bossPhaseCd: 2.2,
+    bossState: 'idle',
+    summonedHalf: false,
+    patrolMinX: levelEndX - 620,
+    patrolMaxX: levelEndX - 110,
+  });
+
+  return { levelEndX, platforms, barrels, obstacles, enemies, pickups };
+}
+
+function buildEscapeSector(sector: number) {
+  const clueTemplates: { x: number; y: number; room: string; label: string }[] = [
+    { x: 235, y: 240, room: 'MEDBAY', label: 'Biometric Scan Key' },
+    { x: 830, y: 760, room: 'REACTOR CORE', label: 'Core Override Code' },
+    { x: 840, y: 210, room: 'RESEARCH LAB', label: 'Cryo Access Pad' },
+    { x: 1390, y: 245, room: 'ELECTRICAL', label: 'Breaker Fuse Chip' },
+    { x: 200, y: 785, room: 'CAFETERIA HUB', label: 'Captain Vault Card' },
+  ];
+  const cluesNeeded = Math.min(5, 2 + sector); // Stage 1 -> 3 clues, Stage 2 -> 4, Stage 3 -> 5
+  const clues: EscapeClue[] = clueTemplates.slice(0, cluesNeeded).map((c, idx) => ({
+    id: `clue_${sector}_${idx}`,
+    x: c.x,
+    y: c.y,
+    room: c.room,
+    label: c.label,
+    collected: false,
+    scanProgress: 0,
+  }));
+
+  const imposterSpawns = [
+    { x: 380, y: 240, name: 'Red Imposter' },
+    { x: 860, y: 290, name: 'Vent Stalker' },
+    { x: 880, y: 720, name: 'Shadow Crew' },
+    { x: 1380, y: 270, name: 'Dark Saboteur' },
+  ];
+  const impCount = Math.min(4, 1 + sector);
+  const imposters: FighterEntity[] = imposterSpawns.slice(0, impCount).map((sp, idx) => ({
+    x: sp.x,
+    y: sp.y,
+    vx: 0,
+    vy: 0,
+    facing: -1,
+    hp: 95,
+    maxHp: 95,
+    pose: 'run',
+    actionTimer: 0,
+    actionDuration: 0.25,
+    dashTimer: 0,
+    dashCooldown: 0,
+    coyoteTimer: 0,
+    jumpBufferTimer: 0,
+    hitCooldown: 0,
+    invulnTimer: 0,
+    flashTimer: 0,
+    grounded: true,
+    jumpsLeft: 1,
+    stamina: 100,
+    finisher: 0,
+    shieldUntil: 0,
+    rageUntil: 0,
+    magnetUntil: 0,
+    dropThroughUntil: 0,
+    stunnedUntil: 0,
+    ropeBoostUntil: 0,
+    hasHitCurrentSwing: false,
+    name: sp.name,
+    stroke: '#ef4444',
+    accent: '#fb7185',
+    speed: 155 + sector * 18 + idx * 8,
+    aggro: 0.8,
+    aiCooldown: 0.5,
+    ventCooldown: 7 + idx * 3,
+  }));
+
+  // Hard End-of-Level Boss guarding the Airlock Escape Shuttle!
+  imposters.push({
+    x: 1355,
+    y: 705,
+    vx: 0,
+    vy: 0,
+    facing: -1,
+    hp: 260 + sector * 75,
+    maxHp: 260 + sector * 75,
+    pose: 'guard',
+    actionTimer: 0,
+    actionDuration: 0.3,
+    dashTimer: 0,
+    dashCooldown: 0,
+    coyoteTimer: 0,
+    jumpBufferTimer: 0,
+    hitCooldown: 0,
+    invulnTimer: 0,
+    flashTimer: 0,
+    grounded: true,
+    jumpsLeft: 1,
+    stamina: 100,
+    finisher: 0,
+    shieldUntil: 0,
+    rageUntil: 0,
+    magnetUntil: 0,
+    dropThroughUntil: 0,
+    stunnedUntil: 0,
+    ropeBoostUntil: 0,
+    hasHitCurrentSwing: false,
+    isBoss: true,
+    name: sector === 3 ? 'Apex Imposter Overlord' : `Airlock Warden Lv.${sector}`,
+    stroke: '#f43f5e',
+    accent: '#fde047',
+    speed: 195 + sector * 16,
+    aggro: 0.96,
+    aiCooldown: 1.0,
+    bossPhaseCd: 2.6,
+    summonedHalf: false,
+    ventCooldown: 999,
+  });
+
+  // Sabotaged Room/Corridor Obstacles & Traps
+  const hazards: StationHazard[] = [
+    { id: `sh_1_${sector}`, x: 310, y: 400, radius: 42, kind: 'cryo_spill', hp: 99, maxHp: 99 },
+    { id: `sh_2_${sector}`, x: 705, y: 265, radius: 26, kind: 'cargo_block', hp: 45, maxHp: 45 },
+    { id: `sh_3_${sector}`, x: 965, y: 245, radius: 32, kind: 'shock_wire', hp: 99, maxHp: 99 },
+    { id: `sh_4_${sector}`, x: 710, y: 710, radius: 44, kind: 'cryo_spill', hp: 99, maxHp: 99 },
+    { id: `sh_5_${sector}`, x: 950, y: 690, radius: 26, kind: 'cargo_block', hp: 45, maxHp: 45 },
+    { id: `sh_6_${sector}`, x: 1320, y: 360, radius: 32, kind: 'shock_wire', hp: 99, maxHp: 99 },
+    { id: `sh_7_${sector}`, x: 1245, y: 710, radius: 22, kind: 'sabotage_mine', hp: 20, maxHp: 20 },
+  ];
+
+  const pickups: Pickup2D[] = [
+    { id: `ep_1_${sector}`, x: 420, y: 630, vy: 0, kind: 'drop' },
+    { id: `ep_2_${sector}`, x: 185, y: 340, vy: 0, kind: 'shield' },
+    { id: `ep_3_${sector}`, x: 710, y: 615, vy: 0, kind: 'gem' },
+    { id: `ep_4_${sector}`, x: 965, y: 315, vy: 0, kind: 'medkit' },
+    { id: `ep_5_${sector}`, x: 1340, y: 345, vy: 0, kind: 'rage' },
+    { id: `ep_6_${sector}`, x: 1460, y: 185, vy: 0, kind: 'gem' },
+  ];
+
+  return { clues, imposters, hazards, pickups };
 }
 
 export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
@@ -248,12 +668,18 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
     gems: 0,
     combo: 0,
     waveOrBout: 1,
-    timeLeft: 160,
+    timeLeft: 180,
     shieldLeft: 0,
     rageLeft: 0,
     magnetLeft: 0,
-    pinCount: 0,
-    pinPossible: false,
+    cluesFound: 0,
+    cluesTotal: 3,
+    currentRoom: 'CAFETERIA HUB',
+    wingBOpen: false,
+    airlockOpen: false,
+    exitProgress: 0,
+    nearClueLabel: '',
+    slowMoActive: false,
   });
 
   const keysRef = useRef<Record<string, boolean>>({});
@@ -273,17 +699,23 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
     comboTimer: number;
     waveOrBout: number;
     shake: number;
-    ropeLeftBend: number;
-    ropeRightBend: number;
-    pinActive: boolean;
-    pinTimer: number;
-    pinCount: number;
+    cameraX: number;
+    cameraY: number;
+    levelEndX: number;
+    slowMoUntil: number;
+    radarPingUntil: number;
     pickupSpawnTimer: number;
-    waveSpawnTimer: number;
+    airdropCooldown: number;
+    runnerHeavyCd: number;
     runnerSpeed: number;
     runnerScroll: number;
     player: FighterEntity;
     enemies: FighterEntity[];
+    raidPlatforms: RaidPlatform[];
+    raidBarrels: RaidBarrel[];
+    raidObstacles: RaidObstacle[];
+    escapeClues: EscapeClue[];
+    stationHazards: StationHazard[];
     pickups: Pickup2D[];
     projectiles: Projectile2D[];
     particles: Particle2D[];
@@ -293,12 +725,13 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
     ambientFlakes: { x: number; y: number; s: number; spd: number }[];
   } | null>(null);
 
-  const makeInitialFighter = (isPlayer: boolean, floorY: number): FighterEntity => ({
-    x: isPlayer ? 360 : 840,
-    y: floorY,
+  const makeInitialFighter = (isPlayer: boolean, x: number, y: number): FighterEntity => ({
+    x,
+    y,
     vx: 0,
     vy: 0,
     facing: isPlayer ? 1 : -1,
+    aimY: 0,
     hp: 100,
     maxHp: 100,
     pose: 'idle',
@@ -314,13 +747,14 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
     grounded: true,
     jumpsLeft: 2,
     stamina: 100,
-    finisher: isPlayer ? 25 : 0,
+    finisher: isPlayer ? 30 : 0,
     shieldUntil: 0,
     rageUntil: 0,
     magnetUntil: 0,
     dropThroughUntil: 0,
     stunnedUntil: 0,
     ropeBoostUntil: 0,
+    slowUntil: 0,
     hasHitCurrentSwing: false,
     colorway: isPlayer ? selectedColorway : 'classic_lofi',
   });
@@ -341,7 +775,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         x,
         y,
         vx: Math.cos(a) * spd,
-        vy: Math.sin(a) * spd - 60,
+        vy: Math.sin(a) * spd - 50,
         life: 0.35 + Math.random() * 0.35,
         maxLife: 0.7,
         color,
@@ -360,133 +794,123 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
     };
   };
 
-  const spawnWrestlingChallenger = (boutIndex: number): FighterEntity => {
-    const spec = WRESTLE_CHALLENGERS[Math.min(WRESTLE_CHALLENGERS.length - 1, boutIndex - 1)];
-    const f = makeInitialFighter(false, RING_FLOOR);
-    f.x = 840;
-    f.hp = spec.maxHp;
-    f.maxHp = spec.maxHp;
-    f.name = spec.name;
-    f.stroke = spec.stroke;
-    f.accent = spec.accent;
-    f.colorway = YETI_COLORWAYS[(boutIndex - 1) % YETI_COLORWAYS.length].id;
-    f.speed = spec.speed;
-    f.aggro = spec.aggro;
-    f.isBoss = true;
-    f.aiCooldown = 0.6;
-    return f;
-  };
+  const initMatchState = useCallback(
+    (mode: GameModeId, mapId: MapId) => {
+      const ambientFlakes = Array.from({ length: 42 }, () => ({
+        x: Math.random() * CANVAS_W,
+        y: Math.random() * CANVAS_H,
+        s: 1.5 + Math.random() * 2.5,
+        spd: 35 + Math.random() * 65,
+      }));
 
-  const spawnBrawlWave = (wave: number): FighterEntity[] => {
-    const list: FighterEntity[] = [];
-    const count = Math.min(4, 1 + Math.ceil(wave * 0.75));
-    const isBossWave = wave % 3 === 0;
-    for (let i = 0; i < count; i++) {
-      const fromRight = i % 2 === 0;
-      const f = makeInitialFighter(false, BRAWL_FLOOR);
-      f.x = fromRight ? 1090 - i * 45 : 110 + i * 45;
-      f.facing = fromRight ? -1 : 1;
-      const boss = isBossWave && i === 0;
-      f.isBoss = boss;
-      f.maxHp = boss ? 130 + wave * 12 : 42 + wave * 6;
-      f.hp = f.maxHp;
-      f.name = boss ? `Glacier Brute Lv.${wave}` : i % 2 === 0 ? 'Frost Ninja' : 'Ember Stick';
-      f.stroke = boss ? '#a855f7' : i % 2 === 0 ? '#fb7185' : '#fb923c';
-      f.accent = boss ? '#fde047' : '#38bdf8';
-      f.colorway = boss ? 'golden_frost' : i % 2 === 0 ? 'aurora_violet' : 'sunset_ember';
-      f.speed = boss ? 165 : 210 + Math.min(70, wave * 8);
-      f.aggro = 0.6 + Math.min(0.35, wave * 0.04);
-      f.aiCooldown = 0.45 + i * 0.25;
-      list.push(f);
-    }
-    return list;
-  };
+      let player = makeInitialFighter(true, 180, RAID_FLOOR);
+      let enemies: FighterEntity[] = [];
+      let raidPlatforms: RaidPlatform[] = [];
+      let raidBarrels: RaidBarrel[] = [];
+      let raidObstacles: RaidObstacle[] = [];
+      let escapeClues: EscapeClue[] = [];
+      let stationHazards: StationHazard[] = [];
+      let pickups: Pickup2D[] = [];
+      let levelEndX = 4150;
+      let runnerPlatforms: RunnerPlatform[] = [];
 
-  const initMatchState = useCallback((mode: GameModeId, mapId: MapId) => {
-    const floor = mode === 'stickman_wrestling' ? RING_FLOOR : BRAWL_FLOOR;
-    const player = makeInitialFighter(true, floor);
-    if (mode === 'stickman_run') {
-      player.x = 240;
-      player.y = 470;
-    }
+      if (mode === 'stickman_wrestling') {
+        const built = buildRaidStage(1, 'sunset_ember');
+        levelEndX = built.levelEndX;
+        raidPlatforms = built.platforms;
+        raidBarrels = built.barrels;
+        raidObstacles = built.obstacles;
+        enemies = built.enemies;
+        pickups = built.pickups;
+        player = makeInitialFighter(true, 160, RAID_FLOOR);
+      } else if (mode === 'stickman_brawl') {
+        const built = buildEscapeSector(1);
+        escapeClues = built.clues;
+        stationHazards = built.hazards;
+        enemies = built.imposters;
+        pickups = built.pickups;
+        player = makeInitialFighter(true, 290, 700);
+      } else {
+        player = makeInitialFighter(true, 240, 470);
+        runnerPlatforms = [
+          { x: 0, y: 470, w: 680 },
+          { x: 760, y: 440, w: 460 },
+          { x: 1300, y: 390, w: 360 },
+          { x: 1740, y: 470, w: 540 },
+        ];
+      }
 
-    const ambientFlakes = Array.from({ length: 42 }, () => ({
-      x: Math.random() * CANVAS_W,
-      y: Math.random() * CANVAS_H,
-      s: 1.5 + Math.random() * 2.5,
-      spd: 35 + Math.random() * 65,
-    }));
+      const totalTime = mode === 'stickman_wrestling' ? 210 : mode === 'stickman_brawl' ? 200 : 180;
 
-    const enemies =
-      mode === 'stickman_wrestling'
-        ? [spawnWrestlingChallenger(1)]
-        : mode === 'stickman_brawl'
-        ? spawnBrawlWave(1)
-        : [];
+      stateRef.current = {
+        phase: 'PLAYING',
+        mode,
+        mapId,
+        elapsed: 0,
+        timeLeft: totalTime,
+        score: 0,
+        drops: 0,
+        gems: 0,
+        hitsLanded: 0,
+        cratesSmashed: 0,
+        knockouts: 0,
+        combo: 0,
+        comboTimer: 0,
+        waveOrBout: 1,
+        shake: 0,
+        cameraX: 0,
+        cameraY: mode === 'stickman_brawl' ? Math.max(0, player.y - CANVAS_H * 0.5) : 0,
+        levelEndX,
+        slowMoUntil: 0,
+        radarPingUntil: performance.now() + 2600,
+        pickupSpawnTimer: 4.5,
+        airdropCooldown: 3.6,
+        runnerHeavyCd: 0,
+        runnerSpeed: 370,
+        runnerScroll: 0,
+        player,
+        enemies,
+        raidPlatforms,
+        raidBarrels,
+        raidObstacles,
+        escapeClues,
+        stationHazards,
+        pickups,
+        projectiles: [],
+        particles: [],
+        runnerPlatforms,
+        runnerHazards: [],
+        banner: null,
+        ambientFlakes,
+      };
 
-    const runnerPlatforms: RunnerPlatform[] =
-      mode === 'stickman_run'
-        ? [
-            { x: 0, y: 470, w: 680 },
-            { x: 760, y: 440, w: 460 },
-            { x: 1300, y: 390, w: 360 },
-            { x: 1740, y: 470, w: 540 },
-          ]
-        : [];
+      if (mode === 'stickman_wrestling') {
+        soundEngine.playBell(1);
+        showBanner(
+          'STAGE 1: COMPOUND BREACH',
+          'Blast Syndicate guards (J), Slow-Mo Dive (Space), Reach EXIT Gate!',
+          '#fbbf24',
+          2400
+        );
+      } else if (mode === 'stickman_brawl') {
+        soundEngine.playBell(1);
+        showBanner(
+          'SECTOR 1: FIND 3 CLUES TO ESCAPE',
+          'Search rooms, analyze Clues (E/J), stun Imposters (K), reach Airlock!',
+          '#2dd4bf',
+          2600
+        );
+      } else {
+        soundEngine.playBoost();
+        showBanner('LEVEL 1: GLACIER RUN!', 'Double-Jump (W/Space), Slide (S), Blast Crates (J)', '#2dd4bf', 2000);
+      }
 
-    const totalTime = mode === 'stickman_wrestling' ? 180 : 150;
-
-    stateRef.current = {
-      phase: 'PLAYING',
-      mode,
-      mapId,
-      elapsed: 0,
-      timeLeft: totalTime,
-      score: 0,
-      drops: 0,
-      gems: 0,
-      hitsLanded: 0,
-      cratesSmashed: 0,
-      knockouts: 0,
-      combo: 0,
-      comboTimer: 0,
-      waveOrBout: 1,
-      shake: 0,
-      ropeLeftBend: 0,
-      ropeRightBend: 0,
-      pinActive: false,
-      pinTimer: 0,
-      pinCount: 0,
-      pickupSpawnTimer: 3.5,
-      waveSpawnTimer: 0,
-      runnerSpeed: 370,
-      runnerScroll: 0,
-      player,
-      enemies,
-      pickups: [],
-      projectiles: [],
-      particles: [],
-      runnerPlatforms,
-      runnerHazards: [],
-      banner: null,
-      ambientFlakes,
-    };
-
-    if (mode === 'stickman_wrestling') {
-      soundEngine.playBell(2);
-      showBanner('BOUT 1: BARON BASALT', 'Ding! Ding! Strike (J), Suplex (K), Pin (E)', '#fbbf24', 2200);
-    } else if (mode === 'stickman_brawl') {
-      soundEngine.playBell(1);
-      showBanner('LEVEL 1: FROST BRAWL', 'Chain combos & collect Drops + Power-Ups!', '#38bdf8', 2000);
-    } else {
-      soundEngine.playBoost();
-      showBanner('LEVEL 1: GLACIER RUN!', 'Double-Jump (W/Space), Slide (S), Blast Crates (J)', '#2dd4bf', 2000);
-    }
-
-    setSummary(null);
-    setClaimStatus('idle');
-    setPhase('PLAYING');
-  }, []);
+      setSummary(null);
+      setClaimStatus('idle');
+      setPhase('PLAYING');
+    },
+    [selectedColorway]
+  );
 
   const finishMatch = useCallback((victory: boolean) => {
     const st = stateRef.current;
@@ -495,16 +919,15 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
     setPhase('GAME_OVER');
 
     soundEngine.playRoundEnd(victory);
-    if (st.mode === 'stickman_wrestling') soundEngine.playBell(victory ? 3 : 1);
 
     const cleanDrops = Math.max(1, st.drops + (victory ? 8 : 2));
     const cleanGems = Math.max(1, st.gems + (victory ? 5 : 1));
-    const cleanScore = Math.max(50, Math.round(st.score + (victory ? 350 : 0)));
+    const cleanScore = Math.max(50, Math.round(st.score + (victory ? 400 : 0)));
     const tasksDone = Math.min(
       3,
-      (st.hitsLanded >= 8 ? 1 : 0) +
+      (st.hitsLanded >= 6 ? 1 : 0) +
         (cleanDrops >= 6 ? 1 : 0) +
-        (st.knockouts >= 2 || st.cratesSmashed >= 4 ? 1 : 0)
+        (st.knockouts >= 2 || st.cratesSmashed >= 3 ? 1 : 0)
     );
 
     setSummary({
@@ -521,18 +944,18 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
       wellBanks: 0,
       tasksDone,
       rank: victory ? 1 : st.player.hp <= 0 ? 4 : 2,
-      totalContenders: st.mode === 'stickman_wrestling' ? 4 : 6,
+      totalContenders: st.mode === 'stickman_wrestling' ? 3 : 6,
       xpEarned: Math.round(cleanScore / 5) + 25 + tasksDone * 20,
       extraStatLabel:
         st.mode === 'stickman_wrestling'
-          ? 'Bouts Cleared'
+          ? 'Stage Reached'
           : st.mode === 'stickman_brawl'
-          ? 'Level Reached'
+          ? 'Sector Cleared'
           : 'Distance (m)',
       extraStatValue:
         st.mode === 'stickman_run'
           ? `${Math.round(st.runnerScroll / 16)}m`
-          : `${st.waveOrBout}`,
+          : `${st.waveOrBout}/3`,
     });
   }, []);
 
@@ -580,21 +1003,127 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
     onAutoLaunchHandled();
   }, [autoLaunchMode, onAutoLaunchHandled]);
 
-  // Smooth Responsive Action Triggers with Jump Buffering & Coyote Time
-  const triggerAction = useCallback((action: 'jump' | 'jab' | 'heavy' | 'special' | 'dash' | 'pin' | 'wave') => {
+  const collectEscapeClue = useCallback((clue: EscapeClue) => {
     const st = stateRef.current;
-    if (!st || st.phase !== 'PLAYING') return;
-    const p = st.player;
-    const now = performance.now();
+    if (!st || clue.collected) return;
+    clue.collected = true;
+    clue.scanProgress = 1;
+    st.cratesSmashed += 1;
+    st.drops += 3;
+    st.gems += 1;
+    st.score += 180;
+    soundEngine.playPickup('gem');
+    spawnParticles(clue.x, clue.y - 20, '#fde047', 16, 220);
 
-    if (action === 'jump') {
-      if (st.mode === 'stickman_run') {
+    const found = st.escapeClues.filter((c) => c.collected).length;
+    const total = st.escapeClues.length;
+    if (found === 1 && total > 1) {
+      soundEngine.playBoost();
+      showBanner(`CLUE 1/${total}: ${clue.label.toUpperCase()}`, 'ELECTRICAL WING UNLOCKED!', '#38bdf8', 2000);
+    } else if (found >= total) {
+      soundEngine.playBell(2);
+      showBanner('ALL CLUES FOUND!', 'AIRLOCK ESCAPE DOOR OPEN! RUN TO AIRLOCK!', '#34d399', 2600);
+    } else {
+      showBanner(`CLUE ${found}/${total} FOUND!`, `${clue.label} uploaded`, '#fde047', 1500);
+    }
+  }, []);
+
+  // Responsive Action Triggers
+  const triggerAction = useCallback(
+    (action: 'jump' | 'jab' | 'heavy' | 'special' | 'dash' | 'interact' | 'wave') => {
+      const st = stateRef.current;
+      if (!st || st.phase !== 'PLAYING') return;
+      const p = st.player;
+      const now = performance.now();
+
+      // === AMONG US MULTI-ROOM ESCAPE ACTIONS ===
+      if (st.mode === 'stickman_brawl') {
+        if (action === 'dash') {
+          if (p.stamina < 20 || p.dashCooldown > 0) return;
+          p.stamina = Math.max(0, p.stamina - 22);
+          p.dashTimer = 0.22;
+          p.dashCooldown = 0.45;
+          p.invulnTimer = Math.max(p.invulnTimer, 0.26);
+          const dx = (keysRef.current['d'] || keysRef.current['arrowright'] ? 1 : 0) -
+            (keysRef.current['a'] || keysRef.current['arrowleft'] ? 1 : 0);
+          const dy = (keysRef.current['s'] || keysRef.current['arrowdown'] ? 1 : 0) -
+            (keysRef.current['w'] || keysRef.current['arrowup'] ? 1 : 0);
+          const len = Math.hypot(dx, dy);
+          if (len > 0) {
+            p.vx = (dx / len) * 620;
+            p.vy = (dy / len) * 620;
+          } else {
+            p.vx = p.facing * 620;
+            p.vy = (p.aimY || 0) * 620;
+          }
+          soundEngine.playDash();
+          spawnParticles(p.x, p.y - 30, '#2dd4bf', 10, 170);
+          return;
+        }
+
+        if (action === 'special') {
+          st.radarPingUntil = now + 2600;
+          soundEngine.playPickup('power');
+          const found = st.escapeClues.filter((c) => c.collected).length;
+          const allFound = found >= st.escapeClues.length;
+          showBanner(
+            allFound ? 'RADAR: FOLLOW GREEN ARROW TO AIRLOCK!' : 'RADAR PING: FOLLOW GOLD ARROW TO CLUE!',
+            undefined,
+            allFound ? '#34d399' : '#fde047',
+            1300
+          );
+          return;
+        }
+
+        if (action === 'interact' || action === 'jab') {
+          const nearClue = st.escapeClues.find(
+            (c) => !c.collected && Math.hypot(c.x - p.x, c.y - p.y) < 82
+          );
+          if (nearClue) {
+            p.pose = 'jab';
+            p.actionTimer = 0.22;
+            p.actionDuration = 0.22;
+            collectEscapeClue(nearClue);
+            return;
+          }
+        }
+
+        if (action === 'heavy' || action === 'jab') {
+          if (p.hitCooldown > 0) return;
+          const isHeavy = action === 'heavy';
+          p.hitCooldown = isHeavy ? 0.45 : 0.28;
+          p.pose = isHeavy ? 'heavy' : 'jab';
+          p.actionTimer = 0.22;
+          p.actionDuration = 0.22;
+          const dirX = p.facing;
+          const dirY = p.aimY || 0;
+          const mag = Math.hypot(dirX, dirY) || 1;
+          st.projectiles.push({
+            x: p.x + (dirX / mag) * 26,
+            y: p.y - 38 + (dirY / mag) * 18,
+            vx: (dirX / mag) * (isHeavy ? 760 : 690),
+            vy: (dirY / mag) * (isHeavy ? 760 : 690),
+            owner: 'player',
+            color: isHeavy ? '#fbbf24' : '#2dd4bf',
+            radius: isHeavy ? 11 : 8,
+            damage: isHeavy ? 38 : 22,
+            stunOnly: isHeavy,
+            life: isHeavy ? 0.78 : 0.65,
+          });
+          soundEngine.playThrow();
+        }
+        return;
+      }
+
+      // === JUMP (Killer Bean Raid & Glacier Run) ===
+      if (action === 'jump') {
         if (p.grounded || p.coyoteTimer > 0 || p.jumpsLeft > 0) {
           const isFirstJump = p.grounded || p.coyoteTimer > 0;
           p.vy = isFirstJump ? -645 : -565;
           p.grounded = false;
           p.coyoteTimer = 0;
           p.jumpsLeft = isFirstJump ? 1 : 0;
+          p.dashTimer = 0;
           p.pose = 'jump';
           soundEngine.playDash();
           spawnParticles(p.x, p.y, '#bae6fd', 6, 120);
@@ -604,188 +1133,177 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         return;
       }
 
-      if (p.grounded || p.coyoteTimer > 0 || p.jumpsLeft > 0) {
-        const isFirstJump = p.grounded || p.coyoteTimer > 0;
-        const nearTurnbuckle =
-          st.mode === 'stickman_wrestling' &&
-          (p.x < RING_LEFT + 65 || p.x > RING_RIGHT - 65);
-        p.vy = nearTurnbuckle ? -780 : isFirstJump ? -630 : -555;
-        p.grounded = false;
-        p.coyoteTimer = 0;
-        p.jumpsLeft = isFirstJump ? 1 : 0;
-        p.dashTimer = 0;
-        p.pose = nearTurnbuckle ? 'finisher' : 'jump';
-        if (nearTurnbuckle) {
-          p.actionTimer = 0.52;
-          p.actionDuration = 0.52;
-          p.hasHitCurrentSwing = false;
-          showBanner('TURNBUCKLE FROG SPLASH!', undefined, '#38bdf8', 900);
-        }
-        soundEngine.playDash();
-      } else {
-        p.jumpBufferTimer = 0.14;
-      }
-      return;
-    }
-
-    if (action === 'dash') {
-      if (st.mode === 'stickman_run') {
-        triggerAction('jump');
-        return;
-      }
-      if (p.stamina < 18 || p.dashCooldown > 0) return;
-      p.stamina = Math.max(0, p.stamina - 20);
-      p.dashTimer = 0.18;
-      p.dashCooldown = 0.36;
-      p.actionTimer = 0;
-      p.vx = p.facing * 680;
-      p.invulnTimer = Math.max(p.invulnTimer, 0.22);
-      p.ropeBoostUntil = now + 900;
-      soundEngine.playDash();
-      spawnParticles(p.x, p.y - 30, '#38bdf8', 8, 160);
-      return;
-    }
-
-    if (st.mode === 'stickman_run') {
-      if (action === 'jab' || action === 'heavy' || action === 'special') {
-        if (p.hitCooldown > 0) return;
-        p.hitCooldown = 0.22;
-        p.pose = 'jab';
-        p.actionTimer = 0.18;
-        p.actionDuration = 0.18;
-        st.projectiles.push({
-          x: p.x + 28,
-          y: p.y - 48,
-          vx: 820,
-          vy: 0,
-          owner: 'player',
-          color: '#67e8f9',
-          radius: 10,
-        });
-        soundEngine.playThrow();
-      }
-      return;
-    }
-
-    if (action === 'wave') {
-      p.pose = 'wave';
-      p.actionTimer = 0.65;
-      p.actionDuration = 0.65;
-      soundEngine.playEmote('wave');
-      st.drops += 1;
-      st.score += 15;
-      showBanner('LOFI SALUTE! +1 DROP', undefined, '#38bdf8', 900);
-      return;
-    }
-
-    // Allow snappy chaining once past active strike swing (> 0.05s remaining cancels cleanly!)
-    if (p.actionTimer > 0.09) return;
-
-    if (action === 'jab') {
-      p.pose = 'jab';
-      p.actionTimer = 0.18;
-      p.actionDuration = 0.18;
-      p.hasHitCurrentSwing = false;
-      p.vx += p.facing * 110; // responsive forward step-in
-      soundEngine.playPunch(false);
-    } else if (action === 'heavy') {
-      if (st.mode === 'stickman_wrestling') {
-        const target = st.enemies[0];
-        if (target && Math.abs(target.x - p.x) < 108 && Math.abs(target.y - p.y) < 82) {
-          if (target.hp <= 38 && target.stunnedUntil > now) {
-            st.pinActive = true;
-            st.pinTimer = 0;
-            st.pinCount = 0;
-            p.pose = 'pin';
-            p.x = target.x - p.facing * 24;
-            soundEngine.playPinTick(1);
-            return;
-          }
-          p.pose = 'suplex';
-          p.actionTimer = 0.46;
-          p.actionDuration = 0.46;
-          p.invulnTimer = 0.48;
-          target.pose = 'hurt';
-          target.actionTimer = 0.5;
-          target.actionDuration = 0.5;
-          target.x = Math.max(RING_LEFT + 35, Math.min(RING_RIGHT - 35, p.x - p.facing * 75));
-          target.vy = -420;
-          target.grounded = false;
-          const dmg = now < p.rageUntil ? 34 : 24;
-          target.hp = Math.max(0, target.hp - dmg);
-          target.flashTimer = 0.2;
-          target.stunnedUntil = now + 2600;
-          st.hitsLanded += 1;
-          st.combo += 1;
-          st.comboTimer = 2.6;
-          st.score += 65 + st.combo * 10;
-          p.finisher = Math.min(100, p.finisher + 22);
-          st.shake = 12;
-          soundEngine.playSlam();
-          spawnParticles(target.x, RING_FLOOR - 12, '#fbbf24', 16, 260);
-          showBanner('OVERHEAD YETI SUPLEX!', `-${dmg} HP · STUNNED`, '#fbbf24', 1100);
+      if (action === 'dash') {
+        if (st.mode === 'stickman_run') {
+          triggerAction('jump');
           return;
         }
+        // Killer Bean Slow-Motion Bullet-Time Dive!
+        if (p.stamina < 18 || p.dashCooldown > 0) return;
+        p.stamina = Math.max(0, p.stamina - 22);
+        p.dashTimer = 0.24;
+        p.dashCooldown = 0.42;
+        p.actionTimer = 0.24;
+        p.actionDuration = 0.24;
+        p.pose = 'slide';
+        p.vx = p.facing * 720;
+        p.vy = Math.min(p.vy, -190);
+        p.invulnTimer = Math.max(p.invulnTimer, 0.34);
+        st.slowMoUntil = now + 820;
+        soundEngine.playDash();
+        spawnParticles(p.x, p.y - 36, '#38bdf8', 12, 180);
+        showBanner('SLOW-MO BULLET DIVE!', undefined, '#38bdf8', 750);
+        return;
       }
-      p.pose = 'heavy';
-      p.actionTimer = 0.28;
-      p.actionDuration = 0.28;
-      p.hasHitCurrentSwing = false;
-      p.vx += p.facing * 150;
-      p.vy = Math.min(p.vy, -170);
-      soundEngine.playPunch(true);
-    } else if (action === 'special') {
-      if (st.mode === 'stickman_wrestling') {
+
+      if (st.mode === 'stickman_run') {
+        if (action === 'special') {
+          if (p.finisher < 100) {
+            showBanner('NEED 100% MEGA CHARGE!', 'Hit crates & boss to charge', '#94a3b8', 900);
+            return;
+          }
+          p.finisher = 0;
+          p.pose = 'finisher';
+          p.actionTimer = 0.3;
+          p.actionDuration = 0.3;
+          st.shake = 10;
+          st.projectiles.push({
+            x: p.x + 30,
+            y: p.y - 48,
+            vx: 1020,
+            vy: 0,
+            owner: 'player',
+            color: '#fbbf24',
+            radius: 17,
+            damage: 95,
+            piercing: true,
+          });
+          soundEngine.playSlam();
+          showBanner('GLACIER MEGA-BEAM!', undefined, '#fbbf24', 950);
+          return;
+        }
+        if (action === 'heavy') {
+          if (st.runnerHeavyCd > 0) return;
+          st.runnerHeavyCd = 1.05;
+          p.pose = 'heavy';
+          p.actionTimer = 0.22;
+          p.actionDuration = 0.22;
+          st.projectiles.push({
+            x: p.x + 28,
+            y: p.y - 48,
+            vx: 920,
+            vy: 0,
+            owner: 'player',
+            color: '#fbbf24',
+            radius: 14,
+            damage: 58,
+            piercing: true,
+          });
+          soundEngine.playPunch(true);
+          return;
+        }
+        if (action === 'jab') {
+          if (p.hitCooldown > 0) return;
+          p.hitCooldown = 0.2;
+          p.pose = 'jab';
+          p.actionTimer = 0.18;
+          p.actionDuration = 0.18;
+          st.projectiles.push({
+            x: p.x + 28,
+            y: p.y - 48,
+            vx: 840,
+            vy: 0,
+            owner: 'player',
+            color: '#67e8f9',
+            radius: 10,
+            damage: 28,
+          });
+          soundEngine.playThrow();
+        }
+        return;
+      }
+
+      if (action === 'wave') {
+        p.pose = 'wave';
+        p.actionTimer = 0.65;
+        p.actionDuration = 0.65;
+        soundEngine.playEmote('wave');
+        st.drops += 1;
+        st.score += 15;
+        showBanner('LOFI SALUTE! +1 DROP', undefined, '#38bdf8', 900);
+        return;
+      }
+
+      // === KILLER BEAN LEVEL RAID COMBAT ===
+      if (action === 'jab') {
+        if (p.hitCooldown > 0) return;
+        p.hitCooldown = 0.17;
+        p.pose = 'jab';
+        p.actionTimer = 0.16;
+        p.actionDuration = 0.16;
+        // Fire crisp Twin Pistol Frost Bolt
+        st.projectiles.push({
+          x: p.x + p.facing * 26,
+          y: p.y - 54,
+          vx: p.facing * 940,
+          vy: (Math.random() - 0.5) * 32,
+          owner: 'player',
+          color: now < p.rageUntil ? '#fb923c' : '#fde047',
+          radius: 7,
+          damage: now < p.rageUntil ? 32 : 22,
+        });
+        soundEngine.playThrow();
+      } else if (action === 'heavy') {
+        if (p.actionTimer > 0.08) return;
+        p.pose = 'heavy';
+        p.actionTimer = 0.28;
+        p.actionDuration = 0.28;
+        p.hasHitCurrentSwing = false;
+        p.vx += p.facing * 180;
+        p.vy = Math.min(p.vy, -170);
+        soundEngine.playPunch(true);
+        // Deflect nearby enemy bullets with Gun-Fu Spin Kick!
+        for (let bi = st.projectiles.length - 1; bi >= 0; bi--) {
+          const pr = st.projectiles[bi];
+          if (pr.owner === 'enemy' && Math.hypot(pr.x - p.x, pr.y - (p.y - 45)) < 115) {
+            pr.owner = 'player';
+            pr.vx = p.facing * 880;
+            pr.color = '#38bdf8';
+            pr.damage = 30;
+            spawnParticles(pr.x, pr.y, '#38bdf8', 8, 160);
+          }
+        }
+      } else if (action === 'special') {
         if (p.finisher < 100) {
-          showBanner('NEED 100% FINISHER METER!', 'Land strikes & blocks to charge', '#94a3b8', 900);
+          showBanner('NEED 100% BEAN SHOT!', 'Hit enemies or barrels to charge', '#94a3b8', 900);
           return;
         }
         p.finisher = 0;
         p.pose = 'finisher';
-        p.actionTimer = 0.58;
-        p.actionDuration = 0.58;
-        p.vy = -520;
-        p.vx = p.facing * 430;
-        p.grounded = false;
-        p.hasHitCurrentSwing = false;
-        p.invulnTimer = 0.7;
-        soundEngine.playBell(1);
-        showBanner('AVALANCHE YETI SLAM!!', 'SIGNATURE FINISHER', '#38bdf8', 1400);
-      } else {
-        if (p.hitCooldown > 0) return;
-        p.hitCooldown = 0.26;
-        p.pose = 'jab';
-        p.actionTimer = 0.18;
-        p.actionDuration = 0.18;
+        p.actionTimer = 0.36;
+        p.actionDuration = 0.36;
+        p.invulnTimer = 0.4;
+        st.shake = 12;
+        st.slowMoUntil = now + 600;
         st.projectiles.push({
-          x: p.x + p.facing * 26,
-          y: p.y - 56,
-          vx: p.facing * 720,
-          vy: -25,
+          x: p.x + p.facing * 30,
+          y: p.y - 54,
+          vx: p.facing * 1120,
+          vy: 0,
           owner: 'player',
-          color: '#67e8f9',
-          radius: 10,
+          color: '#38bdf8',
+          radius: 16,
+          damage: 85,
+          piercing: true,
         });
-        soundEngine.playThrow();
+        soundEngine.playSlam();
+        showBanner('PIERCING BEAN MEGA-SHOT!', undefined, '#38bdf8', 1100);
       }
-    } else if (action === 'pin' && st.mode === 'stickman_wrestling') {
-      const target = st.enemies[0];
-      if (!target) return;
-      if (Math.abs(target.x - p.x) < 115 && (target.hp <= 45 || target.stunnedUntil > now)) {
-        st.pinActive = true;
-        st.pinTimer = 0;
-        st.pinCount = 0;
-        p.pose = 'pin';
-        p.x = target.x - p.facing * 22;
-        target.pose = 'down';
-        soundEngine.playPinTick(1);
-      } else {
-        showBanner('WEAKEN OR STUN RIVAL FIRST!', 'Drop rival below 45 HP or stun with Suplex (K)', '#fb7185', 1100);
-      }
-    }
-  }, []);
+    },
+    [collectEscapeClue]
+  );
 
-  // Keyboard Listeners (with variable jump height release!)
+  // Keyboard Listeners
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
@@ -810,23 +1328,23 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
 
       if (stateRef.current?.phase !== 'PLAYING') return;
 
-      if (k === 'w' || k === 'arrowup') triggerAction('jump');
+      const isTopDown = stateRef.current.mode === 'stickman_brawl';
+      if (!isTopDown && (k === 'w' || k === 'arrowup')) triggerAction('jump');
       else if (k === 'j') triggerAction('jab');
       else if (k === 'k') triggerAction('heavy');
       else if (k === 'l') triggerAction('special');
       else if (k === ' ') triggerAction('dash');
-      else if (k === 'e') triggerAction('pin');
+      else if (k === 'e') triggerAction('interact');
       else if (k === '1') triggerAction('wave');
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
       keysRef.current[k] = false;
-      // Variable jump height cut when releasing jump early
-      if (k === 'w' || k === 'arrowup') {
-        const p = stateRef.current?.player;
-        if (p && p.vy < -220) {
-          p.vy *= 0.64;
+      const st = stateRef.current;
+      if (st && st.mode !== 'stickman_brawl' && (k === 'w' || k === 'arrowup')) {
+        if (st.player.vy < -220) {
+          st.player.vy *= 0.64;
         }
       }
     };
@@ -850,43 +1368,39 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
     let lastTs = performance.now();
     let hudSyncAcc = 0;
 
-    const handlePlayerDamage = (dmg: number, knockX: number) => {
+    const handlePlayerDamage = (dmg: number, knockX: number, knockY = 0) => {
       const st = stateRef.current;
       if (!st) return;
       const p = st.player;
       const now = performance.now();
       if (p.invulnTimer > 0) return;
 
-      const guarding = p.pose === 'guard';
+      const guarding = st.mode === 'stickman_wrestling' && p.pose === 'slide';
       if (now < p.shieldUntil) {
         spawnParticles(p.x, p.y - 45, '#38bdf8', 10, 180);
         soundEngine.playDash();
         return;
       }
-      const finalDmg = guarding ? Math.max(2, Math.round(dmg * 0.25)) : dmg;
+      const finalDmg = guarding ? Math.max(2, Math.round(dmg * 0.35)) : dmg;
       p.hp = Math.max(0, p.hp - finalDmg);
       p.flashTimer = 0.18;
-      p.invulnTimer = guarding ? 0.25 : 0.55;
-      p.vx = knockX * (guarding ? 0.35 : 1);
-      if (guarding) {
-        p.finisher = Math.min(100, p.finisher + 14);
-        soundEngine.playDash();
-      } else {
-        p.pose = 'hurt';
-        p.actionTimer = 0.22;
-        p.actionDuration = 0.22;
-        st.combo = 0;
-        st.shake = 8;
-        soundEngine.playHit();
-        spawnParticles(p.x, p.y - 45, '#ef4444', 10, 180);
-      }
+      p.invulnTimer = 0.6;
+      p.vx = knockX;
+      if (st.mode === 'stickman_brawl') p.vy = knockY;
+      p.pose = 'hurt';
+      p.actionTimer = 0.22;
+      p.actionDuration = 0.22;
+      st.combo = 0;
+      st.shake = 9;
+      soundEngine.playHit();
+      spawnParticles(p.x, p.y - 42, '#ef4444', 10, 180);
 
       if (p.hp <= 0) {
         finishMatch(false);
       }
     };
 
-    const damageEnemy = (e: FighterEntity, dmg: number, knockX: number, knockY = -180) => {
+    const damageEnemy = (e: FighterEntity, dmg: number, knockX: number, knockY = -140) => {
       const st = stateRef.current;
       if (!st) return;
       const now = performance.now();
@@ -895,19 +1409,21 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
       e.hp = Math.max(0, e.hp - dealt);
       e.flashTimer = 0.16;
       e.vx = knockX;
-      e.vy = knockY;
-      if (knockY < -50) e.grounded = false;
+      if (st.mode !== 'stickman_brawl' && knockY < -50) {
+        e.vy = knockY;
+        e.grounded = false;
+      }
       e.pose = e.hp <= 0 ? 'down' : 'hurt';
-      e.actionTimer = 0.26;
-      e.actionDuration = 0.26;
+      e.actionTimer = 0.24;
+      e.actionDuration = 0.24;
 
       st.hitsLanded += 1;
       st.combo += 1;
       st.comboTimer = 2.6;
-      st.score += 25 + st.combo * 5;
-      st.player.finisher = Math.min(100, st.player.finisher + 14);
+      st.score += 30 + st.combo * 5;
+      st.player.finisher = Math.min(100, st.player.finisher + 18);
       st.shake = Math.max(st.shake, 6);
-      spawnParticles(e.x, e.y - 48, '#7dd3fc', 10, 210);
+      spawnParticles(e.x, e.y - 46, '#7dd3fc', 10, 210);
     };
 
     const spawnDropBurst = (x: number, y: number, count: number, includePowerUp = false) => {
@@ -917,8 +1433,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         st.pickups.push({
           id: `pk_${Math.random().toString(36).slice(2, 8)}`,
           x: x + (Math.random() - 0.5) * 60,
-          y: y - 40,
-          vy: -160 - Math.random() * 140,
+          y: y - 30,
+          vy: st.mode === 'stickman_brawl' ? 0 : -150 - Math.random() * 110,
           kind: i === 0 && Math.random() < 0.45 ? 'gem' : 'drop',
         });
       }
@@ -927,8 +1443,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         st.pickups.push({
           id: `pu_${Math.random().toString(36).slice(2, 8)}`,
           x,
-          y: y - 70,
-          vy: -220,
+          y: y - 40,
+          vy: st.mode === 'stickman_brawl' ? 0 : -180,
           kind: kinds[Math.floor(Math.random() * kinds.length)],
         });
       }
@@ -938,8 +1454,35 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
       const st = stateRef.current;
       if (!st) return;
       st.player.hp = st.player.maxHp;
-      spawnParticles(st.player.x, st.player.y - 50, '#4ade80', 18, 220);
-      showBanner(label, sublabel || 'FULL HP RESTORED!', '#4ade80', 2100);
+      spawnParticles(st.player.x, st.player.y - 46, '#4ade80', 18, 220);
+      showBanner(label, sublabel || 'FULL HP RESTORED!', '#4ade80', 2200);
+    };
+
+    const collidesStationWall = (cx: number, cy: number, radius: number, st: NonNullable<typeof stateRef.current>) => {
+      const cluesFound = st.escapeClues.filter((c) => c.collected).length;
+      const wingBOpen = cluesFound >= 1;
+      const airlockOpen = cluesFound >= st.escapeClues.length;
+      for (const w of STATION_WALLS) {
+        if (w.doorId === 'wing_b' && wingBOpen) continue;
+        if (w.doorId === 'airlock' && airlockOpen) continue;
+        if (
+          cx + radius > w.x &&
+          cx - radius < w.x + w.w &&
+          cy + radius > w.y &&
+          cy - radius < w.y + w.h
+        ) {
+          return true;
+        }
+      }
+      for (const hz of st.stationHazards) {
+        if (hz.kind === 'cargo_block' && hz.hp > 0) {
+          const half = hz.radius * 0.72;
+          if (Math.abs(cx - hz.x) < radius + half && Math.abs(cy - hz.y) < radius + half) {
+            return true;
+          }
+        }
+      }
+      return false;
     };
 
     const stepPhysics = (dt: number) => {
@@ -949,10 +1492,12 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
       const p = st.player;
       const keys = keysRef.current;
 
+      const slowFactor = st.mode === 'stickman_wrestling' && now < st.slowMoUntil ? 0.38 : 1;
+
       st.elapsed += dt;
       st.timeLeft = Math.max(0, st.timeLeft - dt);
       if (st.timeLeft <= 0) {
-        finishMatch(st.mode !== 'stickman_wrestling');
+        finishMatch(false);
         return;
       }
 
@@ -961,8 +1506,6 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         if (st.comboTimer <= 0) st.combo = 0;
       }
       st.shake = Math.max(0, st.shake - dt * 32);
-      st.ropeLeftBend = Math.max(0, st.ropeLeftBend - dt * 65);
-      st.ropeRightBend = Math.max(0, st.ropeRightBend - dt * 65);
 
       p.stamina = Math.min(100, p.stamina + dt * 26);
       p.hitCooldown = Math.max(0, p.hitCooldown - dt);
@@ -980,96 +1523,1008 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         if (fl.x < -10) fl.x = CANVAS_W + 10;
       }
 
-      // Pinfall Sequence in Wrestling
-      if (st.mode === 'stickman_wrestling' && st.pinActive) {
-        const target = st.enemies[0];
-        if (!target) {
-          st.pinActive = false;
+      st.runnerHeavyCd = Math.max(0, st.runnerHeavyCd - dt);
+
+      // === MODE 1: KILLER BEAN-STYLE SIDE-SCROLLING LEVEL RAID ('stickman_wrestling') ===
+      if (st.mode === 'stickman_wrestling') {
+        const moveLeft = Boolean(keys['a'] || keys['arrowleft']);
+        const moveRight = Boolean(keys['d'] || keys['arrowright']);
+        const sliding = Boolean(keys['s'] || keys['arrowdown']);
+        const moveDir = (moveRight ? 1 : 0) - (moveLeft ? 1 : 0);
+
+        if (sliding && p.grounded) {
+          p.dropThroughUntil = now + 180;
+        }
+
+        const playerSlowed = now < (p.slowUntil || 0);
+        const maxSpeed = 375 * (now < p.rageUntil ? 1.2 : 1) * (playerSlowed ? 0.56 : 1);
+        if (p.dashTimer > 0) {
+          p.vx *= Math.pow(0.24, dt);
+          p.pose = 'slide';
+          if (Math.random() < 0.7) spawnParticles(p.x, p.y - 36, '#38bdf8', 1, 60);
         } else {
-          st.pinTimer += dt;
-          const nextCount = Math.floor(st.pinTimer / 0.85) + 1;
-          if (nextCount > st.pinCount && nextCount <= 3) {
-            st.pinCount = nextCount;
-            soundEngine.playPinTick(nextCount);
-            showBanner(`REFEREE COUNT: ${nextCount}!`, undefined, '#fbbf24', 800);
+          if (p.actionTimer > 0) p.actionTimer = Math.max(0, p.actionTimer - dt);
+          const targetVx = moveDir * maxSpeed * (p.actionTimer > 0 ? 0.8 : 1);
+          p.vx += (targetVx - p.vx) * Math.min(1, dt * (moveDir !== 0 ? 18 : 14));
+          if (moveDir !== 0) p.facing = moveDir > 0 ? 1 : -1;
+          if (p.actionTimer <= 0) {
+            if (sliding && p.grounded) p.pose = 'slide';
+            else if (!p.grounded) p.pose = p.vy < 0 ? 'jump' : 'fall';
+            else if (Math.abs(p.vx) > 45) p.pose = 'run';
+            else p.pose = 'idle';
           }
-          if (st.pinTimer >= 2.55) {
-            const kickoutChance = target.hp > 32 ? 0.85 : target.hp > 18 ? 0.35 : 0;
-            if (Math.random() < kickoutChance) {
-              st.pinActive = false;
-              st.pinCount = 0;
-              p.vy = -260;
-              p.vx = -p.facing * 240;
-              target.pose = 'idle';
-              target.hp = Math.min(target.maxHp, target.hp + 12);
-              showBanner('KICKOUT AT 2!!', 'Keep attacking to secure the pin!', '#fb7185', 1300);
-              soundEngine.playDash();
-            } else {
-              st.pinActive = false;
-              st.pinCount = 3;
-              target.hp = 0;
-              st.knockouts += 1;
-              st.drops += 6;
-              st.gems += 3;
-              st.score += 320;
-              p.pose = 'victory';
-              p.actionTimer = 0.8;
-              p.actionDuration = 0.8;
-              soundEngine.playBell(3);
-              if (st.waveOrBout >= WRESTLE_CHALLENGERS.length) {
-                finishMatch(true);
-                return;
-              } else {
-                st.waveOrBout += 1;
-                st.enemies = [spawnWrestlingChallenger(st.waveOrBout)];
-                refillPlayerFullLife(
-                  `BOUT ${st.waveOrBout}: ${st.enemies[0].name?.toUpperCase()}!`,
-                  'LEVEL COMPLETE · FULL HP RESTORED!'
-                );
+        }
+
+        if (sliding && !p.grounded) p.vy += 880 * dt;
+        p.vy += 1560 * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+
+        const wasGrounded = p.grounded;
+        p.grounded = false;
+        if (p.vy >= 0 && now > p.dropThroughUntil) {
+          for (const pl of st.raidPlatforms) {
+            if (p.x >= pl.x && p.x <= pl.x + pl.w && p.y >= pl.y && p.y - p.vy * dt <= pl.y + 22) {
+              p.y = pl.y;
+              p.vy = 0;
+              p.grounded = true;
+              p.jumpsLeft = 2;
+              p.coyoteTimer = 0.12;
+            }
+          }
+        }
+        if (p.y >= RAID_FLOOR) {
+          p.y = RAID_FLOOR;
+          p.vy = 0;
+          p.grounded = true;
+          p.jumpsLeft = 2;
+          p.coyoteTimer = 0.12;
+        }
+        if (wasGrounded && !p.grounded && p.vy >= 0) p.coyoteTimer = 0.12;
+
+        // Dynamic Syndicate Aerial Obstacle Drops ahead of player
+        st.airdropCooldown -= dt;
+        if (st.airdropCooldown <= 0 && p.x < st.levelEndX - 320 && st.raidObstacles.length < 22) {
+          st.airdropCooldown = Math.max(2.1, 3.8 - st.waveOrBout * 0.4);
+          const dropX = Math.max(140, Math.min(st.levelEndX - 180, p.x + p.facing * (120 + Math.random() * 150)));
+          const isMine = Math.random() < 0.48;
+          st.raidObstacles.push({
+            id: `air_${Math.random().toString(36).slice(2, 8)}`,
+            x: dropX,
+            y: -40,
+            targetY: RAID_FLOOR,
+            vy: 60,
+            w: isMine ? 34 : 52,
+            h: isMine ? 22 : 48,
+            kind: isMine ? 'cryo_mine' : 'airdrop_crate',
+            hp: isMine ? 18 : 48,
+            maxHp: isMine ? 18 : 48,
+            falling: true,
+          });
+        }
+
+        // Step & Collide Raid Obstacles (Laser Barriers, Airdrop Crates, Cryo Mines)
+        for (let oi = st.raidObstacles.length - 1; oi >= 0; oi--) {
+          const obs = st.raidObstacles[oi];
+          obs.hitCooldown = Math.max(0, (obs.hitCooldown || 0) - dt);
+          if (obs.hp <= 0) {
+            st.cratesSmashed += 1;
+            st.score += 55;
+            spawnParticles(obs.x, obs.y - obs.h * 0.5, obs.kind === 'laser_barrier' ? '#fb7185' : '#fbbf24', 14, 210);
+            spawnDropBurst(obs.x, obs.y, 1, Math.random() < 0.25);
+            st.raidObstacles.splice(oi, 1);
+            continue;
+          }
+
+          if (obs.falling) {
+            obs.vy += 1080 * dt;
+            obs.y += obs.vy * dt;
+            if (
+              Math.abs(p.x - obs.x) < obs.w * 0.5 + 16 &&
+              p.y > obs.y - obs.h &&
+              p.y - 72 < obs.y
+            ) {
+              handlePlayerDamage(18, (p.x >= obs.x ? 1 : -1) * 240);
+              p.slowUntil = now + 1300;
+              showBanner('AIR-DROP IMPACT! SLOWED', undefined, '#fb923c', 850);
+            }
+            if (obs.y >= obs.targetY) {
+              obs.y = obs.targetY;
+              obs.vy = 0;
+              obs.falling = false;
+              st.shake = Math.max(st.shake, 5);
+              spawnParticles(obs.x, obs.y - 8, '#fbbf24', 8, 160);
+            }
+          }
+
+          if (obs.kind === 'laser_barrier') {
+            if (
+              Math.abs(p.x - obs.x) < obs.w * 0.5 + 15 &&
+              p.y > obs.y - obs.h + 6 &&
+              p.y - 72 < obs.y &&
+              p.dashTimer <= 0 &&
+              (obs.hitCooldown || 0) <= 0
+            ) {
+              obs.hitCooldown = 0.75;
+              handlePlayerDamage(14, (p.x >= obs.x ? 1 : -1) * 260);
+              p.slowUntil = now + 900;
+              showBanner('LASER SHOCK! SHOOT OR KICK (K)', undefined, '#fb7185', 850);
+            }
+          } else if (obs.kind === 'airdrop_crate' && !obs.falling) {
+            const halfW = obs.w * 0.5 + 16;
+            const topY = obs.y - obs.h;
+            if (Math.abs(p.x - obs.x) < halfW) {
+              if (p.vy >= 0 && p.y >= topY && p.y - p.vy * dt <= topY + 24) {
+                p.y = topY;
+                p.vy = 0;
+                p.grounded = true;
+                p.jumpsLeft = 2;
+                p.coyoteTimer = 0.12;
+              } else if (p.y > topY + 10 && p.y - 68 < obs.y) {
+                p.x = p.x < obs.x ? obs.x - halfW : obs.x + halfW;
+                p.vx = 0;
+              }
+            }
+          } else if (obs.kind === 'cryo_mine' && !obs.falling) {
+            if (Math.abs(p.x - obs.x) < obs.w * 0.5 + 16 && Math.abs(p.y - obs.y) < 34) {
+              handlePlayerDamage(16, (p.x >= obs.x ? 1 : -1) * 280);
+              p.vy = -340;
+              p.grounded = false;
+              p.slowUntil = now + 1800;
+              spawnParticles(obs.x, obs.y - 12, '#38bdf8', 18, 250);
+              soundEngine.playSlam();
+              showBanner('CRYO MINE DETONATED! SLOWED', undefined, '#38bdf8', 950);
+              st.raidObstacles.splice(oi, 1);
+            }
+          }
+        }
+
+        if (p.grounded && p.jumpBufferTimer > 0) {
+          p.jumpBufferTimer = 0;
+          p.vy = -645;
+          p.grounded = false;
+          p.jumpsLeft = 1;
+          soundEngine.playDash();
+        }
+
+        p.x = Math.max(45, Math.min(st.levelEndX + 40, p.x));
+        const targetCamX = Math.max(0, Math.min(st.levelEndX - CANVAS_W + 170, p.x - 360));
+        st.cameraX += (targetCamX - st.cameraX) * Math.min(1, dt * 8.5);
+
+        // Close-range Spin Kick Hitbox (K) — hits enemies, obstacles, and explosive barrels!
+        if (p.pose === 'heavy' && !p.hasHitCurrentSwing && p.actionTimer < p.actionDuration * 0.78) {
+          let landed = false;
+          for (const e of st.enemies) {
+            if (e.hp <= 0) continue;
+            if (Math.abs(e.x - p.x) <= 105 && Math.abs(e.y - p.y) < 88) {
+              const dmg = e.isBoss && e.bossState === 'guard' ? 18 : 34;
+              damageEnemy(e, dmg, (e.x >= p.x ? 1 : -1) * 340, -240);
+              landed = true;
+            }
+          }
+          for (const obs of st.raidObstacles) {
+            if (Math.abs(obs.x - p.x) <= 105 && Math.abs(obs.y - p.y) < 92) {
+              obs.hp -= 40;
+              landed = true;
+            }
+          }
+          for (let bi = st.raidBarrels.length - 1; bi >= 0; bi--) {
+            const br = st.raidBarrels[bi];
+            if (Math.abs(br.x - p.x) <= 105 && Math.abs(br.y - p.y) < 88) {
+              br.hp -= 45;
+              landed = true;
+              if (br.hp <= 0) {
+                st.raidBarrels.splice(bi, 1);
+                st.cratesSmashed += 1;
+                st.score += 90;
+                st.shake = 14;
+                soundEngine.playSlam();
+                spawnParticles(br.x, br.y - 24, '#fb923c', 22, 320);
+                spawnDropBurst(br.x, br.y, 2, true);
+                if (Math.hypot(p.x - br.x, p.y - br.y) < 110 && p.dashTimer <= 0) {
+                  handlePlayerDamage(12, (p.x >= br.x ? 1 : -1) * 260);
+                }
+                for (const e of st.enemies) {
+                  if (Math.hypot(e.x - br.x, e.y - br.y) < 190) {
+                    damageEnemy(e, 75, (e.x >= br.x ? 1 : -1) * 320, -240);
+                  }
+                }
               }
             }
           }
-          return;
+          if (landed) {
+            p.hasHitCurrentSwing = true;
+            soundEngine.playPunch(true);
+          }
         }
-      }
 
-      // === MODE 3: STICKMAN GLACIER RUN ===
-      if (st.mode === 'stickman_run') {
+        // Enemy Syndicate AI & Tough Multi-Phase Gate Boss (slowed by slowMoUntil!)
+        const eDt = dt * slowFactor;
+        for (let i = st.enemies.length - 1; i >= 0; i--) {
+          const e = st.enemies[i];
+          e.flashTimer = Math.max(0, e.flashTimer - dt);
+          if (e.actionTimer > 0) e.actionTimer = Math.max(0, e.actionTimer - eDt);
+          e.aiCooldown = Math.max(0, (e.aiCooldown || 0) - eDt);
+          e.bossPhaseCd = Math.max(0, (e.bossPhaseCd ?? 2.4) - eDt);
+
+          if (e.hp <= 0) {
+            st.knockouts += 1;
+            st.drops += e.isBoss ? 8 : 2;
+            st.gems += e.isBoss ? 4 : 1;
+            st.score += e.isBoss ? 420 : 110;
+            spawnDropBurst(e.x, e.y, e.isBoss ? 4 : 2, e.isBoss || Math.random() < 0.35);
+            spawnParticles(e.x, e.y - 40, e.stroke || '#fb7185', 18, 250);
+            if (e.isBoss) {
+              showBanner('GATE BOSS DEFEATED!', 'EXTRACTION EXIT UNLOCKED!', '#34d399', 2000);
+            }
+            st.enemies.splice(i, 1);
+            continue;
+          }
+
+          const dx = p.x - e.x;
+          const dist = Math.abs(dx);
+
+          if (e.isBoss && e.hp <= e.maxHp * 0.5 && !e.summonedHalf) {
+            e.summonedHalf = true;
+            showBanner('BOSS ENRAGED!', 'Reinforcements & Cryo Mines Deployed!', '#f43f5e', 1700);
+            for (let si = 0; si < 2; si++) {
+              const sx = Math.max(st.levelEndX - 650, Math.min(st.levelEndX - 130, e.x + (si === 0 ? -150 : 120)));
+              st.enemies.push({
+                x: sx,
+                y: RAID_FLOOR,
+                vx: 0,
+                vy: 0,
+                facing: -1,
+                hp: 65 + st.waveOrBout * 15,
+                maxHp: 65 + st.waveOrBout * 15,
+                pose: 'idle',
+                actionTimer: 0,
+                actionDuration: 0.25,
+                dashTimer: 0,
+                dashCooldown: 0,
+                coyoteTimer: 0,
+                jumpBufferTimer: 0,
+                hitCooldown: 0,
+                invulnTimer: 0,
+                flashTimer: 0,
+                grounded: true,
+                jumpsLeft: 1,
+                stamina: 100,
+                finisher: 0,
+                shieldUntil: 0,
+                rageUntil: 0,
+                magnetUntil: 0,
+                dropThroughUntil: 0,
+                stunnedUntil: 0,
+                ropeBoostUntil: 0,
+                hasHitCurrentSwing: false,
+                id: `boss_add_${Math.random().toString(36).slice(2, 7)}`,
+                name: 'Syndicate Enforcer',
+                stroke: '#fb7185',
+                accent: '#fde047',
+                speed: 205,
+                aggro: 1,
+                aiCooldown: 0.9,
+              });
+              st.raidObstacles.push({
+                id: `bm_${Math.random().toString(36).slice(2, 7)}`,
+                x: sx,
+                y: -30,
+                targetY: RAID_FLOOR,
+                vy: 80,
+                w: 34,
+                h: 22,
+                kind: 'cryo_mine',
+                hp: 18,
+                maxHp: 18,
+                falling: true,
+              });
+            }
+          }
+
+          if (dist < 780) {
+            e.facing = dx >= 0 ? 1 : -1;
+
+            // Tough Boss Phase Attacks
+            if (e.isBoss && (e.bossPhaseCd || 0) <= 0 && e.actionTimer <= 0) {
+              e.bossPhaseCd = Math.max(1.75, 3.1 - st.waveOrBout * 0.35);
+              const roll = Math.random();
+              if (roll < 0.38) {
+                // Jump-Slam + Cryo Mine Drop
+                e.bossState = 'leap';
+                e.vy = -560;
+                e.vx = e.facing * 350;
+                e.grounded = false;
+                e.pose = 'jump';
+                e.actionTimer = 0.55;
+                e.actionDuration = 0.55;
+                st.raidObstacles.push({
+                  id: `bm_${Math.random().toString(36).slice(2, 7)}`,
+                  x: Math.max(200, Math.min(st.levelEndX - 110, p.x + e.facing * 45)),
+                  y: -35,
+                  targetY: RAID_FLOOR,
+                  vy: 90,
+                  w: 34,
+                  h: 22,
+                  kind: 'cryo_mine',
+                  hp: 18,
+                  maxHp: 18,
+                  falling: true,
+                });
+              } else if (roll < 0.72) {
+                // 3-Round Crimson Fan Burst
+                e.bossState = 'idle';
+                e.pose = 'jab';
+                e.actionTimer = 0.32;
+                e.actionDuration = 0.32;
+                for (const vySpread of [-135, 0, 135]) {
+                  st.projectiles.push({
+                    x: e.x + e.facing * 26,
+                    y: e.y - 56,
+                    vx: e.facing * 590,
+                    vy: vySpread,
+                    owner: 'enemy',
+                    color: '#f43f5e',
+                    radius: 8,
+                    damage: 14,
+                  });
+                }
+                soundEngine.playThrow();
+              } else {
+                // Tactical Guard Stance (50% bullet resistance for 1.3s)
+                e.bossState = 'guard';
+                e.pose = 'slide';
+                e.actionTimer = 1.25;
+                e.actionDuration = 1.25;
+                e.vx = 0;
+              }
+            } else if (e.actionTimer <= 0) {
+              if (e.bossState === 'guard') e.bossState = 'idle';
+              if (dist > 320) {
+                e.vx = e.facing * (e.speed || 185);
+                e.pose = 'run';
+              } else if (dist < 125) {
+                e.vx = -e.facing * (e.speed || 165) * 0.72;
+                e.pose = 'run';
+              } else {
+                e.vx *= Math.pow(0.05, eDt);
+                e.pose = 'idle';
+              }
+              if ((e.aiCooldown || 0) <= 0 && dist < 660 && Math.abs(p.y - e.y) < 170) {
+                e.pose = 'jab';
+                e.actionTimer = 0.24;
+                e.actionDuration = 0.24;
+                e.aiCooldown = e.isBoss ? 0.78 : 1.3;
+                st.projectiles.push({
+                  x: e.x + e.facing * 24,
+                  y: e.y - 54,
+                  vx: e.facing * (e.isBoss ? 580 : 475),
+                  vy: 0,
+                  owner: 'enemy',
+                  color: '#fb7185',
+                  radius: 7,
+                  damage: e.isBoss ? 15 : 10,
+                });
+                soundEngine.playThrow();
+              }
+            }
+          } else {
+            e.vx *= Math.pow(0.1, eDt);
+            e.pose = 'idle';
+          }
+
+          const wasEnemyAirborne = !e.grounded;
+          e.vy += 1560 * eDt;
+          e.x += e.vx * eDt;
+          e.y += e.vy * eDt;
+          if (e.y >= RAID_FLOOR) {
+            e.y = RAID_FLOOR;
+            e.vy = 0;
+            e.grounded = true;
+            if (e.isBoss && e.bossState === 'leap' && wasEnemyAirborne) {
+              e.bossState = 'idle';
+              st.shake = Math.max(st.shake, 11);
+              spawnParticles(e.x, e.y - 8, '#f43f5e', 18, 260);
+              soundEngine.playSlam();
+              if (Math.abs(p.x - e.x) < 145 && Math.abs(p.y - e.y) < 85) {
+                handlePlayerDamage(20, (p.x >= e.x ? 1 : -1) * 310);
+                p.slowUntil = now + 1100;
+              }
+            }
+          }
+          for (const pl of st.raidPlatforms) {
+            if (e.vy >= 0 && e.x >= pl.x && e.x <= pl.x + pl.w && e.y >= pl.y && e.y - e.vy * eDt <= pl.y + 18) {
+              e.y = pl.y;
+              e.vy = 0;
+              e.grounded = true;
+            }
+          }
+          if (e.patrolMinX !== undefined && e.patrolMaxX !== undefined) {
+            e.x = Math.max(e.patrolMinX, Math.min(e.patrolMaxX, e.x));
+          }
+        }
+
+        // Check Reaching Extraction Exit Gate at End of Level -> AUTOMATIC FULL HP REFILL!
+        const gateBossAlive = st.enemies.some((e) => e.isBoss);
+        if (p.x >= st.levelEndX - 58) {
+          if (gateBossAlive) {
+            if (!st.banner || now >= st.banner.until) {
+              showBanner('DEFEAT THE GATE BOSS TO EXIT!', undefined, '#f43f5e', 1100);
+            }
+          } else {
+            st.score += 350;
+            st.drops += 5;
+            soundEngine.playBell(2);
+            if (st.waveOrBout >= 3) {
+              finishMatch(true);
+              return;
+            } else {
+              st.waveOrBout += 1;
+              const nextStage = buildRaidStage(
+                st.waveOrBout,
+                st.waveOrBout === 2 ? 'aurora_violet' : 'golden_frost'
+              );
+              st.levelEndX = nextStage.levelEndX;
+              st.raidPlatforms = nextStage.platforms;
+              st.raidBarrels = nextStage.barrels;
+              st.raidObstacles = nextStage.obstacles;
+              st.airdropCooldown = 2.6;
+              st.enemies = nextStage.enemies;
+              st.pickups = nextStage.pickups;
+              st.projectiles = [];
+              p.x = 160;
+              p.y = RAID_FLOOR;
+              p.vx = 0;
+              p.vy = 0;
+              p.slowUntil = 0;
+              st.cameraX = 0;
+              refillPlayerFullLife(
+                `STAGE ${st.waveOrBout}: ${st.waveOrBout === 3 ? 'FINAL HQ RAID' : 'SKYBRIDGE ASSAULT'}!`,
+                'EXIT CLEARED · FULL HP RESTORED!'
+              );
+            }
+          }
+        }
+      } else if (st.mode === 'stickman_brawl') {
+        // === MODE 2: AMONG US-STYLE TOP-DOWN MULTI-ROOM CLUE & ESCAPE ===
+        const moveLeft = Boolean(keys['a'] || keys['arrowleft']);
+        const moveRight = Boolean(keys['d'] || keys['arrowright']);
+        const moveUp = Boolean(keys['w'] || keys['arrowup']);
+        const moveDown = Boolean(keys['s'] || keys['arrowdown']);
+        const dx = (moveRight ? 1 : 0) - (moveLeft ? 1 : 0);
+        const dy = (moveDown ? 1 : 0) - (moveUp ? 1 : 0);
+        const len = Math.hypot(dx, dy);
+
+        const playerSlowed = now < (p.slowUntil || 0);
+        const speed = 295 * (now < p.rageUntil ? 1.25 : 1) * (playerSlowed ? 0.52 : 1);
+        if (p.dashTimer > 0) {
+          p.vx *= Math.pow(0.18, dt);
+          p.vy *= Math.pow(0.18, dt);
+          p.pose = 'run';
+          if (Math.random() < 0.65) spawnParticles(p.x, p.y - 24, '#2dd4bf', 1, 55);
+        } else {
+          if (p.actionTimer > 0) p.actionTimer = Math.max(0, p.actionTimer - dt);
+          const tvx = len > 0 ? (dx / len) * speed : 0;
+          const tvy = len > 0 ? (dy / len) * speed : 0;
+          p.vx += (tvx - p.vx) * Math.min(1, dt * 16);
+          p.vy += (tvy - p.vy) * Math.min(1, dt * 16);
+          if (dx !== 0) p.facing = dx > 0 ? 1 : -1;
+          if (dy !== 0) p.aimY = dy;
+          else if (dx !== 0) p.aimY = 0;
+          if (p.actionTimer <= 0) {
+            p.pose = Math.hypot(p.vx, p.vy) > 35 ? 'run' : 'idle';
+          }
+        }
+
+        // Axis-separated wall, locked-door & cargo_block sliding collision
+        const nextX = p.x + p.vx * dt;
+        if (!collidesStationWall(nextX, p.y, 20, st)) {
+          p.x = nextX;
+        } else {
+          p.vx = 0;
+        }
+        const nextY = p.y + p.vy * dt;
+        if (!collidesStationWall(p.x, nextY, 20, st)) {
+          p.y = nextY;
+        } else {
+          p.vy = 0;
+        }
+
+        // Step Station Floor Obstacles (Cryo Spills, Shock Wires, Sabotage Mines)
+        for (let hi = st.stationHazards.length - 1; hi >= 0; hi--) {
+          const hz = st.stationHazards[hi];
+          if (hz.kind === 'cargo_block' && hz.hp <= 0) {
+            spawnParticles(hz.x, hz.y, '#fb923c', 14, 190);
+            st.cratesSmashed += 1;
+            st.score += 50;
+            st.stationHazards.splice(hi, 1);
+            continue;
+          }
+          const hDist = Math.hypot(p.x - hz.x, p.y - hz.y);
+          if (hz.kind === 'cryo_spill' && hDist < hz.radius + 10) {
+            if (now >= p.shieldUntil) {
+              p.slowUntil = Math.max(p.slowUntil || 0, now + 1400);
+            }
+            if (Math.random() < 0.25) spawnParticles(p.x, p.y - 8, '#7dd3fc', 1, 55);
+          } else if (hz.kind === 'shock_wire' && hDist < hz.radius + 12) {
+            if (p.dashTimer <= 0 && now >= (hz.cooldownUntil || 0)) {
+              hz.cooldownUntil = now + 1150;
+              const d = hDist || 1;
+              handlePlayerDamage(12, ((p.x - hz.x) / d) * 210, ((p.y - hz.y) / d) * 210);
+              showBanner('HIGH-VOLTAGE WIRE!', undefined, '#fde047', 850);
+            }
+          } else if (hz.kind === 'sabotage_mine' && hDist < hz.radius + 16) {
+            const d = hDist || 1;
+            handlePlayerDamage(16, ((p.x - hz.x) / d) * 250, ((p.y - hz.y) / d) * 250);
+            if (now >= p.shieldUntil) p.slowUntil = now + 1600;
+            spawnParticles(hz.x, hz.y, '#ef4444', 18, 220);
+            soundEngine.playSlam();
+            showBanner('SABOTAGE MINE DETONATED! SLOWED', undefined, '#fb7185', 950);
+            st.stationHazards.splice(hi, 1);
+          }
+        }
+
+        const targetCamX = Math.max(0, Math.min(STATION_W - CANVAS_W, p.x - CANVAS_W * 0.5));
+        const targetCamY = Math.max(0, Math.min(STATION_H - CANVAS_H, p.y - CANVAS_H * 0.5));
+        st.cameraX += (targetCamX - st.cameraX) * Math.min(1, dt * 7);
+        st.cameraY += (targetCamY - st.cameraY) * Math.min(1, dt * 7);
+
+        // Quick Proximity Scan on Clues (auto-scans within 48px OR instant on E/J)
+        for (const clue of st.escapeClues) {
+          if (clue.collected) continue;
+          const dist = Math.hypot(clue.x - p.x, clue.y - p.y);
+          if (dist < 48) {
+            clue.scanProgress = Math.min(1, clue.scanProgress + dt * 2.2);
+            if (clue.scanProgress >= 1) {
+              collectEscapeClue(clue);
+            }
+          } else {
+            clue.scanProgress = Math.max(0, clue.scanProgress - dt * 1.4);
+          }
+        }
+
+        const allCluesCollected = st.escapeClues.every((c) => c.collected);
+
+        // Update Imposter & Airlock Warden Boss AI
+        for (let i = st.enemies.length - 1; i >= 0; i--) {
+          const imp = st.enemies[i];
+          imp.flashTimer = Math.max(0, imp.flashTimer - dt);
+          if (imp.actionTimer > 0) imp.actionTimer = Math.max(0, imp.actionTimer - dt);
+          imp.aiCooldown = Math.max(0, (imp.aiCooldown || 0) - dt);
+          imp.ventCooldown = Math.max(0, (imp.ventCooldown || 6) - dt);
+          imp.bossPhaseCd = Math.max(0, (imp.bossPhaseCd ?? 2.8) - dt);
+
+          if (imp.hp <= 0) {
+            st.knockouts += 1;
+            st.drops += imp.isBoss ? 8 : 2;
+            st.gems += imp.isBoss ? 4 : 1;
+            st.score += imp.isBoss ? 420 : 140;
+            spawnDropBurst(imp.x, imp.y, imp.isBoss ? 4 : 2, imp.isBoss || Math.random() < 0.4);
+            spawnParticles(imp.x, imp.y - 24, '#ef4444', 18, 220);
+            if (imp.isBoss) {
+              showBanner('AIRLOCK WARDEN DEFEATED!', 'ESCAPE POD READY IN AIRLOCK!', '#34d399', 2200);
+            } else if (st.stationHazards.length < 14 && Math.random() < 0.6) {
+              st.stationHazards.push({
+                id: `sm_${Math.random().toString(36).slice(2, 7)}`,
+                x: imp.x,
+                y: imp.y,
+                radius: 16,
+                kind: 'sabotage_mine',
+                hp: 15,
+                maxHp: 15,
+              });
+            }
+            st.enemies.splice(i, 1);
+            continue;
+          }
+
+          const stunned = now < imp.stunnedUntil;
+          if (stunned) {
+            imp.pose = 'hurt';
+            imp.vx *= Math.pow(0.05, dt);
+            imp.vy *= Math.pow(0.05, dt);
+            continue;
+          }
+
+          const dist = Math.hypot(p.x - imp.x, p.y - imp.y);
+
+          if (imp.isBoss) {
+            // Airlock Warden Boss Phase Logic
+            const bossActive = allCluesCollected || dist < 480;
+            if (imp.hp <= imp.maxHp * 0.5 && !imp.summonedHalf) {
+              imp.summonedHalf = true;
+              showBanner('AIRLOCK BOSS ENRAGED!', 'Stalker & Sabotage Mines Deployed!', '#f43f5e', 1700);
+              st.enemies.push({
+                x: 1260,
+                y: 820,
+                vx: 0,
+                vy: 0,
+                facing: -1,
+                hp: 85,
+                maxHp: 85,
+                pose: 'idle',
+                actionTimer: 0,
+                actionDuration: 0.25,
+                dashTimer: 0,
+                dashCooldown: 0,
+                coyoteTimer: 0,
+                jumpBufferTimer: 0,
+                hitCooldown: 0,
+                invulnTimer: 0,
+                flashTimer: 0,
+                grounded: true,
+                jumpsLeft: 1,
+                stamina: 100,
+                finisher: 0,
+                shieldUntil: 0,
+                rageUntil: 0,
+                magnetUntil: 0,
+                dropThroughUntil: 0,
+                stunnedUntil: 0,
+                ropeBoostUntil: 0,
+                hasHitCurrentSwing: false,
+                id: `imp_add_${Math.random().toString(36).slice(2, 7)}`,
+                name: 'Vent Enforcer',
+                stroke: '#ef4444',
+                accent: '#38bdf8',
+                speed: 195,
+                aggro: 1,
+                aiCooldown: 1.0,
+                ventCooldown: 8,
+              });
+              for (const mx of [1250, 1460]) {
+                st.stationHazards.push({
+                  id: `bm_${Math.random().toString(36).slice(2, 7)}`,
+                  x: mx,
+                  y: 660 + Math.random() * 120,
+                  radius: 16,
+                  kind: 'sabotage_mine',
+                  hp: 15,
+                  maxHp: 15,
+                });
+              }
+            }
+
+            if (bossActive) {
+              const d = dist || 1;
+              const spd = (imp.speed || 205) * (imp.bossPhaseCd < 0.6 ? 1.55 : 1.0);
+              imp.vx = ((p.x - imp.x) / d) * spd;
+              imp.vy = ((p.y - imp.y) / d) * spd;
+              imp.facing = p.x >= imp.x ? 1 : -1;
+              imp.pose = 'run';
+
+              if ((imp.aiCooldown || 0) <= 0 && dist < 500) {
+                imp.aiCooldown = Math.max(1.15, 1.85 - st.waveOrBout * 0.2);
+                const baseAng = Math.atan2(p.y - imp.y, p.x - imp.x);
+                for (const off of [-0.26, 0, 0.26]) {
+                  st.projectiles.push({
+                    x: imp.x,
+                    y: imp.y - 24,
+                    vx: Math.cos(baseAng + off) * 430,
+                    vy: Math.sin(baseAng + off) * 430,
+                    owner: 'enemy',
+                    color: '#f43f5e',
+                    radius: 8,
+                    damage: 13,
+                    life: 1.3,
+                  });
+                }
+                soundEngine.playThrow();
+              }
+
+              if ((imp.bossPhaseCd || 0) <= 0) {
+                imp.bossPhaseCd = 3.6;
+                if (st.stationHazards.length < 16) {
+                  st.stationHazards.push({
+                    id: `bm_${Math.random().toString(36).slice(2, 7)}`,
+                    x: imp.x,
+                    y: imp.y,
+                    radius: 16,
+                    kind: 'sabotage_mine',
+                    hp: 15,
+                    maxHp: 15,
+                  });
+                }
+              }
+            } else {
+              imp.vx *= Math.pow(0.08, dt);
+              imp.vy *= Math.pow(0.08, dt);
+              imp.pose = 'idle';
+            }
+          } else {
+            const chasing = dist < 340;
+            if (chasing) {
+              imp.alertedUntil = now + 1200;
+              const d = dist || 1;
+              const spd = (imp.speed || 165) * 1.12;
+              imp.vx = ((p.x - imp.x) / d) * spd;
+              imp.vy = ((p.y - imp.y) / d) * spd;
+              imp.facing = p.x >= imp.x ? 1 : -1;
+              imp.pose = 'run';
+
+              if ((imp.bossPhaseCd || 0) <= 0 && st.stationHazards.length < 12) {
+                imp.bossPhaseCd = 5.5 + Math.random() * 2.5;
+                st.stationHazards.push({
+                  id: `sm_${Math.random().toString(36).slice(2, 7)}`,
+                  x: imp.x,
+                  y: imp.y,
+                  radius: 16,
+                  kind: 'sabotage_mine',
+                  hp: 15,
+                  maxHp: 15,
+                });
+              }
+            } else {
+              // Patrol room smoothly & bounce off walls
+              if ((imp.aiCooldown || 0) <= 0 || Math.hypot(imp.vx, imp.vy) < 20) {
+                const ang = Math.random() * Math.PI * 2;
+                const spd = (imp.speed || 150) * 0.65;
+                imp.vx = Math.cos(ang) * spd;
+                imp.vy = Math.sin(ang) * spd;
+                imp.facing = imp.vx >= 0 ? 1 : -1;
+                imp.aiCooldown = 1.6 + Math.random() * 1.6;
+              }
+              imp.pose = 'run';
+
+              // Occasionally pop between Floor Vents when out of sight!
+              if ((imp.ventCooldown || 0) <= 0 && dist > 360) {
+                imp.ventCooldown = 9 + Math.random() * 5;
+                const destVent = STATION_VENTS[Math.floor(Math.random() * STATION_VENTS.length)];
+                if (!collidesStationWall(destVent.x, destVent.y, 18, st)) {
+                  spawnParticles(imp.x, imp.y - 24, '#ef4444', 10, 150);
+                  imp.x = destVent.x;
+                  imp.y = destVent.y;
+                  spawnParticles(imp.x, imp.y - 24, '#ef4444', 12, 170);
+                }
+              }
+            }
+          }
+
+          const nx = imp.x + imp.vx * dt;
+          if (!collidesStationWall(nx, imp.y, 18, st)) imp.x = nx;
+          else imp.vx *= -1;
+          const ny = imp.y + imp.vy * dt;
+          if (!collidesStationWall(imp.x, ny, 18, st)) imp.y = ny;
+          else imp.vy *= -1;
+
+          if (dist < (imp.isBoss ? 50 : 44)) {
+            const d = dist || 1;
+            handlePlayerDamage(imp.isBoss ? 22 : 18, ((p.x - imp.x) / d) * 260, ((p.y - imp.y) / d) * 260);
+          }
+        }
+
+        // Check Reaching Airlock Escape Pod inside Room 5 (after Clues collected & Warden Boss beaten!)
+        const airlockBossAlive = st.enemies.some((e) => e.isBoss);
+        const podX = 1410;
+        const podY = 705;
+        if (allCluesCollected && Math.hypot(p.x - podX, p.y - podY) < 68) {
+          if (airlockBossAlive) {
+            if (!st.banner || now >= st.banner.until) {
+              showBanner('DEFEAT THE AIRLOCK WARDEN TO ESCAPE!', 'Shoot with J or K!', '#f43f5e', 1100);
+            }
+          } else {
+            st.score += 360;
+            st.drops += 6;
+            st.gems += 2;
+            soundEngine.playBell(2);
+            if (st.waveOrBout >= 3) {
+              finishMatch(true);
+              return;
+            } else {
+              st.waveOrBout += 1;
+              const nextSec = buildEscapeSector(st.waveOrBout);
+              st.escapeClues = nextSec.clues;
+              st.stationHazards = nextSec.hazards;
+              st.enemies = nextSec.imposters;
+              st.pickups = nextSec.pickups;
+              st.projectiles = [];
+              p.x = 290;
+              p.y = 700;
+              p.vx = 0;
+              p.vy = 0;
+              p.slowUntil = 0;
+              st.radarPingUntil = now + 2600;
+              refillPlayerFullLife(
+                `SECTOR ${st.waveOrBout}: FIND ${st.escapeClues.length} CLUES!`,
+                'AIRLOCK CLEARED · FULL HP RESTORED!'
+              );
+            }
+          }
+        }
+      } else {
+        // === MODE 3: STICKMAN GLACIER RUN (WITH DROPPED HAZARDS & END-OF-LEVEL BOSS) ===
+        const playerSlowed = now < (p.slowUntil || 0);
         const turbo = now < p.rageUntil ? 1.35 : 1;
-        st.runnerSpeed = Math.min(640, (370 + st.elapsed * 2.1) * turbo);
+        st.runnerSpeed = Math.min(640, (370 + st.elapsed * 2.1) * turbo * (playerSlowed ? 0.68 : 1));
         st.runnerScroll += st.runnerSpeed * dt;
         st.score += st.runnerSpeed * dt * 0.04;
 
-        // Check Glacier Run Level Milestones (every 750m -> automatic full HP refill!)
         const distMeters = Math.floor(st.runnerScroll / 16);
-        const targetLevel = 1 + Math.floor(distMeters / 750);
-        if (targetLevel > st.waveOrBout) {
-          st.waveOrBout = targetLevel;
-          st.score += 150;
-          soundEngine.playLap(false);
-          refillPlayerFullLife(`LEVEL ${st.waveOrBout} REACHED!`, '750m Cleared · Full HP Restored!');
+        const runnerBossAlive = st.enemies.some((e) => e.isBoss);
+        if (!runnerBossAlive && distMeters >= st.waveOrBout * 560) {
+          const bossHp = 240 + st.waveOrBout * 90;
+          st.enemies.push({
+            x: CANVAS_W + 70,
+            y: 350,
+            vx: 0,
+            vy: 0,
+            facing: -1,
+            hp: bossHp,
+            maxHp: bossHp,
+            pose: 'idle',
+            actionTimer: 0,
+            actionDuration: 0.28,
+            dashTimer: 0,
+            dashCooldown: 0,
+            coyoteTimer: 0,
+            jumpBufferTimer: 0,
+            hitCooldown: 0,
+            invulnTimer: 0,
+            flashTimer: 0,
+            grounded: false,
+            jumpsLeft: 1,
+            stamina: 100,
+            finisher: 0,
+            shieldUntil: 0,
+            rageUntil: 0,
+            magnetUntil: 0,
+            dropThroughUntil: 0,
+            stunnedUntil: 0,
+            ropeBoostUntil: 0,
+            hasHitCurrentSwing: false,
+            id: `runner_boss_${st.waveOrBout}`,
+            name: st.waveOrBout >= 3 ? 'Cryo Mech Emperor' : `Frost Interceptor Lv.${st.waveOrBout}`,
+            stroke: '#f43f5e',
+            accent: '#fbbf24',
+            isBoss: true,
+            aiCooldown: 1.2,
+            bossPhaseCd: 3.1,
+            bossState: 'idle',
+          });
+          soundEngine.playBell(1);
+          showBanner(
+            `LEVEL ${st.waveOrBout} BOSS: ${st.waveOrBout >= 3 ? 'CRYO MECH EMPEROR!' : 'FROST INTERCEPTOR!'}`,
+            'Blast with J (Rapid) · K (Heavy) · L (Mega Beam)',
+            '#f43f5e',
+            2200
+          );
+        }
+
+        // Step Runner Level Boss NPC
+        for (let bi = st.enemies.length - 1; bi >= 0; bi--) {
+          const b = st.enemies[bi];
+          b.flashTimer = Math.max(0, b.flashTimer - dt);
+          if (b.actionTimer > 0) b.actionTimer = Math.max(0, b.actionTimer - dt);
+          b.aiCooldown = Math.max(0, (b.aiCooldown || 0) - dt);
+          b.bossPhaseCd = Math.max(0, (b.bossPhaseCd ?? 3.0) - dt);
+
+          if (b.hp <= 0) {
+            st.knockouts += 1;
+            st.drops += 6;
+            st.gems += 3;
+            st.score += 450;
+            spawnDropBurst(b.x, b.y, 4, true);
+            spawnParticles(b.x, b.y - 45, '#fb7185', 24, 280);
+            soundEngine.playBell(2);
+            st.enemies.splice(bi, 1);
+            if (st.waveOrBout >= 3) {
+              finishMatch(true);
+              return;
+            } else {
+              st.waveOrBout += 1;
+              refillPlayerFullLife(
+                `LEVEL ${st.waveOrBout} UNLOCKED!`,
+                'BOSS DEFEATED · FULL HP RESTORED!'
+              );
+            }
+            continue;
+          }
+
+          if (b.bossState === 'dash') {
+            b.x -= 640 * dt;
+            b.pose = 'heavy';
+            if (Math.abs(b.x - p.x) < 42 && Math.abs(b.y - p.y) < 76) {
+              handlePlayerDamage(18, -160);
+            }
+            if (b.x < 170) b.bossState = 'idle';
+          } else {
+            const targetX = CANVAS_W - 185;
+            b.x += (targetX - b.x) * Math.min(1, dt * 3.5);
+            b.y = 355 + Math.sin(st.elapsed * 2.1) * 95;
+            b.facing = -1;
+            if (b.actionTimer <= 0) b.pose = 'jump';
+          }
+
+          if ((b.aiCooldown || 0) <= 0 && b.x < CANVAS_W - 40) {
+            b.aiCooldown = Math.max(0.85, 1.45 - st.waveOrBout * 0.18);
+            b.pose = 'jab';
+            b.actionTimer = 0.22;
+            b.actionDuration = 0.22;
+            const aimVy = Math.max(-220, Math.min(220, ((p.y - 45) - (b.y - 48)) * 0.65));
+            st.projectiles.push({
+              x: b.x - 28,
+              y: b.y - 48,
+              vx: -540,
+              vy: aimVy,
+              owner: 'enemy',
+              color: '#f43f5e',
+              radius: 9,
+              damage: 14,
+            });
+            soundEngine.playThrow();
+          }
+
+          if ((b.bossPhaseCd || 0) <= 0 && b.x < CANVAS_W - 40) {
+            b.bossPhaseCd = Math.max(2.3, 3.6 - st.waveOrBout * 0.3);
+            if (Math.random() < 0.34) {
+              b.bossState = 'dash';
+              showBanner('BOSS SURGE DASH! JUMP OVER!', undefined, '#fb923c', 850);
+            } else {
+              // Boss drops boulder or sludge onto track ahead of player
+              const dropPlat = st.runnerPlatforms.find((pl) => pl.x + pl.w > 460) || st.runnerPlatforms[0];
+              const targetY = dropPlat ? dropPlat.y : 440;
+              if (Math.random() < 0.65) {
+                st.runnerHazards.push({
+                  id: `bb_${Math.random()}`,
+                  x: 430 + Math.random() * 290,
+                  y: -30,
+                  w: 44,
+                  h: 44,
+                  kind: 'falling_boulder',
+                  hp: 2,
+                  vy: 45,
+                  targetY,
+                  landed: false,
+                });
+              } else if (dropPlat) {
+                st.runnerHazards.push({
+                  id: `bs_${Math.random()}`,
+                  x: Math.max(460, Math.min(dropPlat.x + dropPlat.w - 110, 720)),
+                  y: targetY,
+                  w: 90,
+                  h: 14,
+                  kind: 'sludge',
+                  hp: 99,
+                });
+              }
+            }
+          }
         }
 
         const sliding = Boolean(keys['s'] || keys['arrowdown']);
-        if (sliding && !p.grounded) {
-          p.vy += 1100 * dt; // fast-fall responsiveness
-        }
+        if (sliding && !p.grounded) p.vy += 1100 * dt;
         p.pose = !p.grounded ? (p.vy < 0 ? 'jump' : 'fall') : sliding ? 'slide' : 'run';
 
         p.vy += 1580 * dt;
         p.y += p.vy * dt;
 
         for (const plat of st.runnerPlatforms) plat.x -= st.runnerSpeed * dt;
-        for (const hz of st.runnerHazards) hz.x -= st.runnerSpeed * dt;
+        for (const hz of st.runnerHazards) {
+          hz.x -= st.runnerSpeed * dt;
+          if (hz.kind === 'falling_boulder' && !hz.landed) {
+            hz.vy = (hz.vy || 0) + 980 * dt;
+            hz.y += hz.vy * dt;
+            const ty = hz.targetY ?? 450;
+            if (hz.y >= ty) {
+              hz.y = ty;
+              hz.vy = 0;
+              hz.landed = true;
+              st.shake = Math.max(st.shake, 5);
+              spawnParticles(hz.x + hz.w * 0.5, hz.y, '#fb923c', 8, 160);
+            }
+          }
+        }
         for (const pk of st.pickups) pk.x -= st.runnerSpeed * dt;
 
         st.runnerPlatforms = st.runnerPlatforms.filter((pl) => pl.x + pl.w > -120);
         const lastPlat = st.runnerPlatforms[st.runnerPlatforms.length - 1];
         if (lastPlat && lastPlat.x + lastPlat.w < CANVAS_W + 450) {
-          const gap = 90 + Math.random() * 125;
+          const gap = runnerBossAlive ? 65 + Math.random() * 65 : 90 + Math.random() * 125;
           const nx = lastPlat.x + lastPlat.w + gap;
-          const ny = Math.max(310, Math.min(520, lastPlat.y + (Math.random() - 0.5) * 140));
-          const nw = 280 + Math.random() * 340;
+          const ny = runnerBossAlive
+            ? 455
+            : Math.max(310, Math.min(520, lastPlat.y + (Math.random() - 0.5) * 140));
+          const nw = runnerBossAlive ? 420 : 280 + Math.random() * 340;
           st.runnerPlatforms.push({ x: nx, y: ny, w: nw });
 
           for (let px = nx + 55; px < nx + nw - 55; px += 65) {
@@ -1083,7 +2538,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               });
             }
           }
-          if (Math.random() < 0.28) {
+          if (Math.random() < 0.3) {
             const kinds: Pickup2D['kind'][] = ['medkit', 'shield', 'rage', 'magnet'];
             st.pickups.push({
               id: `rpu_${Math.random()}`,
@@ -1093,38 +2548,29 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               kind: kinds[Math.floor(Math.random() * kinds.length)],
             });
           }
-          if (nw > 260 && Math.random() < 0.85) {
+          if (!runnerBossAlive && nw > 260 && Math.random() < 0.88) {
             const roll = Math.random();
-            if (roll < 0.36) {
-              st.runnerHazards.push({
-                id: `hz_${Math.random()}`,
-                x: nx + nw * 0.55,
-                y: ny,
-                w: 38,
-                h: 36,
-                kind: 'spike',
-                hp: 99,
-              });
+            if (roll < 0.24) {
+              st.runnerHazards.push({ id: `hz_${Math.random()}`, x: nx + nw * 0.55, y: ny, w: 38, h: 36, kind: 'spike', hp: 99 });
+            } else if (roll < 0.46) {
+              st.runnerHazards.push({ id: `hz_${Math.random()}`, x: nx + nw * 0.52, y: ny - 54, w: 58, h: 48, kind: 'icicle', hp: 99 });
             } else if (roll < 0.68) {
+              st.runnerHazards.push({ id: `hz_${Math.random()}`, x: nx + nw * 0.62, y: ny, w: 44, h: 48, kind: 'crate', hp: 1 });
+            } else if (roll < 0.85) {
               st.runnerHazards.push({
                 id: `hz_${Math.random()}`,
-                x: nx + nw * 0.52,
-                y: ny - 54,
-                w: 58,
-                h: 48,
-                kind: 'icicle',
-                hp: 99,
+                x: nx + nw * 0.5,
+                y: -30,
+                w: 44,
+                h: 44,
+                kind: 'falling_boulder',
+                hp: 2,
+                vy: 30,
+                targetY: ny,
+                landed: false,
               });
             } else {
-              st.runnerHazards.push({
-                id: `hz_${Math.random()}`,
-                x: nx + nw * 0.62,
-                y: ny,
-                w: 44,
-                h: 48,
-                kind: 'crate',
-                hp: 1,
-              });
+              st.runnerHazards.push({ id: `hz_${Math.random()}`, x: nx + nw * 0.42, y: ny, w: 92, h: 14, kind: 'sludge', hp: 99 });
             }
           }
         }
@@ -1141,7 +2587,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               p.coyoteTimer = 0.12;
               if (p.jumpBufferTimer > 0) {
                 p.jumpBufferTimer = 0;
-                p.vy = -645;
+                p.vy = -645 * (playerSlowed ? 0.9 : 1);
                 p.grounded = false;
                 p.jumpsLeft = 1;
                 soundEngine.playDash();
@@ -1149,9 +2595,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
             }
           }
         }
-        if (wasGrounded && !p.grounded && p.vy >= 0) {
-          p.coyoteTimer = 0.12;
-        }
+        if (wasGrounded && !p.grounded && p.vy >= 0) p.coyoteTimer = 0.12;
 
         if (p.y > CANVAS_H + 80) {
           handlePlayerDamage(25, 0);
@@ -1168,8 +2612,13 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           if (hz.x + hz.w < -60) return false;
           const hzTop = hz.y - hz.h;
           const overlapX = Math.abs(p.x - (hz.x + hz.w / 2)) < hz.w / 2 + 16;
-          const overlapY = p.y > hzTop + 6 && playerTop < hz.y - 6;
+          const overlapY = p.y > hzTop + 4 && playerTop < hz.y - 4;
           if (overlapX && overlapY) {
+            if (hz.kind === 'sludge') {
+              if (now >= p.shieldUntil) p.slowUntil = Math.max(p.slowUntil || 0, now + 1500);
+              if (Math.random() < 0.3) spawnParticles(p.x, p.y - 8, '#7dd3fc', 1, 70);
+              return true;
+            }
             if (hz.kind === 'crate' && now < p.rageUntil) {
               st.cratesSmashed += 1;
               st.score += 45;
@@ -1177,371 +2626,180 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               spawnParticles(hz.x, hz.y - 24, '#7dd3fc', 12, 220);
               return false;
             }
-            handlePlayerDamage(18, -140);
-            spawnParticles(hz.x, hz.y - 20, '#ef4444', 8, 160);
+            handlePlayerDamage(hz.kind === 'crate' ? 12 : 18, -140);
+            p.slowUntil = now + (hz.kind === 'crate' ? 1100 : 1350);
+            p.vy = Math.min(p.vy, -230);
+            spawnParticles(hz.x, hz.y - 20, '#ef4444', 10, 170);
             return false;
           }
           return true;
         });
-      } else {
-        // === BUTTER-SMOOTH WRESTLING & BRAWL MOVEMENT ===
-        const moveLeft = Boolean(keys['a'] || keys['arrowleft']);
-        const moveRight = Boolean(keys['d'] || keys['arrowright']);
-        const guarding = Boolean(keys['s'] || keys['arrowdown']);
-        const moveDir = (moveRight ? 1 : 0) - (moveLeft ? 1 : 0);
+      }
 
-        if (guarding && st.mode === 'stickman_brawl' && p.grounded) {
-          p.dropThroughUntil = now + 180;
-        }
-
-        const maxSpeed =
-          (now < p.ropeBoostUntil ? 500 : 355) * (now < p.rageUntil ? 1.2 : 1);
-
-        if (p.dashTimer > 0) {
-          // Smooth dash momentum glide
-          p.vx *= Math.pow(0.18, dt);
-          p.pose = 'run';
-          if (Math.random() < 0.6) {
-            spawnParticles(p.x, p.y - 42, '#38bdf8', 1, 55);
-          }
-        } else {
-          const isAttacking = p.actionTimer > 0;
-          if (isAttacking) {
-            p.actionTimer = Math.max(0, p.actionTimer - dt);
-          }
-
-          const targetVx =
-            guarding && p.grounded && !isAttacking
-              ? 0
-              : moveDir * maxSpeed * (isAttacking ? 0.65 : 1);
-
-          const rate = moveDir !== 0 ? (p.grounded ? 20 : 12) : 16;
-          p.vx += (targetVx - p.vx) * Math.min(1, dt * rate);
-
-          if (!isAttacking) {
-            if (guarding && p.grounded) {
-              p.pose = 'guard';
-            } else if (moveDir !== 0) {
-              p.facing = moveDir > 0 ? 1 : -1;
-              p.pose = p.grounded ? 'run' : p.vy < 0 ? 'jump' : 'fall';
-            } else {
-              p.pose = p.grounded
-                ? Math.abs(p.vx) > 45
-                  ? 'run'
-                  : 'idle'
-                : p.vy < 0
-                ? 'jump'
-                : 'fall';
-            }
+      // === PROJECTILES (Across All 3 Modes) ===
+      for (let i = st.projectiles.length - 1; i >= 0; i--) {
+        const pr = st.projectiles[i];
+        const pDt = pr.owner === 'enemy' ? dt * slowFactor : dt;
+        pr.x += pr.vx * pDt;
+        pr.y += pr.vy * pDt;
+        if (pr.life !== undefined) {
+          pr.life -= dt;
+          if (pr.life <= 0) {
+            st.projectiles.splice(i, 1);
+            continue;
           }
         }
 
-        // Fast-fall in midair when holding S/Down
-        if (guarding && !p.grounded) {
-          p.vy += 850 * dt;
-        }
-
-        p.vy += 1560 * dt;
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-
-        const floorY = st.mode === 'stickman_wrestling' ? RING_FLOOR : BRAWL_FLOOR;
-        const wasGrounded = p.grounded;
-        p.grounded = false;
-
-        if (st.mode === 'stickman_brawl' && p.vy >= 0 && now > p.dropThroughUntil) {
-          for (const pl of BRAWL_PLATFORMS) {
-            if (p.x >= pl.x && p.x <= pl.x + pl.w && p.y >= pl.y && p.y - p.vy * dt <= pl.y + 20) {
-              p.y = pl.y;
-              p.vy = 0;
-              p.grounded = true;
-              p.jumpsLeft = 2;
-              p.coyoteTimer = 0.12;
-            }
-          }
-        }
-        if (p.y >= floorY) {
-          p.y = floorY;
-          if (p.pose === 'finisher' && !p.hasHitCurrentSwing) {
-            p.hasHitCurrentSwing = true;
-            st.shake = 16;
-            soundEngine.playSlam();
-            spawnParticles(p.x, floorY - 8, '#38bdf8', 22, 320);
-            for (const e of st.enemies) {
-              if (Math.abs(e.x - p.x) < 220) {
-                damageEnemy(e, 46, (e.x >= p.x ? 1 : -1) * 420, -340);
-                e.stunnedUntil = now + 3200;
-              }
-            }
-          }
-          p.vy = 0;
-          p.grounded = true;
-          p.jumpsLeft = 2;
-          p.coyoteTimer = 0.12;
-        }
-
-        if (wasGrounded && !p.grounded && p.vy >= 0) {
-          p.coyoteTimer = 0.12;
-        }
-
-        // Consume Jump Buffer right upon landing!
-        if (p.grounded && p.jumpBufferTimer > 0) {
-          p.jumpBufferTimer = 0;
-          p.vy = -630;
-          p.grounded = false;
-          p.jumpsLeft = 1;
-          soundEngine.playDash();
-        }
-
-        // Ring Rope Bounce (Wrestling) vs Canyon Walls (Brawl)
         if (st.mode === 'stickman_wrestling') {
-          if (p.x < RING_LEFT + 18) {
-            p.x = RING_LEFT + 18;
-            if (p.vx < -250) {
-              p.vx = 530;
-              p.facing = 1;
-              p.ropeBoostUntil = now + 1100;
-              st.ropeLeftBend = 28;
-              soundEngine.playDash();
-              showBanner('ROPE REBOUND!', 'Turbo Lariat Ready!', '#38bdf8', 850);
-            } else {
-              p.vx = 0;
-            }
-          } else if (p.x > RING_RIGHT - 18) {
-            p.x = RING_RIGHT - 18;
-            if (p.vx > 250) {
-              p.vx = -530;
-              p.facing = -1;
-              p.ropeBoostUntil = now + 1100;
-              st.ropeRightBend = 28;
-              soundEngine.playDash();
-              showBanner('ROPE REBOUND!', 'Turbo Lariat Ready!', '#38bdf8', 850);
-            } else {
-              p.vx = 0;
-            }
+          if (pr.x < st.cameraX - 100 || pr.x > st.cameraX + CANVAS_W + 100) {
+            st.projectiles.splice(i, 1);
+            continue;
           }
-        } else {
-          p.x = Math.max(45, Math.min(CANVAS_W - 45, p.x));
-        }
-
-        // Player Melee Hitbox Check
-        if (
-          (p.pose === 'jab' || p.pose === 'heavy' || p.pose === 'finisher') &&
-          !p.hasHitCurrentSwing &&
-          p.actionTimer < p.actionDuration * 0.78
-        ) {
-          const reach = p.pose === 'heavy' ? 110 : 94;
-          const dmg = p.pose === 'finisher' ? 38 : p.pose === 'heavy' ? 22 : 14;
-          let landed = false;
-          for (const e of st.enemies) {
-            if (e.hp <= 0) continue;
-            const dx = e.x - p.x;
-            const dy = Math.abs(e.y - p.y);
-            if (dx * p.facing > -24 && Math.abs(dx) <= reach && dy < 92) {
-              damageEnemy(
-                e,
-                dmg,
-                p.facing * (p.pose === 'heavy' ? 380 : 210),
-                p.pose === 'heavy' ? -260 : -110
-              );
-              landed = true;
-            }
-          }
-          if (landed) {
-            p.hasHitCurrentSwing = true;
-            soundEngine.playPunch(p.pose !== 'jab');
-          }
-        }
-
-        // Update Enemies & AI
-        for (let i = st.enemies.length - 1; i >= 0; i--) {
-          const e = st.enemies[i];
-          e.flashTimer = Math.max(0, e.flashTimer - dt);
-          if (e.actionTimer > 0) e.actionTimer = Math.max(0, e.actionTimer - dt);
-          e.aiCooldown = Math.max(0, (e.aiCooldown || 0) - dt);
-
-          const dx = p.x - e.x;
-          const dist = Math.abs(dx);
-          const stunned = now < e.stunnedUntil;
-
-          if (e.hp <= 0) {
-            e.pose = 'down';
-            if (st.mode === 'stickman_brawl') {
-              st.knockouts += 1;
-              st.drops += e.isBoss ? 5 : 2;
-              st.gems += e.isBoss ? 3 : 1;
-              st.score += e.isBoss ? 220 : 85;
-              spawnDropBurst(e.x, e.y, e.isBoss ? 4 : 2, e.isBoss || Math.random() < 0.28);
-              spawnParticles(e.x, e.y - 40, e.stroke || '#fb923c', 18, 250);
-              st.enemies.splice(i, 1);
-              continue;
-            } else if (st.mode === 'stickman_wrestling') {
-              st.knockouts += 1;
-              st.drops += 6;
-              st.gems += 3;
-              st.score += 300;
-              soundEngine.playBell(3);
-              if (st.waveOrBout >= WRESTLE_CHALLENGERS.length) {
-                finishMatch(true);
-                return;
-              } else {
-                st.waveOrBout += 1;
-                st.enemies = [spawnWrestlingChallenger(st.waveOrBout)];
-                refillPlayerFullLife(
-                  `KO! BOUT ${st.waveOrBout}: ${st.enemies[0].name?.toUpperCase()}!`,
-                  'LEVEL COMPLETE · FULL HP RESTORED!'
-                );
+        } else if (st.mode === 'stickman_brawl') {
+          if (pr.owner === 'player') {
+            let hitHazard = false;
+            for (let hi = st.stationHazards.length - 1; hi >= 0; hi--) {
+              const hz = st.stationHazards[hi];
+              if (
+                (hz.kind === 'cargo_block' || hz.kind === 'sabotage_mine') &&
+                Math.hypot(pr.x - hz.x, pr.y - hz.y) < hz.radius + 10
+              ) {
+                hz.hp -= pr.damage || 22;
+                spawnParticles(pr.x, pr.y, '#fb923c', 7, 130);
+                if (hz.kind === 'sabotage_mine' && hz.hp <= 0) {
+                  spawnParticles(hz.x, hz.y, '#ef4444', 14, 190);
+                  st.stationHazards.splice(hi, 1);
+                  st.score += 35;
+                }
+                hitHazard = true;
                 break;
               }
             }
-          }
-
-          if (e.actionTimer <= 0) {
-            if (stunned) {
-              e.pose = 'down';
-              e.vx *= Math.pow(0.05, dt);
-            } else {
-              e.facing = dx >= 0 ? 1 : -1;
-              const desiredGap = 58;
-              if (dist > desiredGap) {
-                const targetEvx = e.facing * (e.speed || 220);
-                e.vx += (targetEvx - e.vx) * Math.min(1, dt * 10);
-                e.pose = e.grounded ? 'run' : 'jump';
-                if (st.mode === 'stickman_brawl' && p.y < e.y - 80 && e.grounded && Math.random() < 0.03) {
-                  e.vy = -610;
-                  e.grounded = false;
-                }
-              } else {
-                e.vx *= Math.pow(0.05, dt);
-                e.pose = 'idle';
-                if ((e.aiCooldown || 0) <= 0) {
-                  const heavy = Math.random() < (st.mode === 'stickman_wrestling' ? 0.36 : 0.24);
-                  e.pose = heavy ? 'heavy' : 'jab';
-                  e.actionTimer = heavy ? 0.44 : 0.3;
-                  e.actionDuration = e.actionTimer;
-                  e.hasHitCurrentSwing = false;
-                  e.aiCooldown = 0.78 + (1 - (e.aggro || 0.7)) * 0.6;
-                }
-              }
+            if (hitHazard) {
+              st.projectiles.splice(i, 1);
+              continue;
             }
           }
-
-          if (
-            (e.pose === 'jab' || e.pose === 'heavy') &&
-            !e.hasHitCurrentSwing &&
-            e.actionTimer < e.actionDuration * 0.52
-          ) {
-            if (Math.abs(p.x - e.x) < 86 && Math.abs(p.y - e.y) < 82) {
-              e.hasHitCurrentSwing = true;
-              handlePlayerDamage(e.pose === 'heavy' ? 14 : 9, e.facing * 240);
-            }
+          if (collidesStationWall(pr.x, pr.y, 4, st)) {
+            spawnParticles(pr.x, pr.y, pr.color, 5, 110);
+            st.projectiles.splice(i, 1);
+            continue;
           }
-
-          e.vy += 1560 * dt;
-          e.x += e.vx * dt;
-          e.y += e.vy * dt;
-          e.grounded = false;
-
-          if (st.mode === 'stickman_brawl' && e.vy >= 0) {
-            for (const pl of BRAWL_PLATFORMS) {
-              if (e.x >= pl.x && e.x <= pl.x + pl.w && e.y >= pl.y && e.y - e.vy * dt <= pl.y + 18) {
-                e.y = pl.y;
-                e.vy = 0;
-                e.grounded = true;
-              }
-            }
-          }
-          if (e.y >= floorY) {
-            e.y = floorY;
-            e.vy = 0;
-            e.grounded = true;
-          }
-          if (st.mode === 'stickman_wrestling') {
-            if (e.x < RING_LEFT + 18) {
-              e.x = RING_LEFT + 18;
-              e.vx = Math.abs(e.vx) * 0.5;
-              st.ropeLeftBend = 18;
-            } else if (e.x > RING_RIGHT - 18) {
-              e.x = RING_RIGHT - 18;
-              e.vx = -Math.abs(e.vx) * 0.5;
-              st.ropeRightBend = 18;
-            }
-          } else {
-            e.x = Math.max(40, Math.min(CANVAS_W - 40, e.x));
-          }
-        }
-
-        // Respawn Brawl Waves when cleared -> AUTOMATIC FULL HP REFILL!
-        if (st.mode === 'stickman_brawl' && st.enemies.length === 0) {
-          st.waveSpawnTimer += dt;
-          if (st.waveSpawnTimer > 0.95) {
-            st.waveSpawnTimer = 0;
-            if (st.waveOrBout >= 6) {
-              showBanner('FROST CITADEL CLEARED!', 'The final boss is defeated!', '#facc15', 2200);
-              finishMatch(true);
-              return;
-            }
-            st.waveOrBout += 1;
-            st.enemies = spawnBrawlWave(st.waveOrBout);
-            soundEngine.playBell(1);
-            refillPlayerFullLife(
-              `LEVEL ${st.waveOrBout}`,
-              st.waveOrBout % 3 === 0 ? 'BOSS LEVEL · Full HP Restored!' : 'Wave Cleared · Full HP Restored!'
-            );
-          }
-        }
-
-        st.pickupSpawnTimer -= dt;
-        if (st.pickupSpawnTimer <= 0) {
-          st.pickupSpawnTimer = 7.0;
-          const kinds: Pickup2D['kind'][] = ['drop', 'gem', 'medkit', 'shield', 'rage', 'magnet'];
-          const minX = st.mode === 'stickman_wrestling' ? RING_LEFT + 90 : 160;
-          const maxX = st.mode === 'stickman_wrestling' ? RING_RIGHT - 90 : CANVAS_W - 160;
-          st.pickups.push({
-            id: `ap_${Math.random()}`,
-            x: minX + Math.random() * (maxX - minX),
-            y: 120,
-            vy: 60,
-            kind: kinds[Math.floor(Math.random() * kinds.length)],
-          });
-        }
-      }
-
-      // === PROJECTILES ===
-      for (let i = st.projectiles.length - 1; i >= 0; i--) {
-        const pr = st.projectiles[i];
-        pr.x += pr.vx * dt;
-        pr.y += pr.vy * dt;
-        if (pr.x < -40 || pr.x > CANVAS_W + 40) {
+        } else if (pr.x < -40 || pr.x > CANVAS_W + 40) {
           st.projectiles.splice(i, 1);
           continue;
         }
+
         let hit = false;
         if (st.mode === 'stickman_run') {
-          for (let j = st.runnerHazards.length - 1; j >= 0; j--) {
-            const hz = st.runnerHazards[j];
-            if (
-              hz.kind === 'crate' &&
-              Math.abs(pr.x - (hz.x + hz.w / 2)) < hz.w / 2 + 12 &&
-              Math.abs(pr.y - (hz.y - hz.h / 2)) < hz.h / 2 + 16
-            ) {
-              st.runnerHazards.splice(j, 1);
-              st.cratesSmashed += 1;
-              st.drops += 2;
-              st.score += 60;
-              soundEngine.playPunch(true);
-              spawnParticles(hz.x, hz.y - 24, '#67e8f9', 14, 240);
+          if (pr.owner === 'enemy') {
+            if (Math.abs(pr.x - p.x) < 26 && Math.abs(pr.y - (p.y - 45)) < 44) {
+              handlePlayerDamage(pr.damage || 14, -140);
               hit = true;
-              break;
+            }
+          } else {
+            for (let j = st.runnerHazards.length - 1; j >= 0; j--) {
+              const hz = st.runnerHazards[j];
+              if (
+                (hz.kind === 'crate' || hz.kind === 'falling_boulder') &&
+                Math.abs(pr.x - (hz.x + hz.w / 2)) < hz.w / 2 + 12 &&
+                Math.abs(pr.y - (hz.y - hz.h / 2)) < hz.h / 2 + 16
+              ) {
+                hz.hp -= pr.piercing ? 2 : 1;
+                if (hz.hp <= 0) {
+                  st.runnerHazards.splice(j, 1);
+                  st.cratesSmashed += 1;
+                  st.drops += 2;
+                  st.score += 65;
+                  soundEngine.playPunch(true);
+                  spawnParticles(hz.x + hz.w * 0.5, hz.y - 24, '#67e8f9', 14, 240);
+                } else {
+                  spawnParticles(pr.x, pr.y, '#fb923c', 6, 120);
+                }
+                if (!pr.piercing) hit = true;
+                break;
+              }
+            }
+            if (!hit || pr.piercing) {
+              for (const b of st.enemies) {
+                if (Math.abs(pr.x - b.x) < 38 && Math.abs(pr.y - (b.y - 48)) < 62) {
+                  damageEnemy(b, pr.damage || 28, 0, 0);
+                  soundEngine.playPunch(Boolean(pr.piercing));
+                  if (!pr.piercing) hit = true;
+                  break;
+                }
+              }
             }
           }
+        } else if (pr.owner === 'enemy') {
+          if (Math.abs(pr.x - p.x) < 26 && Math.abs(pr.y - (p.y - 45)) < 46) {
+            handlePlayerDamage(pr.damage || 10, Math.sign(pr.vx) * 200);
+            hit = true;
+          }
         } else {
-          for (const e of st.enemies) {
-            if (Math.abs(pr.x - e.x) < 36 && Math.abs(pr.y - (e.y - 48)) < 56) {
-              damageEnemy(e, 16, Math.sign(pr.vx) * 200, -100);
-              soundEngine.playPunch(false);
-              hit = true;
-              break;
+          // Player shot -> check barrels & obstacles first (in Raid)
+          if (st.mode === 'stickman_wrestling') {
+            for (let oi = st.raidObstacles.length - 1; oi >= 0; oi--) {
+              const obs = st.raidObstacles[oi];
+              if (
+                Math.abs(pr.x - obs.x) < obs.w * 0.5 + 10 &&
+                pr.y > obs.y - obs.h - 10 &&
+                pr.y < obs.y + 8
+              ) {
+                obs.hp -= pr.damage || 22;
+                spawnParticles(pr.x, pr.y, '#fbbf24', 6, 120);
+                if (!pr.piercing) hit = true;
+                break;
+              }
+            }
+            if (!hit || pr.piercing) {
+              for (let bi = st.raidBarrels.length - 1; bi >= 0; bi--) {
+                const br = st.raidBarrels[bi];
+                if (Math.abs(pr.x - br.x) < 24 && Math.abs(pr.y - (br.y - 25)) < 32) {
+                  br.hp -= pr.damage || 22;
+                  if (!pr.piercing) hit = true;
+                  if (br.hp <= 0) {
+                    st.raidBarrels.splice(bi, 1);
+                    st.cratesSmashed += 1;
+                    st.score += 90;
+                    st.shake = 14;
+                    soundEngine.playSlam();
+                    spawnParticles(br.x, br.y - 24, '#fb923c', 22, 320);
+                    spawnDropBurst(br.x, br.y, 2, true);
+                    if (Math.hypot(p.x - br.x, p.y - br.y) < 110 && p.dashTimer <= 0) {
+                      handlePlayerDamage(12, (p.x >= br.x ? 1 : -1) * 260);
+                    }
+                    for (const e of st.enemies) {
+                      if (Math.hypot(e.x - br.x, e.y - br.y) < 190) {
+                        damageEnemy(e, 75, (e.x >= br.x ? 1 : -1) * 320, -240);
+                      }
+                    }
+                  }
+                  break;
+                }
+              }
+            }
+          }
+
+          if (!hit || pr.piercing) {
+            for (const e of st.enemies) {
+              if (Math.abs(pr.x - e.x) < 34 && Math.abs(pr.y - (e.y - 44)) < 54) {
+                const rawDmg = pr.damage || 22;
+                const finalDmg =
+                  e.isBoss && e.bossState === 'guard' && !pr.piercing
+                    ? Math.round(rawDmg * 0.5)
+                    : rawDmg;
+                damageEnemy(e, finalDmg, Math.sign(pr.vx) * 190, -90);
+                if (st.mode === 'stickman_brawl' && pr.stunOnly) {
+                  e.stunnedUntil = now + (e.isBoss ? 550 : 2800);
+                  soundEngine.playDash();
+                  spawnParticles(e.x, e.y - 40, '#2dd4bf', 12, 180);
+                } else {
+                  soundEngine.playPunch(false);
+                }
+                if (!pr.piercing) hit = true;
+                break;
+              }
             }
           }
         }
@@ -1549,20 +2807,25 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
       }
 
       // === PICKUPS ===
-      const floorPkY = st.mode === 'stickman_wrestling' ? RING_FLOOR : BRAWL_FLOOR;
       for (let i = st.pickups.length - 1; i >= 0; i--) {
         const pk = st.pickups[i];
-        if (st.mode !== 'stickman_run') {
+        if (st.mode === 'stickman_wrestling') {
           pk.vy += 680 * dt;
           pk.y += pk.vy * dt;
-          if (pk.y >= floorPkY - 16) {
-            pk.y = floorPkY - 16;
+          if (pk.y >= RAID_FLOOR - 16) {
+            pk.y = RAID_FLOOR - 16;
             pk.vy = 0;
+          }
+          for (const pl of st.raidPlatforms) {
+            if (pk.vy >= 0 && pk.x >= pl.x && pk.x <= pl.x + pl.w && pk.y >= pl.y - 16 && pk.y - pk.vy * dt <= pl.y + 8) {
+              pk.y = pl.y - 16;
+              pk.vy = 0;
+            }
           }
         }
         if (now < p.magnetUntil) {
           const dx = p.x - pk.x;
-          const dy = p.y - 45 - pk.y;
+          const dy = p.y - 36 - pk.y;
           const d = Math.hypot(dx, dy) || 1;
           if (d < 360) {
             pk.x += (dx / d) * 480 * dt;
@@ -1570,7 +2833,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           }
         }
 
-        if (Math.hypot(pk.x - p.x, pk.y - (p.y - 42)) < 50) {
+        if (Math.hypot(pk.x - p.x, pk.y - (p.y - 34)) < 50) {
           if (pk.kind === 'drop') {
             st.drops += 1;
             st.score += 20;
@@ -1590,7 +2853,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           } else if (pk.kind === 'rage') {
             p.rageUntil = now + 7000;
             soundEngine.playPickup('power');
-            showBanner('YETI RAGE 1.6x DMG (7s)', undefined, '#fb923c', 900);
+            showBanner('YETI RAGE BOOST (7s)', undefined, '#fb923c', 900);
           } else if (pk.kind === 'magnet') {
             p.magnetUntil = now + 8000;
             soundEngine.playPickup('power');
@@ -1609,7 +2872,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           st.particles.splice(i, 1);
           continue;
         }
-        pt.vy += 450 * dt;
+        pt.vy += (st.mode === 'stickman_brawl' ? 0 : 450) * dt;
         pt.x += pt.vx * dt;
         pt.y += pt.vy * dt;
       }
@@ -1631,313 +2894,600 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         );
       }
 
-      const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-      sky.addColorStop(0, pal.skyTop);
-      sky.addColorStop(1, pal.skyBot);
-      ctx.fillStyle = sky;
-      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      if (mode === 'stickman_brawl') {
+        // === TOP-DOWN MULTI-ROOM STATION RENDERER ===
+        ctx.fillStyle = '#050d1a';
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-      ctx.save();
-      ctx.strokeStyle = pal.accent;
-      ctx.globalAlpha = 0.16;
-      ctx.lineWidth = 34;
-      ctx.beginPath();
-      const scrollOff = st ? st.runnerScroll * 0.12 : nowMs * 0.02;
-      ctx.moveTo(0, 120);
-      for (let x = 0; x <= CANVAS_W; x += 80) {
-        ctx.lineTo(x, 115 + Math.sin((x + scrollOff) * 0.008) * 38);
-      }
-      ctx.stroke();
-      ctx.restore();
-
-      ctx.fillStyle = pal.ridgeFar;
-      ctx.beginPath();
-      ctx.moveTo(0, CANVAS_H);
-      for (let x = 0; x <= CANVAS_W + 120; x += 140) {
-        const h = 230 + Math.sin(x * 0.011 + 1.4) * 60;
-        ctx.lineTo(x, h);
-      }
-      ctx.lineTo(CANVAS_W, CANVAS_H);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = pal.ridgeNear;
-      ctx.beginPath();
-      ctx.moveTo(0, CANVAS_H);
-      for (let x = 0; x <= CANVAS_W + 100; x += 110) {
-        const h = 320 + Math.cos(x * 0.014) * 52;
-        ctx.lineTo(x, h);
-      }
-      ctx.lineTo(CANVAS_W, CANVAS_H);
-      ctx.closePath();
-      ctx.fill();
-
-      if (st) {
-        ctx.fillStyle = pal.particle;
-        for (const fl of st.ambientFlakes) {
-          ctx.globalAlpha = 0.45;
-          ctx.beginPath();
-          ctx.arc(fl.x, fl.y, fl.s, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-      }
-
-      if (mode === 'stickman_wrestling') {
+        const camX = st ? st.cameraX : 0;
+        const camY = st ? st.cameraY : 250;
         ctx.save();
-        ctx.fillStyle = 'rgba(186, 230, 253, 0.07)';
-        ctx.beginPath();
-        ctx.moveTo(260, 0);
-        ctx.lineTo(440, RING_FLOOR);
-        ctx.lineTo(760, RING_FLOOR);
-        ctx.lineTo(540, 0);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(940, 0);
-        ctx.lineTo(440, RING_FLOOR);
-        ctx.lineTo(760, RING_FLOOR);
-        ctx.lineTo(660, 0);
-        ctx.fill();
-        ctx.restore();
+        ctx.translate(-camX, -camY);
 
-        ctx.fillStyle = '#050c18';
-        for (let cx = 30; cx < CANVAS_W; cx += 52) {
-          const bounce = st ? Math.abs(Math.sin(nowMs * 0.005 + cx)) * 5 : 0;
-          ctx.beginPath();
-          ctx.arc(cx, 548 - bounce, 14, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillRect(cx - 16, 560 - bounce, 32, 115);
-        }
+        // Floor Rooms + Subtle Sci-Fi Deck Tiles
+        for (const r of STATION_ROOMS) {
+          ctx.fillStyle = r.floor;
+          ctx.fillRect(r.x, r.y, r.w, r.h);
 
-        ctx.fillStyle = '#0284c7';
-        ctx.strokeStyle = '#e0f2fe';
-        ctx.lineWidth = 3;
-        ctx.fillRect(RING_LEFT - 14, 330, 22, 210);
-        ctx.strokeRect(RING_LEFT - 14, 330, 22, 210);
-        ctx.fillStyle = '#e11d48';
-        ctx.fillRect(RING_RIGHT - 8, 330, 22, 210);
-        ctx.strokeRect(RING_RIGHT - 8, 330, 22, 210);
-
-        [355, 405, 455].forEach((ry) => {
-          ctx.fillStyle = '#38bdf8';
-          ctx.fillRect(RING_LEFT - 2, ry - 9, 18, 18);
-          ctx.fillStyle = '#f43f5e';
-          ctx.fillRect(RING_RIGHT - 16, ry - 9, 18, 18);
-        });
-
-        const bendL = st ? st.ropeLeftBend : 0;
-        const bendR = st ? st.ropeRightBend : 0;
-        const ropeColors = ['#38bdf8', '#e2e8f0', '#f43f5e'];
-        [355, 405, 455].forEach((ry, idx) => {
-          ctx.strokeStyle = ropeColors[idx];
-          ctx.lineWidth = 5;
-          ctx.beginPath();
-          ctx.moveTo(RING_LEFT + 8, ry);
-          ctx.quadraticCurveTo(
-            RING_LEFT - bendL * 1.2 + (RING_RIGHT - RING_LEFT) * 0.25,
-            ry,
-            (RING_LEFT + RING_RIGHT) / 2,
-            ry
-          );
-          ctx.quadraticCurveTo(
-            RING_RIGHT + bendR * 1.2 - (RING_RIGHT - RING_LEFT) * 0.25,
-            ry,
-            RING_RIGHT - 8,
-            ry
-          );
-          ctx.stroke();
-        });
-
-        ctx.fillStyle = '#1e293b';
-        ctx.fillRect(RING_LEFT - 28, RING_FLOOR, RING_RIGHT - RING_LEFT + 56, 22);
-        ctx.fillStyle = pal.floorFill;
-        ctx.fillRect(RING_LEFT - 28, RING_FLOOR + 22, RING_RIGHT - RING_LEFT + 56, 75);
-        ctx.strokeStyle = pal.floorTrim;
-        ctx.lineWidth = 4;
-        ctx.strokeRect(RING_LEFT - 28, RING_FLOOR, RING_RIGHT - RING_LEFT + 56, 22);
-
-        ctx.fillStyle = 'rgba(255,255,255,0.14)';
-        ctx.font = '700 18px Oxanium, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('LOFI SLAM · SUI WRESTLING', CANVAS_W / 2, RING_FLOOR + 62);
-      } else if (mode === 'stickman_brawl') {
-        ctx.fillStyle = pal.floorFill;
-        ctx.fillRect(0, BRAWL_FLOOR, CANVAS_W, CANVAS_H - BRAWL_FLOOR);
-        ctx.fillStyle = pal.floorTrim;
-        ctx.fillRect(0, BRAWL_FLOOR, CANVAS_W, 6);
-
-        for (const pl of BRAWL_PLATFORMS) {
-          ctx.fillStyle = '#16385d';
-          ctx.strokeStyle = pal.floorTrim;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.roundRect(pl.x, pl.y, pl.w, 16, 8);
-          ctx.fill();
-          ctx.stroke();
-        }
-      } else if (mode === 'stickman_run' && st) {
-        for (const pl of st.runnerPlatforms) {
-          ctx.fillStyle = pal.floorFill;
-          ctx.fillRect(pl.x, pl.y, pl.w, CANVAS_H - pl.y);
-          ctx.fillStyle = pal.floorTrim;
-          ctx.fillRect(pl.x, pl.y, pl.w, 7);
-        }
-        for (const hz of st.runnerHazards) {
-          if (hz.kind === 'spike') {
-            ctx.fillStyle = '#38bdf8';
-            ctx.strokeStyle = '#e0f2fe';
-            ctx.lineWidth = 2;
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
+          ctx.lineWidth = 1;
+          for (let gx = r.x; gx < r.x + r.w; gx += 46) {
             ctx.beginPath();
-            ctx.moveTo(hz.x, hz.y);
-            ctx.lineTo(hz.x + hz.w * 0.5, hz.y - hz.h);
-            ctx.lineTo(hz.x + hz.w, hz.y);
-            ctx.closePath();
-            ctx.fill();
+            ctx.moveTo(gx, r.y);
+            ctx.lineTo(gx, r.y + r.h);
             ctx.stroke();
-          } else if (hz.kind === 'icicle') {
-            ctx.fillStyle = '#fb7185';
-            ctx.strokeStyle = '#ffe4e6';
-            ctx.lineWidth = 2;
-            ctx.fillRect(hz.x, hz.y - hz.h, hz.w, hz.h * 0.72);
-            ctx.strokeRect(hz.x, hz.y - hz.h, hz.w, hz.h * 0.72);
-            ctx.font = '700 10px Oxanium, sans-serif';
-            ctx.fillStyle = '#fff';
-            ctx.textAlign = 'center';
-            ctx.fillText('SLIDE!', hz.x + hz.w / 2, hz.y - hz.h - 6);
-          } else {
-            ctx.fillStyle = '#0284c7';
-            ctx.strokeStyle = '#bae6fd';
-            ctx.lineWidth = 3;
-            ctx.fillRect(hz.x, hz.y - hz.h, hz.w, hz.h);
-            ctx.strokeRect(hz.x, hz.y - hz.h, hz.w, hz.h);
+          }
+          for (let gy = r.y; gy < r.y + r.h; gy += 46) {
             ctx.beginPath();
-            ctx.moveTo(hz.x, hz.y - hz.h);
-            ctx.lineTo(hz.x + hz.w, hz.y);
-            ctx.moveTo(hz.x + hz.w, hz.y - hz.h);
-            ctx.lineTo(hz.x, hz.y);
+            ctx.moveTo(r.x, gy);
+            ctx.lineTo(r.x + r.w, gy);
+            ctx.stroke();
+          }
+
+          ctx.strokeStyle = r.accent;
+          ctx.lineWidth = 2;
+          ctx.globalAlpha = 0.45;
+          ctx.strokeRect(r.x + 2, r.y + 2, r.w - 4, r.h - 4);
+          ctx.globalAlpha = 1;
+
+          // Floor Room Watermark Label
+          ctx.fillStyle = 'rgba(255,255,255,0.16)';
+          ctx.font = '700 20px Oxanium, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(r.name, r.x + 20, r.y + 34);
+        }
+
+        const cluesFound = st ? st.escapeClues.filter((c) => c.collected).length : 0;
+        const totalClues = st ? st.escapeClues.length : 3;
+        const wingBOpen = cluesFound >= 1;
+        const airlockOpen = cluesFound >= totalClues;
+        const podX = 1410;
+        const podY = 705;
+
+        // Built Room Interiors (Medbay Cryo-Pod & Tanks, Lab Servers & Benches, Electrical Coils, Cafeteria Kitchen & Tables, Reactor Turbine, Airlock Suit Lockers & Escape Shuttle)
+        drawStationRoomArchitecture(ctx, airlockOpen, nowMs * 0.001);
+
+        // Floor Vents
+        for (const v of STATION_VENTS) {
+          ctx.fillStyle = '#1e293b';
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 2;
+          ctx.fillRect(v.x - 22, v.y - 14, 44, 28);
+          ctx.strokeRect(v.x - 22, v.y - 14, 44, 28);
+          ctx.strokeStyle = '#0f172a';
+          for (let sx = -14; sx <= 14; sx += 7) {
+            ctx.beginPath();
+            ctx.moveTo(v.x + sx, v.y - 10);
+            ctx.lineTo(v.x + sx, v.y + 10);
             ctx.stroke();
           }
         }
-      }
 
-      if (!st) {
-        const t = nowMs * 0.001;
-        drawStickmanCharacter(ctx, {
-          x: 430,
-          y: mode === 'stickman_wrestling' ? RING_FLOOR : BRAWL_FLOOR,
-          facing: 1,
-          pose: mode === 'stickman_wrestling' ? 'victory' : 'run',
-          animTime: t,
-          isLofiYeti: true,
-          colorwayId: selectedColorway,
-          hatId: yeti?.equipped.hat || 'hat_goggles',
-          scarfId: yeti?.equipped.scarf || 'scarf_lofi',
-          hasBelt: mode === 'stickman_wrestling',
-          hp: 100,
-          maxHp: 100,
-          label: playerName,
-          scale: 1.25,
-          weapon: 'sword',
-        });
-        if (mode !== 'stickman_run') {
+        // Walls & Locked/Unlocked Blast Doors
+        for (const w of STATION_WALLS) {
+          if (w.doorId === 'wing_b') {
+            ctx.fillStyle = wingBOpen ? 'rgba(56, 189, 248, 0.14)' : 'rgba(245, 158, 11, 0.72)';
+            ctx.strokeStyle = wingBOpen ? '#38bdf8' : '#fbbf24';
+            ctx.lineWidth = 3;
+            ctx.fillRect(w.x + 18, w.y, 24, w.h);
+            ctx.strokeRect(w.x + 18, w.y, 24, w.h);
+            ctx.font = '700 11px Oxanium, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(wingBOpen ? 'OPEN' : '1 CLUE', w.x + 30, w.y + w.h / 2 + 4);
+            continue;
+          }
+          if (w.doorId === 'airlock') {
+            ctx.fillStyle = airlockOpen ? 'rgba(52, 211, 153, 0.14)' : 'rgba(244, 63, 94, 0.76)';
+            ctx.strokeStyle = airlockOpen ? '#34d399' : '#fb7185';
+            ctx.lineWidth = 3;
+            ctx.fillRect(w.x + 18, w.y, 24, w.h);
+            ctx.strokeRect(w.x + 18, w.y, 24, w.h);
+            ctx.font = '700 11px Oxanium, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(airlockOpen ? 'OPEN' : `${totalClues} CLUES`, w.x + 30, w.y + w.h / 2 + 4);
+            continue;
+          }
+
+          ctx.fillStyle = '#09111e';
+          ctx.fillRect(w.x, w.y, w.w, w.h);
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(w.x, w.y, w.w, w.h);
+        }
+
+        if (st) {
+          // Clues inside Rooms
+          for (const clue of st.escapeClues) {
+            if (clue.collected) continue;
+            const pulse = 20 + Math.sin(nowMs * 0.007) * 4;
+            ctx.fillStyle = 'rgba(250, 204, 21, 0.25)';
+            ctx.beginPath();
+            ctx.arc(clue.x, clue.y, pulse, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#fde047';
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 2.5;
+            ctx.fillRect(clue.x - 14, clue.y - 12, 28, 22);
+            ctx.strokeRect(clue.x - 14, clue.y - 12, 28, 22);
+
+            if (clue.scanProgress > 0) {
+              ctx.strokeStyle = '#34d399';
+              ctx.lineWidth = 4;
+              ctx.beginPath();
+              ctx.arc(clue.x, clue.y, 28, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * clue.scanProgress);
+              ctx.stroke();
+            }
+
+            ctx.font = '700 11px Oxanium, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#fef08a';
+            ctx.fillText(clue.label, clue.x, clue.y - 22);
+          }
+
+          // Station Floor Obstacles & Sabotage Traps
+          for (const hz of st.stationHazards) {
+            drawStationHazard2D(ctx, hz, nowMs * 0.001);
+          }
+
+          // Graphic Power-Ups
+          for (const pk of st.pickups) {
+            drawPowerUpIcon(ctx, pk.kind, pk.x, pk.y, nowMs * 0.001);
+          }
+
+          // Imposter Stickmen & Airlock Boss NPC
+          for (const imp of st.enemies) {
+            drawStickmanCharacter(ctx, {
+              x: imp.x,
+              y: imp.y + 12,
+              facing: imp.facing,
+              pose: imp.pose,
+              animTime: st.elapsed + imp.x * 0.01,
+              scale: imp.isBoss ? 1.32 : 0.96,
+              isLofiYeti: false,
+              imposterVisor: true,
+              bossAura: Boolean(imp.isBoss),
+              customStroke: imp.stroke || '#ef4444',
+              customAccent: imp.accent || '#fb7185',
+              hp: imp.hp,
+              maxHp: imp.maxHp,
+              label: nowMs < imp.stunnedUntil ? 'STUNNED!' : imp.name,
+              flashHit: imp.flashTimer > 0,
+              weapon: imp.isBoss ? 'blaster' : 'sword',
+            });
+          }
+
+          // Player Lofi Yeti Stickman
+          const p = st.player;
           drawStickmanCharacter(ctx, {
-            x: 770,
-            y: mode === 'stickman_wrestling' ? RING_FLOOR : BRAWL_FLOOR,
-            facing: -1,
-            pose: 'guard',
-            animTime: t + 1,
+            x: p.x,
+            y: p.y + 14,
+            facing: p.facing,
+            pose: p.pose,
+            animTime: st.elapsed,
+            actionProgress: p.actionDuration > 0 ? 1 - p.actionTimer / p.actionDuration : 0,
+            scale: 1.04,
             isLofiYeti: true,
-            colorwayId: 'sunset_ember',
+            colorwayId: selectedColorway,
+            hatId: yeti?.equipped.hat || 'hat_goggles',
+            scarfId: yeti?.equipped.scarf || 'scarf_lofi',
+            shielded: nowMs < p.shieldUntil,
+            raged: nowMs < p.rageUntil,
+            hp: p.hp,
+            maxHp: p.maxHp,
+            label: playerName,
+            flashHit: p.flashTimer > 0,
+            weapon: 'scanner',
+          });
+
+          // Directional Radar Beacon Arrow toward nearest Clue OR Airlock Shuttle
+          if (nowMs < st.radarPingUntil || airlockOpen) {
+            const target = airlockOpen
+              ? { x: podX, y: podY, color: '#34d399' }
+              : (() => {
+                  let best: EscapeClue | null = null;
+                  let bestD = Infinity;
+                  for (const c of st.escapeClues) {
+                    if (c.collected) continue;
+                    const d = Math.hypot(c.x - p.x, c.y - p.y);
+                    if (d < bestD) {
+                      bestD = d;
+                      best = c;
+                    }
+                  }
+                  return best ? { x: best.x, y: best.y, color: '#fde047' } : null;
+                })();
+            if (target) {
+              const ang = Math.atan2(target.y - p.y, target.x - p.x);
+              const ax = p.x + Math.cos(ang) * 76;
+              const ay = p.y + Math.sin(ang) * 76;
+              ctx.save();
+              ctx.translate(ax, ay);
+              ctx.rotate(ang);
+              ctx.fillStyle = target.color;
+              ctx.beginPath();
+              ctx.moveTo(14, 0);
+              ctx.lineTo(-8, -8);
+              ctx.lineTo(-4, 0);
+              ctx.lineTo(-8, 8);
+              ctx.closePath();
+              ctx.fill();
+              ctx.restore();
+            }
+          }
+
+          // Projectiles & Particles in Station World Space
+          for (const pr of st.projectiles) {
+            ctx.fillStyle = pr.color;
+            ctx.beginPath();
+            ctx.arc(pr.x, pr.y, pr.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+          for (const pt of st.particles) {
+            ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+            ctx.fillStyle = pt.color;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        } else {
+          // Menu preview actors
+          drawStickmanCharacter(ctx, {
+            x: 340,
+            y: 700,
+            facing: 1,
+            pose: 'run',
+            animTime: nowMs * 0.001,
+            isLofiYeti: true,
+            colorwayId: selectedColorway,
+            hatId: yeti?.equipped.hat || 'hat_goggles',
             hp: 100,
             maxHp: 100,
-            label: mode === 'stickman_wrestling' ? 'Baron Basalt' : 'Frost Ninja',
-            scale: 1.2,
-            weapon: 'sword',
+            label: playerName,
+            scale: 1.05,
+            weapon: 'scanner',
           });
         }
+
         ctx.restore();
-        return;
-      }
 
-      // Draw Graphic Power-Ups & Pickups (NO letter glyphs!)
-      for (const pk of st.pickups) {
-        drawPowerUpIcon(ctx, pk.kind, pk.x, pk.y, nowMs * 0.001);
-      }
+        // === LIVE STATION MINI-MAP (Bottom Right Inside Canvas, above controls) ===
+        if (st) {
+          const mmW = 210;
+          const mmH = 124;
+          const mmX = CANVAS_W - mmW - 18;
+          const mmY = CANVAS_H - mmH - 64;
+          const sx = mmW / STATION_W;
+          const sy = mmH / STATION_H;
 
-      for (const e of st.enemies) {
-        drawStickmanCharacter(ctx, {
-          x: e.x,
-          y: e.y,
-          facing: e.facing,
-          pose: e.pose,
-          animTime: st.elapsed + e.x * 0.01,
-          actionProgress: e.actionDuration > 0 ? 1 - e.actionTimer / e.actionDuration : 0,
-          scale: e.isBoss ? 1.24 : 1.08,
-          isLofiYeti: true,
-          colorwayId: e.colorway || 'classic_lofi',
-          hp: e.hp,
-          maxHp: e.maxHp,
-          label: e.name,
-          flashHit: e.flashTimer > 0,
-          weapon: st.mode === 'stickman_run' ? 'blaster' : 'sword',
-        });
-      }
+          ctx.save();
+          ctx.fillStyle = 'rgba(4, 12, 24, 0.88)';
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(mmX, mmY, mmW, mmH, 10);
+          ctx.fill();
+          ctx.stroke();
 
-      const p = st.player;
-      drawStickmanCharacter(ctx, {
-        x: p.x,
-        y: p.y,
-        facing: p.facing,
-        pose: p.pose,
-        animTime: st.elapsed,
-        actionProgress: p.actionDuration > 0 ? 1 - p.actionTimer / p.actionDuration : 0,
-        scale: 1.18,
-        isLofiYeti: true,
-        colorwayId: selectedColorway,
-        hatId: yeti?.equipped.hat || 'hat_goggles',
-        scarfId: yeti?.equipped.scarf || 'scarf_lofi',
-        hasBelt: st.mode === 'stickman_wrestling',
-        shielded: nowMs < p.shieldUntil,
-        raged: nowMs < p.rageUntil,
-        finisherReady: st.mode === 'stickman_wrestling' && p.finisher >= 100,
-        hp: p.hp,
-        maxHp: p.maxHp,
-        label: playerName,
-        flashHit: p.flashTimer > 0,
-        weapon: st.mode === 'stickman_run' ? 'blaster' : 'sword',
-      });
+          for (const r of STATION_ROOMS) {
+            ctx.fillStyle = 'rgba(30, 58, 95, 0.55)';
+            ctx.strokeStyle = r.accent;
+            ctx.lineWidth = 1;
+            ctx.fillRect(mmX + r.x * sx, mmY + r.y * sy, r.w * sx, r.h * sy);
+            ctx.strokeRect(mmX + r.x * sx, mmY + r.y * sy, r.w * sx, r.h * sy);
+          }
+          for (const c of st.escapeClues) {
+            if (c.collected) continue;
+            ctx.fillStyle = '#fde047';
+            ctx.beginPath();
+            ctx.arc(mmX + c.x * sx, mmY + c.y * sy, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.fillStyle = airlockOpen ? '#34d399' : '#64748b';
+          ctx.beginPath();
+          ctx.arc(mmX + 1410 * sx, mmY + 705 * sy, 4.5, 0, Math.PI * 2);
+          ctx.fill();
 
-      for (const pr of st.projectiles) {
-        ctx.fillStyle = pr.color;
+          for (const imp of st.enemies) {
+            if (Math.hypot(imp.x - st.player.x, imp.y - st.player.y) < 420) {
+              ctx.fillStyle = '#ef4444';
+              ctx.beginPath();
+              ctx.arc(mmX + imp.x * sx, mmY + imp.y * sy, 3.2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(mmX + st.player.x * sx, mmY + st.player.y * sy, 4.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      } else {
+        // === SIDE-SCROLLING BACKDROP (Killer Bean Raid & Glacier Run) ===
+        const sky = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+        sky.addColorStop(0, pal.skyTop);
+        sky.addColorStop(1, pal.skyBot);
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+        const camX = st ? st.cameraX : 0;
+        const scrollRef = st ? (mode === 'stickman_run' ? st.runnerScroll : camX) : nowMs * 0.04;
+
+        ctx.save();
+        ctx.strokeStyle = pal.accent;
+        ctx.globalAlpha = 0.16;
+        ctx.lineWidth = 34;
         ctx.beginPath();
-        ctx.arc(pr.x, pr.y, pr.radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
+        ctx.moveTo(0, 120);
+        for (let x = 0; x <= CANVAS_W; x += 80) {
+          ctx.lineTo(x, 115 + Math.sin((x + scrollRef * 0.15) * 0.008) * 38);
+        }
         ctx.stroke();
-      }
+        ctx.restore();
 
-      for (const pt of st.particles) {
-        ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
-        ctx.fillStyle = pt.color;
+        ctx.fillStyle = pal.ridgeFar;
         ctx.beginPath();
-        ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+        ctx.moveTo(0, CANVAS_H);
+        for (let x = 0; x <= CANVAS_W + 120; x += 140) {
+          const h = 230 + Math.sin((x + scrollRef * 0.18) * 0.011 + 1.4) * 60;
+          ctx.lineTo(x, h);
+        }
+        ctx.lineTo(CANVAS_W, CANVAS_H);
+        ctx.closePath();
         ctx.fill();
-      }
-      ctx.globalAlpha = 1;
 
-      if (st.banner && nowMs < st.banner.until) {
+        ctx.fillStyle = pal.ridgeNear;
+        ctx.beginPath();
+        ctx.moveTo(0, CANVAS_H);
+        for (let x = 0; x <= CANVAS_W + 100; x += 110) {
+          const h = 320 + Math.cos((x + scrollRef * 0.35) * 0.014) * 52;
+          ctx.lineTo(x, h);
+        }
+        ctx.lineTo(CANVAS_W, CANVAS_H);
+        ctx.closePath();
+        ctx.fill();
+
+        if (st) {
+          ctx.fillStyle = pal.particle;
+          for (const fl of st.ambientFlakes) {
+            ctx.globalAlpha = 0.45;
+            ctx.beginPath();
+            ctx.arc(fl.x, fl.y, fl.s, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        }
+
+        if (mode === 'stickman_wrestling') {
+          // Parallax Skyline Towers & Syndicate Compound Buildings
+          drawRaidParallaxBuildings(ctx, camX, CANVAS_W, RAID_FLOOR, pal.accent, nowMs * 0.001);
+
+          ctx.save();
+          ctx.translate(-camX, 0);
+
+          // Warehouse Steel Columns & Spotlights
+          const endX = st ? st.levelEndX : 4150;
+          for (let bx = 240; bx < endX; bx += 360) {
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+            ctx.fillRect(bx, 60, 26, RAID_FLOOR - 60);
+            ctx.fillStyle = 'rgba(251, 191, 36, 0.07)';
+            ctx.beginPath();
+            ctx.moveTo(bx + 13, 80);
+            ctx.lineTo(bx - 80, RAID_FLOOR);
+            ctx.lineTo(bx + 106, RAID_FLOOR);
+            ctx.closePath();
+            ctx.fill();
+          }
+
+          // Compound Floor
+          ctx.fillStyle = pal.floorFill;
+          ctx.fillRect(0, RAID_FLOOR, endX + 400, CANVAS_H - RAID_FLOOR);
+          ctx.fillStyle = '#f59e0b';
+          ctx.fillRect(0, RAID_FLOOR, endX + 400, 6);
+
+          if (st) {
+            // Elevated Steel Catwalks with Truss Supports & Shipping Containers
+            drawRaidPlatformSupports(ctx, st.raidPlatforms, RAID_FLOOR, pal.floorTrim);
+
+            // Dropped Raid Obstacles (Laser Barriers, Airdrop Crates, Cryo Mines)
+            for (const obs of st.raidObstacles) {
+              drawRaidObstacle2D(ctx, obs, nowMs * 0.001);
+            }
+
+            // Explosive Barrels
+            for (const br of st.raidBarrels) {
+              ctx.fillStyle = '#dc2626';
+              ctx.strokeStyle = '#fca5a5';
+              ctx.lineWidth = 2.5;
+              ctx.fillRect(br.x - 16, br.y - 48, 32, 48);
+              ctx.strokeRect(br.x - 16, br.y - 48, 32, 48);
+              ctx.fillStyle = '#facc15';
+              ctx.fillRect(br.x - 16, br.y - 28, 32, 9);
+            }
+
+            // Armored Extraction Gatehouse Building
+            const bossAlive = st.enemies.some((e) => e.isBoss);
+            drawExtractionBunker(ctx, endX, RAID_FLOOR, bossAlive, nowMs * 0.001);
+
+            for (const pk of st.pickups) {
+              drawPowerUpIcon(ctx, pk.kind, pk.x, pk.y, nowMs * 0.001);
+            }
+
+            for (const e of st.enemies) {
+              drawStickmanCharacter(ctx, {
+                x: e.x,
+                y: e.y,
+                facing: e.facing,
+                pose: e.pose,
+                animTime: st.elapsed + e.x * 0.01,
+                actionProgress: e.actionDuration > 0 ? 1 - e.actionTimer / e.actionDuration : 0,
+                scale: e.isBoss ? 1.38 : 1.08,
+                isLofiYeti: false,
+                bossAura: Boolean(e.isBoss),
+                shielded: Boolean(e.isBoss && e.bossState === 'guard'),
+                customStroke: e.stroke || '#fb7185',
+                customAccent: e.accent || '#facc15',
+                hp: e.hp,
+                maxHp: e.maxHp,
+                label: e.name,
+                flashHit: e.flashTimer > 0,
+                weapon: 'pistols',
+              });
+            }
+
+            const p = st.player;
+            drawStickmanCharacter(ctx, {
+              x: p.x,
+              y: p.y,
+              facing: p.facing,
+              pose: p.pose,
+              animTime: st.elapsed,
+              actionProgress: p.actionDuration > 0 ? 1 - p.actionTimer / p.actionDuration : 0,
+              scale: 1.18,
+              isLofiYeti: true,
+              colorwayId: selectedColorway,
+              hatId: yeti?.equipped.hat || 'hat_goggles',
+              scarfId: yeti?.equipped.scarf || 'scarf_lofi',
+              shielded: nowMs < p.shieldUntil,
+              raged: nowMs < p.rageUntil,
+              finisherReady: p.finisher >= 100,
+              hp: p.hp,
+              maxHp: p.maxHp,
+              label: playerName,
+              flashHit: p.flashTimer > 0,
+              weapon: 'pistols',
+            });
+
+            for (const pr of st.projectiles) {
+              ctx.fillStyle = pr.color;
+              ctx.beginPath();
+              ctx.arc(pr.x, pr.y, pr.radius, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 2;
+              ctx.stroke();
+            }
+
+            for (const pt of st.particles) {
+              ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+              ctx.fillStyle = pt.color;
+              ctx.beginPath();
+              ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+          } else {
+            drawStickmanCharacter(ctx, {
+              x: 380,
+              y: RAID_FLOOR,
+              facing: 1,
+              pose: 'idle',
+              animTime: nowMs * 0.001,
+              isLofiYeti: true,
+              colorwayId: selectedColorway,
+              hatId: yeti?.equipped.hat || 'hat_goggles',
+              hp: 100,
+              maxHp: 100,
+              label: playerName,
+              scale: 1.24,
+              weapon: 'pistols',
+            });
+          }
+
+          ctx.restore();
+        } else if (mode === 'stickman_run' && st) {
+          drawArcticOutpostParallax(ctx, scrollRef, CANVAS_W, 412, pal.accent, nowMs * 0.001);
+          drawRunnerPlatformFoundations(ctx, st.runnerPlatforms, CANVAS_H, pal.floorFill, pal.floorTrim);
+          for (const hz of st.runnerHazards) {
+            drawRunnerHazard2D(ctx, hz, nowMs * 0.001);
+          }
+
+          for (const pk of st.pickups) {
+            drawPowerUpIcon(ctx, pk.kind, pk.x, pk.y, nowMs * 0.001);
+          }
+
+          for (const b of st.enemies) {
+            drawStickmanCharacter(ctx, {
+              x: b.x,
+              y: b.y,
+              facing: -1,
+              pose: b.pose,
+              animTime: st.elapsed,
+              actionProgress: b.actionDuration > 0 ? 1 - b.actionTimer / b.actionDuration : 0,
+              scale: 1.38,
+              isLofiYeti: false,
+              bossAura: true,
+              customStroke: b.stroke || '#f43f5e',
+              customAccent: b.accent || '#fbbf24',
+              hp: b.hp,
+              maxHp: b.maxHp,
+              label: b.name,
+              flashHit: b.flashTimer > 0,
+              weapon: 'blaster',
+            });
+          }
+
+          const p = st.player;
+          drawStickmanCharacter(ctx, {
+            x: p.x,
+            y: p.y,
+            facing: p.facing,
+            pose: p.pose,
+            animTime: st.elapsed,
+            actionProgress: p.actionDuration > 0 ? 1 - p.actionTimer / p.actionDuration : 0,
+            scale: 1.18,
+            isLofiYeti: true,
+            colorwayId: selectedColorway,
+            hatId: yeti?.equipped.hat || 'hat_goggles',
+            scarfId: yeti?.equipped.scarf || 'scarf_lofi',
+            shielded: nowMs < p.shieldUntil,
+            raged: nowMs < p.rageUntil,
+            hp: p.hp,
+            maxHp: p.maxHp,
+            label: playerName,
+            flashHit: p.flashTimer > 0,
+            weapon: 'blaster',
+          });
+
+          for (const pr of st.projectiles) {
+            ctx.fillStyle = pr.color;
+            ctx.beginPath();
+            ctx.arc(pr.x, pr.y, pr.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+
+          for (const pt of st.particles) {
+            ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+            ctx.fillStyle = pt.color;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      if (st && st.banner && nowMs < st.banner.until) {
         ctx.save();
         ctx.textAlign = 'center';
-        ctx.font = '700 28px "Pixel Forge", Oxanium, sans-serif';
+        ctx.font = '700 26px "Pixel Forge", Oxanium, sans-serif';
         ctx.fillStyle = '#040c18';
-        ctx.fillText(st.banner.text, CANVAS_W / 2 + 2, 166);
+        ctx.fillText(st.banner.text, CANVAS_W / 2 + 2, 146);
         ctx.fillStyle = st.banner.color;
-        ctx.fillText(st.banner.text, CANVAS_W / 2, 164);
+        ctx.fillText(st.banner.text, CANVAS_W / 2, 144);
         if (st.banner.subtext) {
           ctx.font = '600 14px Oxanium, sans-serif';
           ctx.fillStyle = '#e2e8f0';
-          ctx.fillText(st.banner.subtext, CANVAS_W / 2, 192);
+          ctx.fillText(st.banner.subtext, CANVAS_W / 2, 172);
         }
         ctx.restore();
       }
@@ -1957,8 +3507,18 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         hudSyncAcc = 0;
         const st = stateRef.current;
         const p = st.player;
-        const boss = st.enemies[0];
         const now = performance.now();
+        const boss = st.enemies.find((e) => e.isBoss);
+        const cluesFound = st.escapeClues.filter((c) => c.collected).length;
+        const cluesTotal = st.escapeClues.length;
+        const room =
+          STATION_ROOMS.find(
+            (r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h
+          )?.name || 'CORRIDOR';
+        const nearClue = st.escapeClues.find(
+          (c) => !c.collected && Math.hypot(c.x - p.x, c.y - p.y) < 82
+        );
+
         setHud({
           hp: Math.round(p.hp),
           maxHp: p.maxHp,
@@ -1976,10 +3536,14 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           shieldLeft: Math.max(0, Math.ceil((p.shieldUntil - now) / 1000)),
           rageLeft: Math.max(0, Math.ceil((p.rageUntil - now) / 1000)),
           magnetLeft: Math.max(0, Math.ceil((p.magnetUntil - now) / 1000)),
-          pinCount: st.pinCount,
-          pinPossible:
-            st.mode === 'stickman_wrestling' &&
-            Boolean(boss && (boss.hp <= 45 || boss.stunnedUntil > now)),
+          cluesFound,
+          cluesTotal,
+          currentRoom: room,
+          wingBOpen: cluesFound >= 1,
+          airlockOpen: cluesTotal > 0 && cluesFound >= cluesTotal,
+          exitProgress: Math.min(100, Math.max(0, Math.round((p.x / Math.max(1, st.levelEndX)) * 100))),
+          nearClueLabel: nearClue?.label || '',
+          slowMoActive: now < st.slowMoUntil,
         });
       }
 
@@ -1988,7 +3552,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
 
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
-  }, [finishMatch, playerName, selectedColorway, selectedGameMode, selectedMapId, yeti?.equipped.hat, yeti?.equipped.scarf]);
+  }, [collectEscapeClue, finishMatch, playerName, selectedColorway, selectedGameMode, selectedMapId, yeti?.equipped.hat, yeti?.equipped.scarf]);
 
   const handleClaim = async () => {
     if (!summary || claimStatus !== 'idle') return;
@@ -2032,8 +3596,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         {/* === IN-GAME ARCADE MINI-HUD === */}
         {phase !== 'MENU' && (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start justify-between gap-3 p-3 sm:p-4 bg-gradient-to-b from-[#040c18]/85 via-[#040c18]/35 to-transparent">
-            {/* Left: Lofi Yeti Life Bar & Finisher/Level */}
-            <div className="pointer-events-auto min-w-[215px] arcade-hud px-3 py-2 space-y-1.5">
+            {/* Left: Player HP & Mode Progress */}
+            <div className="pointer-events-auto min-w-[225px] arcade-hud px-3 py-2 space-y-1.5">
               <div className="flex items-center justify-between gap-3 text-xs font-bold tabular-nums">
                 <span className="text-sky-200 inline-flex items-center gap-1.5">
                   <Heart className="h-3.5 w-3.5 text-rose-400 fill-rose-400" />
@@ -2054,22 +3618,35 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
 
               {selectedGameMode === 'stickman_wrestling' ? (
                 <div className="space-y-0.5">
-                  <div className="flex items-center justify-between text-[10px] font-bold text-cyan-300 tabular-nums">
-                    <span>FINISHER (L) · BOUT {hud.waveOrBout}/3</span>
-                    <span>{hud.finisher}%</span>
+                  <div className="flex items-center justify-between text-[10px] font-bold text-amber-300 tabular-nums">
+                    <span>STAGE {hud.waveOrBout}/3 · EXIT {hud.exitProgress}%</span>
+                    <span>SHOT (L) {hud.finisher}%</span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-950">
+                    <div
+                      className="h-full bg-amber-400 transition-all duration-150"
+                      style={{ width: `${hud.exitProgress}%` }}
+                    />
+                  </div>
+                </div>
+              ) : selectedGameMode === 'stickman_brawl' ? (
+                <div className="space-y-0.5">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-teal-300 tabular-nums">
+                    <span>SECTOR {hud.waveOrBout}/3 · {hud.currentRoom}</span>
+                    <span>CLUES {hud.cluesFound}/{hud.cluesTotal}</span>
                   </div>
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-950">
                     <div
                       className={`h-full transition-all duration-150 ${
-                        hud.finisher >= 100 ? 'bg-amber-400' : 'bg-cyan-400'
+                        hud.airlockOpen ? 'bg-emerald-400' : 'bg-amber-400'
                       }`}
-                      style={{ width: `${hud.finisher}%` }}
+                      style={{ width: `${(hud.cluesFound / Math.max(1, hud.cluesTotal)) * 100}%` }}
                     />
                   </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-between text-[10px] font-bold text-slate-300 tabular-nums">
-                  <span>LVL {hud.waveOrBout}</span>
+                  <span>LVL {hud.waveOrBout}/3 · MEGA (L) {hud.finisher}%</span>
                   {hud.combo > 1 && <span className="text-amber-300">{hud.combo}× COMBO</span>}
                 </div>
               )}
@@ -2119,7 +3696,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               </div>
             </div>
 
-            {/* Right: Opponent HP Bar + Home / Menu / Pause / Fullscreen */}
+            {/* Right: Navigation + Gate Boss / Clue Status */}
             <div className="pointer-events-auto flex flex-col items-end gap-2">
               <div className="flex items-center gap-1.5">
                 <button
@@ -2175,7 +3752,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                 </button>
               </div>
 
-              {hud.enemyName && selectedGameMode !== 'stickman_run' && (
+              {hud.enemyName && (
                 <div className="min-w-[205px] arcade-hud border-rose-500/45 px-3 py-1.5 space-y-1">
                   <div className="flex items-center justify-between text-[11px] font-bold tabular-nums">
                     <span className="text-orange-200">{hud.enemyName}</span>
@@ -2189,11 +3766,12 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                       style={{ width: `${enemyHpPct}%` }}
                     />
                   </div>
-                  {hud.pinPossible && (
-                    <span className="block text-[10px] font-bold text-amber-300">
-                      PRESS [E] TO PIN!
-                    </span>
-                  )}
+                </div>
+              )}
+
+              {selectedGameMode === 'stickman_brawl' && hud.nearClueLabel && (
+                <div className="arcade-hud border-amber-400/60 px-3 py-1.5 text-[11px] font-bold text-amber-200">
+                  PRESS [E] TO ANALYZE: {hud.nearClueLabel}
                 </div>
               )}
             </div>
@@ -2234,29 +3812,62 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                   </button>
                 </>
               )}
-              <button
-                type="button"
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  triggerAction('jump');
-                }}
-                className="arcade-hud inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-sky-200 active:bg-sky-500 active:text-slate-950 touch-none cursor-pointer"
-              >
-                <span className="arcade-kbd">W</span> Jump
-              </button>
-              <button
-                type="button"
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  keysRef.current['s'] = true;
-                }}
-                onPointerUp={() => (keysRef.current['s'] = false)}
-                onPointerCancel={() => (keysRef.current['s'] = false)}
-                onPointerLeave={() => (keysRef.current['s'] = false)}
-                className="arcade-hud inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-slate-200 active:bg-sky-500 active:text-slate-950 touch-none cursor-pointer"
-              >
-                <span className="arcade-kbd">S</span> {selectedGameMode === 'stickman_run' ? 'Slide' : 'Guard'}
-              </button>
+              {selectedGameMode === 'stickman_brawl' ? (
+                <>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      keysRef.current['w'] = true;
+                    }}
+                    onPointerUp={() => (keysRef.current['w'] = false)}
+                    onPointerCancel={() => (keysRef.current['w'] = false)}
+                    onPointerLeave={() => (keysRef.current['w'] = false)}
+                    className="arcade-hud inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-sky-200 active:bg-sky-500 active:text-slate-950 touch-none cursor-pointer"
+                  >
+                    <span className="arcade-kbd">W</span> Up
+                  </button>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      keysRef.current['s'] = true;
+                    }}
+                    onPointerUp={() => (keysRef.current['s'] = false)}
+                    onPointerCancel={() => (keysRef.current['s'] = false)}
+                    onPointerLeave={() => (keysRef.current['s'] = false)}
+                    className="arcade-hud inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-slate-200 active:bg-sky-500 active:text-slate-950 touch-none cursor-pointer"
+                  >
+                    <span className="arcade-kbd">S</span> Down
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      triggerAction('jump');
+                    }}
+                    className="arcade-hud inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-sky-200 active:bg-sky-500 active:text-slate-950 touch-none cursor-pointer"
+                  >
+                    <span className="arcade-kbd">W</span> Jump
+                  </button>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      keysRef.current['s'] = true;
+                    }}
+                    onPointerUp={() => (keysRef.current['s'] = false)}
+                    onPointerCancel={() => (keysRef.current['s'] = false)}
+                    onPointerLeave={() => (keysRef.current['s'] = false)}
+                    className="arcade-hud inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-slate-200 active:bg-sky-500 active:text-slate-950 touch-none cursor-pointer"
+                  >
+                    <span className="arcade-kbd">S</span> Slide
+                  </button>
+                </>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
@@ -2268,9 +3879,14 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                 }}
                 className="rounded-lg border border-sky-400/50 bg-sky-500/20 px-2.5 py-1.5 text-xs font-bold text-sky-100 hover:bg-sky-500/35 whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1"
               >
-                <span className="arcade-kbd">J</span> {selectedGameMode === 'stickman_run' ? 'Blast' : 'Strike'}
+                <span className="arcade-kbd">J</span>{' '}
+                {selectedGameMode === 'stickman_wrestling'
+                  ? 'Pistols'
+                  : selectedGameMode === 'stickman_brawl'
+                  ? 'Clue / Zap'
+                  : 'Blast'}
               </button>
-              {selectedGameMode !== 'stickman_run' && (
+              {selectedGameMode === 'stickman_run' ? (
                 <>
                   <button
                     type="button"
@@ -2280,17 +3896,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                     }}
                     className="rounded-lg border border-amber-400/50 bg-amber-500/20 px-2.5 py-1.5 text-xs font-bold text-amber-100 hover:bg-amber-500/35 whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1"
                   >
-                    <span className="arcade-kbd">K</span> {selectedGameMode === 'stickman_wrestling' ? 'Suplex' : 'Upper'}
-                  </button>
-                  <button
-                    type="button"
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      triggerAction('dash');
-                    }}
-                    className="rounded-lg border border-cyan-400/50 bg-cyan-500/20 px-2.5 py-1.5 text-xs font-bold text-cyan-100 hover:bg-cyan-500/35 whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1"
-                  >
-                    <span className="arcade-kbd">SPC</span> Dash
+                    <span className="arcade-kbd">K</span> Heavy
                   </button>
                   <button
                     type="button"
@@ -2300,22 +3906,58 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                     }}
                     className="rounded-lg border border-purple-400/50 bg-purple-500/20 px-2.5 py-1.5 text-xs font-bold text-purple-100 hover:bg-purple-500/35 whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1"
                   >
-                    <span className="arcade-kbd">L</span> {selectedGameMode === 'stickman_wrestling' ? `${hud.finisher}%` : 'Ice'}
+                    <span className="arcade-kbd">L</span> {hud.finisher}%
                   </button>
-                  {selectedGameMode === 'stickman_wrestling' && (
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      triggerAction('heavy');
+                    }}
+                    className="rounded-lg border border-amber-400/50 bg-amber-500/20 px-2.5 py-1.5 text-xs font-bold text-amber-100 hover:bg-amber-500/35 whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <span className="arcade-kbd">K</span>{' '}
+                    {selectedGameMode === 'stickman_wrestling' ? 'Spin Kick' : 'Stun Bolt'}
+                  </button>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      triggerAction('dash');
+                    }}
+                    className="rounded-lg border border-cyan-400/50 bg-cyan-500/20 px-2.5 py-1.5 text-xs font-bold text-cyan-100 hover:bg-cyan-500/35 whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <span className="arcade-kbd">SPC</span>{' '}
+                    {selectedGameMode === 'stickman_wrestling' ? 'Slow-Mo' : 'Sprint'}
+                  </button>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      triggerAction('special');
+                    }}
+                    className="rounded-lg border border-purple-400/50 bg-purple-500/20 px-2.5 py-1.5 text-xs font-bold text-purple-100 hover:bg-purple-500/35 whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <span className="arcade-kbd">L</span>{' '}
+                    {selectedGameMode === 'stickman_wrestling' ? `${hud.finisher}%` : 'Radar'}
+                  </button>
+                  {selectedGameMode === 'stickman_brawl' && (
                     <button
                       type="button"
                       onPointerDown={(e) => {
                         e.preventDefault();
-                        triggerAction('pin');
+                        triggerAction('interact');
                       }}
                       className={`rounded-lg px-2.5 py-1.5 text-xs font-bold whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1 ${
-                        hud.pinPossible
+                        hud.nearClueLabel
                           ? 'bg-amber-400 text-slate-950'
-                          : 'border border-rose-500/45 bg-rose-500/20 text-rose-100'
+                          : 'border border-emerald-400/45 bg-emerald-500/20 text-emerald-100'
                       }`}
                     >
-                      <span className="arcade-kbd">E</span> Pin
+                      <span className="arcade-kbd">E</span> Clue
                     </button>
                   )}
                 </>
@@ -2324,7 +3966,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           </div>
         )}
 
-        {/* === GAMISH 2D LAUNCHER OVERLAY (ZERO TEXT WALLS, ZERO BACKDROP-BLUR) === */}
+        {/* === GAMISH 2D LAUNCHER OVERLAY === */}
         {phase === 'MENU' && (
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#040B16]/80 p-3 sm:p-5 overflow-y-auto">
             <div className="w-full max-w-3xl arcade-panel p-4 sm:p-6 space-y-4">
@@ -2379,21 +4021,21 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                       const active = gm.id === selectedGameMode;
                       const Icon =
                         gm.id === 'stickman_wrestling'
-                          ? Trophy
+                          ? Crosshair
                           : gm.id === 'stickman_brawl'
-                          ? Swords
+                          ? KeyRound
                           : Flame;
                       const grad =
                         gm.id === 'stickman_wrestling'
                           ? 'from-amber-500/25 via-rose-500/10 to-slate-900'
                           : gm.id === 'stickman_brawl'
-                          ? 'from-sky-500/25 via-cyan-500/10 to-slate-900'
+                          ? 'from-teal-500/25 via-cyan-500/10 to-slate-900'
                           : 'from-emerald-500/25 via-sky-500/10 to-slate-900';
                       const quickTag =
                         gm.id === 'stickman_wrestling'
-                          ? 'Pro Ring · 1-2-3 Pin'
+                          ? 'Bean Gun-Fu · Reach Exit'
                           : gm.id === 'stickman_brawl'
-                          ? 'Ledge Brawl · Combos'
+                          ? 'Rooms · Clues · Escape'
                           : 'Cliff Runner · Blasts';
                       return (
                         <button
@@ -2521,13 +4163,20 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                       <span><span className="arcade-kbd">S</span> Slide</span>
                       <span><span className="arcade-kbd">J</span> Blast</span>
                     </>
+                  ) : selectedGameMode === 'stickman_brawl' ? (
+                    <>
+                      <span><span className="arcade-kbd">WASD</span> Rooms</span>
+                      <span><span className="arcade-kbd">E</span> Clue</span>
+                      <span><span className="arcade-kbd">K</span> Stun</span>
+                      <span><span className="arcade-kbd">L</span> Radar</span>
+                    </>
                   ) : (
                     <>
                       <span><span className="arcade-kbd">A/D</span> Move</span>
                       <span><span className="arcade-kbd">W</span> Jump</span>
-                      <span><span className="arcade-kbd">J</span> Hit</span>
-                      <span><span className="arcade-kbd">K</span> Heavy</span>
-                      <span><span className="arcade-kbd">L</span> Special</span>
+                      <span><span className="arcade-kbd">J</span> Pistols</span>
+                      <span><span className="arcade-kbd">K</span> Spin Kick</span>
+                      <span><span className="arcade-kbd">SPC</span> Slow-Mo</span>
                     </>
                   )}
                 </div>
@@ -2622,18 +4271,26 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               <span><span className="arcade-kbd">W</span> Jump ×2</span>
               <span><span className="arcade-kbd">S</span> Slide</span>
               <span><span className="arcade-kbd">J</span> Blast</span>
+              <span><span className="arcade-kbd">K</span> Heavy</span>
+              <span><span className="arcade-kbd">L</span> Mega</span>
+            </>
+          ) : selectedGameMode === 'stickman_brawl' ? (
+            <>
+              <span><span className="arcade-kbd">WASD</span> Explore Rooms</span>
+              <span><span className="arcade-kbd">E/J</span> Analyze Clue</span>
+              <span><span className="arcade-kbd">K</span> Stun Imposter</span>
+              <span><span className="arcade-kbd">SPC</span> Sprint</span>
+              <span><span className="arcade-kbd">L</span> <Radar className="inline h-3 w-3" /> Radar</span>
             </>
           ) : (
             <>
               <span><span className="arcade-kbd">A/D</span> Move</span>
-              <span><span className="arcade-kbd">W</span> Jump</span>
-              <span><span className="arcade-kbd">S</span> Guard</span>
-              <span><span className="arcade-kbd">J</span> Strike</span>
-              <span><span className="arcade-kbd">K</span> Heavy</span>
-              <span><span className="arcade-kbd">L</span> {selectedGameMode === 'stickman_wrestling' ? 'Finisher' : 'Throw'}</span>
-              {selectedGameMode === 'stickman_wrestling' && (
-                <span><span className="arcade-kbd">E</span> Pin</span>
-              )}
+              <span><span className="arcade-kbd">W</span> Jump ×2</span>
+              <span><span className="arcade-kbd">S</span> Slide</span>
+              <span><span className="arcade-kbd">J</span> Twin Pistols</span>
+              <span><span className="arcade-kbd">K</span> Spin Kick</span>
+              <span><span className="arcade-kbd">SPC</span> Slow-Mo Dive</span>
+              <span><span className="arcade-kbd">L</span> Mega-Shot</span>
             </>
           )}
         </div>

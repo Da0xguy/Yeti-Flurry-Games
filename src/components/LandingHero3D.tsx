@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useSpring, useTransform } from 'motion/react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { Play, Users, ArrowRight, Compass, Car, Crosshair, Snowflake, Swords, Trophy, Flame } from 'lucide-react';
+import { Play, Users, ArrowRight, Compass, Car, Crosshair, Snowflake, KeyRound, Flame } from 'lucide-react';
 import type { GameModeId, MapId, YetiObject } from '../types';
 import { ARENA_MAPS, GAME_MODES } from '../data/gameCatalog';
 import { buildArcticEnvironment } from '../three/arenaEnvironment';
@@ -287,9 +287,9 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
       case 'shooting':
         return Crosshair;
       case 'stickman_wrestling':
-        return Trophy;
+        return Crosshair;
       case 'stickman_brawl':
-        return Swords;
+        return KeyRound;
       case 'stickman_run':
         return Flame;
       default:
@@ -345,7 +345,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
             </motion.h1>
 
             <p className="max-w-md text-lg font-medium leading-snug text-slate-100 sm:text-xl">
-              Race. Brawl. Wrestle. Survive the storm across 2D Stickman &amp; 3D Arenas.
+              Race. Shoot. Escape Rooms. Survive the storm across 2D Stickman &amp; 3D Arenas.
             </p>
 
             <div className="flex flex-wrap items-center gap-4 pt-2">
@@ -363,8 +363,8 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                 onClick={() => onLaunchMode('stickman_wrestling')}
                 className="inline-flex items-center gap-2 rounded-lg border border-amber-400/60 bg-[#09182c]/85 px-5 py-3.5 text-sm font-semibold text-amber-200 hover:bg-amber-400 hover:text-slate-950 transition-colors whitespace-nowrap shrink-0"
               >
-                <Trophy className="h-4 w-4" />
-                2D Stickman Wrestling
+                <Crosshair className="h-4 w-4" />
+                2D Bean Raid Action
               </button>
             </div>
 
@@ -420,7 +420,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
               onClick={() => onLaunchMode('stickman_wrestling')}
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-300 hover:text-amber-200 whitespace-nowrap shrink-0"
             >
-              Step Into The 2D Ring
+              Launch 2D Bean Raid
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>

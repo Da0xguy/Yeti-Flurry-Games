@@ -29,10 +29,10 @@ export const GAME_MODES: GameModeSpec[] = [
     dimension: '3D',
     name: 'Arcade Survival',
     shortLabel: 'Survival 3D',
-    subtitle: 'Central Well · Snowball Clash · Power-Ups · 2:30 Match',
+    subtitle: '5-Yeti Squad · Monster Ambush · 3 Waystones · Escape Gate',
     description:
-      'Roam the huge 3D arena, grab Glacial Drops & Power-Ups (Shield, Magnet, Turbo, Tri-Shot, Medkit), bank at the Shrine, and outlast rival Yetis.',
-    controlsSummary: 'WASD / Arrows move · Space Dash · Click / J Throw · 1/E Wave · 2/F Dance',
+      'Embark with a 5-Yeti squad! Fight off attacking Frost Stalkers, Brutes, and Abyssal Wraiths, awaken 3 Waystone Relics, and reach the Escape Portal alive.',
+    controlsSummary: 'WASD / Arrows move · Space Dash · Click / J Throw · K Sword · 1/E Wave · 2/F Dance',
     supportsTunnel: true,
   },
   {
@@ -60,23 +60,23 @@ export const GAME_MODES: GameModeSpec[] = [
   {
     id: 'stickman_wrestling',
     dimension: '2D',
-    name: 'Stickman Yeti Wrestling',
-    shortLabel: 'Wrestling 2D',
-    subtitle: 'Pro Ring · Suplex Slams · Rope Bounce · 1-2-3 Pinfall',
+    name: 'Shadow Bean: Level Raid',
+    shortLabel: 'Bean Raid 2D',
+    subtitle: 'Killer Bean Action · Twin Pistols · Slow-Mo Dive · Exit Gate',
     description:
-      'Step into the 2D ring as Lofi the Yeti Stickman! Execute suplex slams, bounce off elastic ropes, unleash your Avalanche Finisher, and score a 1-2-3 pinfall across 3 championship bouts.',
-    controlsSummary: 'A / D Move · W Jump · S Guard · J Strike · K Grapple/Pin · Space Rope Dash · L Finisher',
+      'Blast and gun-fu your way across 3 fortified compound stages as Lofi Bean! Fire twin pistols, dive in slow-motion over enemy tracers, shatter explosive barrels, and reach the Extraction Gate.',
+    controlsSummary: 'A / D Move · W Jump (x2) · S Slide · J Twin Pistols · K Spin Kick · Space Slow-Mo Dive · L Super Shot',
     supportsTunnel: false,
   },
   {
     id: 'stickman_brawl',
     dimension: '2D',
-    name: 'Stickman Frost Brawl',
-    shortLabel: 'Stick Brawl 2D',
-    subtitle: '2D Side-View Combat · Ledges · Wave Bosses & Combos',
+    name: 'Frost Station Escape',
+    shortLabel: 'Room Escape 2D',
+    subtitle: 'Among Us Mystery · Search Rooms · Find Clues · Unlock Doors',
     description:
-      'Control an articulated 2D Lofi the Yeti Stickman fighter across multi-ledge icy canyons. Chain punches, uppercuts, snowball throws, and frost dashes against wave fighters.',
-    controlsSummary: 'A / D Move · W Double Jump · S Guard · J Combo Hit · K Heavy Uppercut · L Ice Throw · Space Dash',
+      'Explore interconnected station rooms in top-down 2D! Search Cafeteria, Medbay, Lab, Reactor & Electrical for hidden Clues to unlock sealed doors, dodge vent Imposters, and escape through the Airlock.',
+    controlsSummary: 'WASD / Arrows Move · E / J Inspect Clue or Stun · K Cryo Taser · Space Sprint · L Clue Radar',
     supportsTunnel: false,
   },
   {
@@ -214,19 +214,19 @@ export function getMapModeDetails(mapId: MapId, gameMode: GameModeId): {
   if (gameMode === 'survival') {
     if (mapId === 'volcanic_springs') {
       return {
-        tag: 'Temple Run: Ember Ruins',
-        summary: 'A forward-running ruin route through fire gates, basalt pillars, and collapsing steam vents.',
+        tag: 'Caldera Escape Quest',
+        summary: '5-Yeti squad quest through basalt cover, magma monsters, and 3 Ember Waystones to the Escape Gate.',
       };
     }
     if (mapId === 'aurora_summit') {
       return {
-        tag: 'Temple Run: Sky Relics',
-        summary: 'Sprint between floating relic gates, crystal bridges, and low-gravity cliff turns.',
+        tag: 'Aurora Escape Quest',
+        summary: 'Sprint with 4 Yeti allies across glowing crystal ridges, awaken 3 Sky Relics, and extract alive.',
       };
     }
     return {
-      tag: 'Temple Run: Glacier Relic',
-      summary: 'Run the frozen relic route through ice gates, snow ramps, and falling icicle hazards.',
+      tag: 'Glacier Escape Quest',
+      summary: 'Lead your 5-Yeti party through monster ambushes, charge 3 Waystone Relics, and escape through the Portal.',
     };
   }
   if (gameMode === 'shooting') {
@@ -250,37 +250,37 @@ export function getMapModeDetails(mapId: MapId, gameMode: GameModeId): {
   if (gameMode === 'stickman_wrestling') {
     if (mapId === 'volcanic_springs') {
       return {
-        tag: 'Caldera Cage Ring',
-        summary: 'Heated basalt arena spotlights, fast rope rebounds, and bonus finisher charge.',
+        tag: 'Basalt Foundry Raid',
+        summary: 'Fight across magma steel catwalks, explosive fuel barrels, and syndicate hitmen to reach the Vault Gate.',
       };
     }
     if (mapId === 'aurora_summit') {
       return {
-        tag: 'Skyline Championship',
-        summary: 'High-altitude aurora ring with crisp bounce physics and emerald turnbuckles.',
+        tag: 'Aurora Skybridge Raid',
+        summary: 'High-altitude skybridge infiltration with sniper patrols, slow-mo drops, and rooftop extraction.',
       };
     }
     return {
-      tag: 'Frost Slam Ring',
-      summary: 'Classic icy blue squared circle with elastic ropes and championship turnbuckles.',
+      tag: 'Frozen Warehouse Raid',
+      summary: 'Classic Killer-Bean style depot shootout with dual frost pistols, crate cover, and extraction gates.',
     };
   }
   if (gameMode === 'stickman_brawl') {
     if (mapId === 'volcanic_springs') {
       return {
-        tag: 'Ember Ridge Brawl',
-        summary: 'High-heat basalt platforms with rapid enemy rushers and ember power orbs.',
+        tag: 'Caldera Outpost Deck',
+        summary: 'Navigate locked thermal reactor rooms, decode clues, and dodge red Imposters to reach the Airlock.',
       };
     }
     if (mapId === 'aurora_summit') {
       return {
-        tag: 'Aurora Spire Brawl',
-        summary: 'Low-gravity sky ledges for soaring stickman aerial combos and crystal gems.',
+        tag: 'Aurora Research Wing',
+        summary: 'Search Medbay, Lab, and Security for encrypted keycards while evading vent ambushes.',
       };
     }
     return {
-      tag: 'Frozen Gorge Brawl',
-      summary: 'Two-tier frozen ice ledges built for fast 2D stickman brawling and snowball zoning.',
+      tag: 'Cryo Station Alpha',
+      summary: 'Explore 6 connected ship rooms, scan clues to unlock blast doors, and escape before Imposters catch you.',
     };
   }
   if (gameMode === 'stickman_run') {
@@ -542,6 +542,84 @@ export function resolveArenaObstacleCollision(
   }
 
   return { x: rx, y: ry, vx: rvx, vy: rvy };
+}
+
+export interface RaceTrackObstacle {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  kind: 'rock' | 'cryo_pylon';
+}
+
+/**
+ * Physical trackside boulders and glowing cryo pylons along curves and straights.
+ * Positioned deliberately 48–76 logical units off centerline so clean racing lines remain passable.
+ */
+export function getRaceTrackObstacles(mapId: MapId): RaceTrackObstacle[] {
+  const wps = getRaceTrackWaypoints(mapId);
+  const offsets = [58, -56, 62, -60, 54, -64, 60, -54, 58, -62];
+  const obs: RaceTrackObstacle[] = [];
+  for (let idx = 1; idx < wps.length; idx++) {
+    const prev = wps[idx - 1];
+    const cur = wps[idx];
+    const next = wps[(idx + 1) % wps.length];
+    const dirX = next.x - prev.x;
+    const dirY = next.y - prev.y;
+    const len = Math.hypot(dirX, dirY) || 1;
+    const perpX = -dirY / len;
+    const perpY = dirX / len;
+
+    // Place chicane pylon/rock halfway between cur and next for active dodging
+    if (idx % 2 === 1 || idx === 6 || idx === 10) {
+      const midX = (cur.x + next.x) * 0.5;
+      const midY = (cur.y + next.y) * 0.5;
+      const lateral = offsets[obs.length % offsets.length];
+      obs.push({
+        id: `race_obs_${mapId}_${idx}`,
+        x: midX + perpX * lateral,
+        y: midY + perpY * lateral,
+        radius: obs.length % 3 === 0 ? 32 : 26,
+        kind: obs.length % 2 === 0 ? 'rock' : 'cryo_pylon',
+      });
+    }
+  }
+  return obs;
+}
+
+export function resolveRaceObstacleCollision(
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  kartRadius: number,
+  mapId: MapId
+): { x: number; y: number; vx: number; vy: number; hit: boolean } {
+  let rx = x;
+  let ry = y;
+  let rvx = vx;
+  let rvy = vy;
+  let hit = false;
+
+  for (const obs of getRaceTrackObstacles(mapId)) {
+    const dx = rx - obs.x;
+    const dy = ry - obs.y;
+    const dist = Math.hypot(dx, dy);
+    const minDist = obs.radius + kartRadius;
+    if (dist < minDist) {
+      hit = true;
+      const nx = dist > 0.01 ? dx / dist : 1;
+      const ny = dist > 0.01 ? dy / dist : 0;
+      rx = obs.x + nx * minDist;
+      ry = obs.y + ny * minDist;
+      const dot = rvx * nx + rvy * ny;
+      if (dot < 0) {
+        rvx -= dot * nx * 1.25;
+        rvy -= dot * ny * 1.25;
+      }
+    }
+  }
+  return { x: rx, y: ry, vx: rvx, vy: rvy, hit };
 }
 
 export const CAREER_QUESTS: CareerQuest[] = [

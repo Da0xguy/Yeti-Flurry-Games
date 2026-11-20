@@ -34,6 +34,8 @@ import {
   Magnet,
   Flame,
   Home,
+  Axe,
+  Swords,
 } from 'lucide-react';
 import type {
   ArenaTaskProgress,
@@ -67,6 +69,7 @@ import {
   getRaceTrackWaypoints,
   getYetiColorway,
   resolveArenaObstacleCollision,
+  resolveRaceObstacleCollision,
 } from '../data/gameCatalog';
 import { animateYetiWalk, buildYetiRig, type YetiRigParts } from '../three/yetiBuilder';
 import {
@@ -84,6 +87,25 @@ import {
   type ShooterTargetMesh,
   type YetiKartRigParts,
 } from '../three/kartAndShooter';
+import {
+  animateEscapePortal,
+  animateQuestMonster,
+  animateWaystoneRelic,
+  animateWeaponPod,
+  buildEscapePortalMesh,
+  buildHeldWeaponMesh,
+  buildQuestMonsterMesh,
+  buildWaystoneRelicMesh,
+  buildWeaponPodMesh,
+  getQuestWeaponSpec,
+  pickRandomQuestWeapon,
+  type EscapePortalRig,
+  type QuestMonsterKind,
+  type QuestMonsterRig,
+  type QuestWeaponKind,
+  type WaystoneRelicRig,
+  type WeaponPodRig,
+} from '../three/questEntities';
 import { ArenaMiniMap, type MiniMapDot } from './ArenaMiniMap';
 import { ArenaGameOverOverlay } from './ArenaGameOverOverlay';
 
@@ -175,6 +197,9 @@ interface LocalYeti {
   gatherAtWellUntil?: number;
   magnetUntil: number;
   tripleUntil: number;
+  weaponKind?: 'standard' | QuestWeaponKind;
+  weaponAmmo?: number;
+  weaponUntil?: number;
 }
 
 interface Pickup {
@@ -209,6 +234,10 @@ interface Snowball {
   ttl: number;
   isBlaster?: boolean;
   isEnemyOrb?: boolean;
+  damage?: number;
+  weaponKind?: QuestWeaponKind;
+  piercing?: boolean;
+  hitIds?: string[];
 }
 
 interface IcicleHazard {
@@ -275,6 +304,53 @@ interface ShooterEnemy {
   fireCd: number;
   orbitAngle: number;
   colorway: YetiColorId;
+}
+
+interface QuestMonster {
+  id: string;
+  kind: QuestMonsterKind;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  hp: number;
+  maxHp: number;
+  speed: number;
+  radius: number;
+  attackCd: number;
+  fireCd: number;
+  slamCd?: number;
+  slowUntil?: number;
+  minionsSummoned?: boolean;
+  facingX: number;
+  facingY: number;
+  hitUntil: number;
+}
+
+interface WeaponPod {
+  id: string;
+  kind: QuestWeaponKind;
+  x: number;
+  y: number;
+  expiresAt?: number;
+}
+
+interface WaystoneRelic {
+  id: string;
+  index: number;
+  x: number;
+  y: number;
+  radius: number;
+  charge: number;
+  completed: boolean;
+}
+
+interface EscapePortal {
+  open: boolean;
+  x: number;
+  y: number;
+  radius: number;
+  extractProgress: number;
 }
 
 interface BurstParticle3D {
@@ -356,27 +432,27 @@ function createTasksForMode(gm: GameModeId): ArenaTaskProgress[] {
   }
   return [
     {
-      id: 'task_bank',
-      title: 'Bank Drops at Central Well',
-      progress: 0,
-      target: 1,
-      rewardGems: 4,
-      completed: false,
-    },
-    {
-      id: 'task_hits',
-      title: 'Land 3 Snowball Hits',
-      progress: 0,
-      target: 3,
-      rewardGems: 4,
-      completed: false,
-    },
-    {
-      id: 'task_crates',
-      title: 'Smash 3 Crates or Capture Beacon',
+      id: 'task_relics',
+      title: 'Awaken 3 Waystones',
       progress: 0,
       target: 3,
       rewardGems: 5,
+      completed: false,
+    },
+    {
+      id: 'task_monsters',
+      title: 'Slay 10 Monsters',
+      progress: 0,
+      target: 10,
+      rewardGems: 5,
+      completed: false,
+    },
+    {
+      id: 'task_escape',
+      title: 'Reach Escape Portal',
+      progress: 0,
+      target: 1,
+      rewardGems: 8,
       completed: false,
     },
   ];
@@ -466,6 +542,19 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     elims: 0,
     combo: 1,
     novaReady: true,
+    // Survival Escape Quest telemetry
+    relicsDone: 0,
+    totalRelics: 3,
+    escapeOpen: false,
+    extractPct: 0,
+    relicChargePct: 0,
+    squadAlive: 5,
+    squadTotal: 5,
+    monstersAlive: 0,
+    monstersSlain: 0,
+    activeWeapon: 'standard' as 'standard' | QuestWeaponKind,
+    weaponAmmo: 0,
+    weaponSec: 0,
   });
 
   const [minimapData, setMinimapData] = useState<{
@@ -503,7 +592,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   const tunnelStartTimeRef = useRef<number>(0);
 
   const simRef = useRef({
-    timeLeft: 75,
+    timeLeft: 180,
     elapsed: 0,
     ringRadius: ARENA_INITIAL_RING_RADIUS,
     shake: 0,
@@ -530,6 +619,24 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     blessingUntil: 0,
     ritualCooldownUntil: 0,
     lastTunnelBlessingUntil: 0,
+    // Survival Co-op Monster Escape Quest state
+    monsters: [] as QuestMonster[],
+    relics: [] as WaystoneRelic[],
+    weaponPods: [] as WeaponPod[],
+    strategicPodStage: 0,
+    lootDropCd: 11.0,
+    escapePortal: {
+      open: false,
+      x: ARENA_CENTER_X,
+      y: ARENA_CENTER_Y - 520,
+      radius: 92,
+      extractProgress: 0,
+    } as EscapePortal,
+    monstersSlain: 0,
+    monsterSpawnCd: 2.6,
+    bossSpawned: false,
+    escaped: false,
+    activeRelicCharge: 0,
     // Car Racing simulation state
     karts: [] as KartRacer[],
     raceCountdown: 0,
@@ -671,7 +778,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
   const spawnShooterWave = useCallback((waveNum: number, mapId: MapId) => {
     const s = simRef.current;
-    const droneCount = 4 + Math.min(6, waveNum);
+    const droneCount = 5 + Math.min(7, waveNum);
     const bullseyeCount = mapId === 'aurora_summit' ? 5 : 4;
     const enemies: ShooterEnemy[] = [];
     const rivalColors: YetiColorId[] = ['glacier_mint', 'sunset_ember', 'aurora_violet'];
@@ -685,6 +792,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         24,
         mapId
       );
+      const droneHp = waveNum >= 4 ? 3 : waveNum >= 2 ? 2 : 1;
       enemies.push({
         id: `dr_${waveNum}_${i}_${Math.random().toString(36).slice(2, 5)}`,
         kind: 'drone',
@@ -692,9 +800,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         y: pos.y,
         vx: 0,
         vy: 0,
-        hp: waveNum >= 3 ? 2 : 1,
-        maxHp: waveNum >= 3 ? 2 : 1,
-        fireCd: 1.5 + Math.random() * 1.6,
+        hp: droneHp,
+        maxHp: droneHp,
+        fireCd: 1.0 + Math.random() * 1.1,
         orbitAngle: a,
         colorway: 'midnight_cyan',
       });
@@ -741,15 +849,15 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         y: pos.y,
         vx: 0,
         vy: 0,
-        hp: 3 + Math.floor(waveNum / 2),
-        maxHp: 3 + Math.floor(waveNum / 2),
-        fireCd: 1.4 + r * 0.6,
+        hp: 4 + Math.floor(waveNum / 2),
+        maxHp: 4 + Math.floor(waveNum / 2),
+        fireCd: 1.05 + r * 0.45,
         orbitAngle: a,
         colorway: rivalColors[(waveNum + r) % rivalColors.length],
       });
     }
 
-    if (waveNum % 3 === 0) {
+    if (waveNum % 2 === 0) {
       const bossAngle = Math.PI * 0.75;
       const bossPos = nudgeOutsideObstacles(
         ARENA_CENTER_X + Math.cos(bossAngle) * 430,
@@ -757,7 +865,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         34,
         mapId
       );
-      const bossHp = 18 + waveNum * 3;
+      const bossHp = 22 + waveNum * 4;
       enemies.push({
         id: `boss_${waveNum}_${Math.random().toString(36).slice(2, 6)}`,
         kind: 'boss_yeti',
@@ -767,7 +875,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         vy: 0,
         hp: bossHp,
         maxHp: bossHp,
-        fireCd: 1.2,
+        fireCd: 1.0,
         orbitAngle: bossAngle,
         colorway: 'golden_frost',
       });
@@ -775,6 +883,47 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
     s.shooterEnemies = enemies;
   }, []);
+
+  const spawnQuestMonster = useCallback(
+    (
+      kind: QuestMonsterKind,
+      mapId: MapId,
+      spawnX?: number,
+      spawnY?: number
+    ): QuestMonster => {
+      const ang = Math.random() * Math.PI * 2;
+      const dist = 420 + Math.random() * 210;
+      const rawX = spawnX ?? ARENA_CENTER_X + Math.cos(ang) * dist;
+      const rawY = spawnY ?? ARENA_CENTER_Y + Math.sin(ang) * (dist * 0.8);
+      const pos = nudgeOutsideObstacles(rawX, rawY, kind === 'boss' ? 46 : 28, mapId);
+      const maxHp =
+        kind === 'boss' ? 820 : kind === 'brute' ? 260 : kind === 'wraith' ? 135 : 95;
+      const speed =
+        kind === 'stalker' ? 168 : kind === 'wraith' ? 136 : kind === 'boss' ? 130 : 114;
+      const radius = kind === 'boss' ? 44 : kind === 'brute' ? 32 : kind === 'wraith' ? 24 : 22;
+      return {
+        id: `mon_${kind}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        kind,
+        x: pos.x,
+        y: pos.y,
+        vx: 0,
+        vy: 0,
+        hp: maxHp,
+        maxHp,
+        speed,
+        radius,
+        attackCd: 0.55,
+        fireCd: 1.15 + Math.random() * 0.9,
+        slamCd: kind === 'boss' ? 4.4 : undefined,
+        slowUntil: 0,
+        minionsSummoned: false,
+        facingX: 0,
+        facingY: 1,
+        hitUntil: 0,
+      };
+    },
+    []
+  );
 
   const updateTaskProgress = useCallback(
     (taskId: string, newVal: number, player?: LocalYeti) => {
@@ -791,11 +940,128 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           queueRing(player.x, player.y, '#34d399', 3.2);
         }
         soundEngine.playPickup('power');
-        flashBanner(`Task Complete: ${t.title} (+${t.rewardGems} Gems)`);
+        flashBanner(`Quest Milestone: ${t.title} (+${t.rewardGems} Gems)`);
       }
       setTasks(s.tasks.map((x) => ({ ...x })));
     },
     [flashBanner, queueBurst, queueRing]
+  );
+
+  const spawnWeaponLootDrop = useCallback(
+    (
+      lx: number,
+      ly: number,
+      bannerLabel?: string,
+      forcedKind?: QuestWeaponKind
+    ): QuestWeaponKind => {
+      const s = simRef.current;
+      const player = s.entities.find((e) => e.id === 'player');
+      const exclude =
+        player?.weaponKind && player.weaponKind !== 'standard'
+          ? player.weaponKind
+          : undefined;
+      const kind = forcedKind || pickRandomQuestWeapon(exclude);
+      const spec = getQuestWeaponSpec(kind);
+
+      while (s.weaponPods.length >= 5) {
+        s.weaponPods.shift();
+      }
+
+      const pos = nudgeOutsideObstacles(lx, ly, 26, mapIdRef.current);
+      s.weaponPods.push({
+        id: `wp_loot_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        kind,
+        x: pos.x,
+        y: pos.y,
+        expiresAt: Date.now() + 30000,
+      });
+      queueBurst(pos.x, pos.y, spec.colorHex, 14);
+      queueRing(pos.x, pos.y, spec.colorHex, 3.2);
+      if (bannerLabel) {
+        flashBanner(`${bannerLabel}: ${spec.label} Dropped!`);
+      }
+      return kind;
+    },
+    [flashBanner, queueBurst, queueRing]
+  );
+
+  const awardMonsterDefeat = useCallback(
+    (monster: QuestMonster, player: LocalYeti | undefined, killer?: LocalYeti) => {
+      const s = simRef.current;
+      s.monstersSlain += 1;
+      const pts =
+        monster.kind === 'boss'
+          ? 450
+          : monster.kind === 'brute'
+          ? 120
+          : monster.kind === 'wraith'
+          ? 100
+          : 75;
+      const drops = monster.kind === 'boss' ? 6 : monster.kind === 'brute' ? 2 : 1;
+
+      if (killer) {
+        killer.score += pts;
+        killer.knockouts += 1;
+      }
+      if (player) {
+        if (!killer || killer.isBot) {
+          player.score += Math.round(pts * 0.5);
+        }
+        player.wellDrops += drops;
+        updateTaskProgress('task_monsters', s.monstersSlain, player);
+      }
+
+      const burstCol =
+        monster.kind === 'boss'
+          ? '#f59e0b'
+          : monster.kind === 'wraith'
+          ? '#e879f9'
+          : '#f43f5e';
+      queueBurst(monster.x, monster.y, burstCol, monster.kind === 'boss' ? 24 : 14);
+      queueRing(monster.x, monster.y, burstCol, monster.kind === 'boss' ? 3.8 : 2.2);
+      soundEngine.playPickup(monster.kind === 'boss' ? 'gem' : 'drop');
+
+      if (Math.random() < (monster.kind === 'boss' ? 1 : 0.58)) {
+        const dropPool: Pickup['kind'][] = ['medkit', 'shield', 'boost', 'triple', 'gem', 'drop'];
+        s.pickups.push({
+          id: `mk_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          kind: dropPool[Math.floor(Math.random() * dropPool.length)],
+          x: monster.x,
+          y: monster.y,
+          bobOffset: Math.random() * Math.PI * 2,
+        });
+      }
+
+      const weaponLootChance =
+        monster.kind === 'boss'
+          ? 1.0
+          : monster.kind === 'brute'
+          ? 0.45
+          : monster.kind === 'wraith'
+          ? 0.28
+          : 0.18;
+
+      if (Math.random() < weaponLootChance) {
+        const scatterAng = Math.random() * Math.PI * 2;
+        const dropX = monster.x + Math.cos(scatterAng) * 34;
+        const dropY = monster.y + Math.sin(scatterAng) * 34;
+        const banner =
+          monster.kind === 'boss'
+            ? 'Boss Loot'
+            : monster.kind === 'brute'
+            ? 'Brute Loot'
+            : undefined;
+        spawnWeaponLootDrop(dropX, dropY, banner);
+
+        if (monster.kind === 'boss' && Math.random() < 0.65) {
+          spawnWeaponLootDrop(
+            monster.x - Math.cos(scatterAng) * 44,
+            monster.y - Math.sin(scatterAng) * 44
+          );
+        }
+      }
+    },
+    [queueBurst, queueRing, spawnWeaponLootDrop, updateTaskProgress]
   );
 
   const initSoloMatch = useCallback(
@@ -853,6 +1119,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         eliminated: false,
         emote: 'none',
         emoteUntil: 0,
+        weaponKind: 'standard',
+        weaponAmmo: 0,
+        weaponUntil: 0,
       };
 
       if (gm === 'car_racing') {
@@ -896,7 +1165,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             colorway: colorwayRef.current === 'glacier_mint' ? 'midnight_cyan' : 'glacier_mint',
             hat: 'hat_beanie',
             scarf: 'scarf_aurora',
-            bias: 0.96,
+            bias: 0.99,
             lane: 26,
             rowBack: 22,
           },
@@ -907,7 +1176,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             colorway: colorwayRef.current === 'sunset_ember' ? 'golden_frost' : 'sunset_ember',
             hat: 'hat_crown',
             scarf: 'scarf_crimson',
-            bias: 0.91,
+            bias: 0.95,
             lane: -26,
             rowBack: 64,
           },
@@ -918,7 +1187,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             colorway: colorwayRef.current === 'aurora_violet' ? 'classic_lofi' : 'aurora_violet',
             hat: 'hat_goggles',
             scarf: 'scarf_lofi',
-            bias: 0.87,
+            bias: 0.91,
             lane: 26,
             rowBack: 64,
           },
@@ -993,78 +1262,154 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         s.crates = Array.from({ length: 8 }, (_, i) => spawnCrate(i, mapId));
         spawnShooterWave(1, mapId);
       } else {
-        // Survival Flurry (Expanded 2400x1600 Map · 150s)
-        s.timeLeft = 150;
-        s.ringRadius = ARENA_INITIAL_RING_RADIUS;
-        s.nextHazardIn = 4.2;
+        // 5-Yeti Squad Monster Ambush & Escape Quest (180s)
+        s.timeLeft = 180;
+        s.ringRadius = ARENA_INITIAL_RING_RADIUS + 40;
+        s.nextHazardIn = 5.0;
         s.karts = [];
         s.shooterEnemies = [];
+        s.monsters = [];
+        s.weaponPods = [];
+        s.strategicPodStage = 0;
+        s.lootDropCd = 9.0;
+        s.monstersSlain = 0;
+        s.monsterSpawnCd = 2.6;
+        s.bossSpawned = false;
+        s.escaped = false;
+        s.activeRelicCharge = 0;
         s.beacon = {
           active: false,
           x: ARENA_CENTER_X,
           y: ARENA_CENTER_Y,
           radius: 78,
           timeLeft: 0,
-          nextIn: 9.0,
+          nextIn: 12.0,
           tickAccum: 0,
         };
 
-        const botSpecs: {
+        // Player + 4 Allied Explorers start together as a 5-Yeti quest party
+        playerYeti.x = ARENA_CENTER_X;
+        playerYeti.y = ARENA_CENTER_Y + 95;
+
+        const allySpecs: {
           id: string;
           name: string;
           hat: string;
           scarf: string;
           colorway: YetiColorId;
-          angle: number;
+          offX: number;
+          offY: number;
         }[] = [
-          { id: 'bot_mira', name: 'Mira', hat: 'hat_beanie', scarf: 'scarf_aurora', colorway: 'glacier_mint', angle: -0.6 },
-          { id: 'bot_taro', name: 'Taro', hat: 'hat_crown', scarf: 'scarf_crimson', colorway: 'sunset_ember', angle: 2.2 },
-          { id: 'bot_pip', name: 'Pip', hat: 'hat_goggles', scarf: 'scarf_lofi', colorway: 'aurora_violet', angle: 3.8 },
+          { id: 'ally_mira', name: 'Mira', hat: 'hat_beanie', scarf: 'scarf_aurora', colorway: 'glacier_mint', offX: -54, offY: 68 },
+          { id: 'ally_taro', name: 'Taro', hat: 'hat_crown', scarf: 'scarf_crimson', colorway: 'sunset_ember', offX: 54, offY: 68 },
+          { id: 'ally_pip', name: 'Pip', hat: 'hat_goggles', scarf: 'scarf_lofi', colorway: 'aurora_violet', offX: -62, offY: 132 },
+          { id: 'ally_kael', name: 'Kael', hat: 'hat_beanie', scarf: 'scarf_aurora', colorway: 'golden_frost', offX: 62, offY: 132 },
         ];
 
-        const bots: LocalYeti[] = botSpecs.map((b) => ({
-          id: b.id,
-          name: b.name,
-          x: ARENA_CENTER_X + Math.cos(b.angle) * 340,
-          y: ARENA_CENTER_Y + Math.sin(b.angle) * 260,
-          vx: 0,
-          vy: 0,
-          hp: 100,
-          maxHp: 100,
-          score: 0,
-          wellDrops: 0,
-          carriedDrops: 0,
-          frostGems: 0,
-          knockouts: 0,
-          isBot: true,
-          hat: b.hat,
-          scarf: b.scarf,
-          trail: 'trail_powder',
-          colorway: b.colorway === colorwayRef.current ? 'midnight_cyan' : b.colorway,
-          dashCd: 0,
-          dashTime: 0,
-          throwCd: 1.5 + Math.random(),
-          throwPulse: 0,
-          shieldUntil: 0,
-          boostUntil: 0,
-          magnetUntil: 0,
-          tripleUntil: 0,
-          hurtUntil: 0,
-          facingX: 1,
-          facingY: 0,
-          eliminated: false,
-          emote: 'none',
-          emoteUntil: 0,
-        }));
+        const allies: LocalYeti[] = allySpecs.map((b) => {
+          const pos = nudgeOutsideObstacles(
+            ARENA_CENTER_X + b.offX,
+            ARENA_CENTER_Y + b.offY,
+            18,
+            mapId
+          );
+          return {
+            id: b.id,
+            name: b.name,
+            x: pos.x,
+            y: pos.y,
+            vx: 0,
+            vy: 0,
+            hp: 120,
+            maxHp: 120,
+            score: 0,
+            wellDrops: 0,
+            carriedDrops: 0,
+            frostGems: 0,
+            knockouts: 0,
+            isBot: true,
+            hat: b.hat,
+            scarf: b.scarf,
+            trail: 'trail_powder',
+            colorway: b.colorway === colorwayRef.current ? 'midnight_cyan' : b.colorway,
+            dashCd: 0,
+            dashTime: 0,
+            throwCd: 0.9 + Math.random() * 0.6,
+            throwPulse: 0,
+            shieldUntil: 0,
+            boostUntil: 0,
+            magnetUntil: 0,
+            tripleUntil: 0,
+            hurtUntil: 0,
+            facingX: 0,
+            facingY: -1,
+            eliminated: false,
+            emote: 'none',
+            emoteUntil: 0,
+          };
+        });
 
-        s.entities = [playerYeti, ...bots];
-        s.pickups = Array.from({ length: 28 }, (_, i) => spawnPickup(i, mapId));
+        s.entities = [playerYeti, ...allies];
+
+        // Place 3 Ancient Waystone Relics across outer quadrants
+        const relicConfigs = [
+          { angle: -Math.PI * 0.78, dist: 500 },
+          { angle: -Math.PI * 0.18, dist: 520 },
+          { angle: Math.PI * 0.42, dist: 490 },
+        ];
+        s.relics = relicConfigs.map((rc, idx) => {
+          const pos = nudgeOutsideObstacles(
+            ARENA_CENTER_X + Math.cos(rc.angle) * rc.dist,
+            ARENA_CENTER_Y + Math.sin(rc.angle) * (rc.dist * 0.85),
+            44,
+            mapId
+          );
+          return {
+            id: `relic_${idx + 1}`,
+            index: idx + 1,
+            x: pos.x,
+            y: pos.y,
+            radius: 96,
+            charge: 0,
+            completed: false,
+          };
+        });
+
+        // Position locked Escape Portal Gate on the northern rim
+        const portalPos = nudgeOutsideObstacles(
+          ARENA_CENTER_X,
+          ARENA_CENTER_Y - 545,
+          48,
+          mapId
+        );
+        s.escapePortal = {
+          open: false,
+          x: portalPos.x,
+          y: portalPos.y,
+          radius: 96,
+          extractProgress: 0,
+        };
+
+        // Initial Monster Ambush closing in on the 5-Yeti party
+        const initialKinds: QuestMonsterKind[] = ['stalker', 'stalker', 'wraith', 'brute'];
+        s.monsters = initialKinds.map((mk, idx) => {
+          const ang = -Math.PI * 0.85 + idx * (Math.PI * 0.55);
+          const dist = 420 + idx * 35;
+          return spawnQuestMonster(
+            mk,
+            mapId,
+            ARENA_CENTER_X + Math.cos(ang) * dist,
+            ARENA_CENTER_Y + Math.sin(ang) * (dist * 0.8)
+          );
+        });
+
+        s.pickups = Array.from({ length: 24 }, (_, i) => spawnPickup(i, mapId));
         s.crates = Array.from({ length: 10 }, (_, i) => spawnCrate(i, mapId));
       }
 
       rigVersionDirtyRef.current = true;
     },
-    [playerName, spawnCrate, spawnPickup, spawnShooterWave]
+    [playerName, spawnCrate, spawnPickup, spawnQuestMonster, spawnShooterWave]
   );
 
   useEffect(() => {
@@ -1433,26 +1778,32 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       return;
     }
 
-    // Survival
-    const sorted = [...s.entities].sort((a, b) => b.score - a.score);
-    const rank = sorted.findIndex((e) => e.id === 'player') + 1;
+    // Survival 5-Yeti Escape Quest Summary
     const defeated = player.eliminated || player.hp <= 0;
+    const won = s.escaped && !defeated;
+    const squadAlive = s.entities.filter((e) => !e.eliminated).length;
+    const relicsDone = s.relics.filter((r) => r.completed).length;
+    const escapeBonusPts = won ? 320 + squadAlive * 65 : 0;
+    const escapeBonusDrops = won ? 4 + squadAlive * 2 : 0;
+
     const runSum: RunSummary = {
-      score: player.score,
-      wellDrops: player.wellDrops,
-      frostGems: player.frostGems,
-      knockouts: player.knockouts,
+      score: player.score + escapeBonusPts,
+      wellDrops: player.wellDrops + escapeBonusDrops,
+      frostGems: player.frostGems + (won ? 5 : 0),
+      knockouts: s.monstersSlain,
       survivalSeconds: Math.max(1, Math.round(s.elapsed)),
       mode: 'solo',
       gameMode: 'survival',
       mapId: mapIdRef.current,
       hitsLanded: s.hitsLanded,
       cratesSmashed: s.cratesSmashed,
-      wellBanks: s.wellBanks,
+      wellBanks: relicsDone,
       tasksDone,
-      rank: rank || 1,
+      rank: won ? 1 : 2,
       totalContenders: s.entities.length,
-      xpEarned: Math.round(player.score / 5) + 25 + tasksDone * 20,
+      xpEarned: Math.round((player.score + escapeBonusPts) / 5) + 30 + tasksDone * 20,
+      extraStatLabel: 'Squad / Slain',
+      extraStatValue: `${squadAlive}/${s.entities.length} · ${s.monstersSlain} KO`,
     };
     if (defeated) {
       setHud((prev) => ({ ...prev, hp: 0 }));
@@ -1461,7 +1812,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     setLifeDepleted(defeated);
     setClaimStatus('idle');
     setGameState('GAME_OVER');
-    soundEngine.playRoundEnd(rank === 1 && !defeated);
+    soundEngine.playRoundEnd(won);
   }, []);
 
   const triggerDashOrSpecial = useCallback(() => {
@@ -1616,6 +1967,20 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         });
       }
 
+      let droppedWeaponLabel = '';
+      if (gameModeRef.current === 'survival') {
+        const weaponChance =
+          propKind === 'ice_pillar' ? 0.38 : propKind === 'frozen_barrel' ? 0.32 : 0.26;
+        if (Math.random() < weaponChance) {
+          const wAng = Math.random() * Math.PI * 2;
+          const droppedWep = spawnWeaponLootDrop(
+            cr.x + Math.cos(wAng) * 34,
+            cr.y + Math.sin(wAng) * 34
+          );
+          droppedWeaponLabel = ` + ${getQuestWeaponSpec(droppedWep).shortLabel} Loot!`;
+        }
+      }
+
       s.crates.splice(index, 1);
 
       if (attacker) {
@@ -1654,13 +2019,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               ? 'Medkit (+30 HP)'
               : 'Frost Gem';
           flashBanner(
-            `${impactLabel ? `${impactLabel}: ` : ''}${propName} Shattered! Dropped ${dropLabel}`
+            `${impactLabel ? `${impactLabel}: ` : ''}${propName} Shattered! Dropped ${dropLabel}${droppedWeaponLabel}`
           );
         }
       }
       return true;
     },
-    [flashBanner, queueBurst, queueRing, updateTaskProgress]
+    [flashBanner, queueBurst, queueRing, spawnWeaponLootDrop, updateTaskProgress]
   );
 
   const triggerMelee = useCallback(() => {
@@ -1677,12 +2042,23 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     if (s.meleeCd > 0) return;
     const player = s.entities.find((e) => e.id === 'player');
     if (!player || player.eliminated) return;
-    s.meleeCd = 0.55;
+    const nowMs = Date.now();
+    const activeWep: 'standard' | QuestWeaponKind =
+      gameModeRef.current === 'survival' &&
+      player.weaponKind &&
+      player.weaponKind !== 'standard' &&
+      (player.weaponAmmo || 0) > 0 &&
+      nowMs < (player.weaponUntil || 0)
+        ? player.weaponKind
+        : 'standard';
+
+    s.meleeCd = activeWep === 'frost_spear' ? 0.42 : activeWep === 'ice_axe' ? 0.48 : 0.55;
     player.throwPulse = 0.28;
     player.facingX = player.facingX || 0;
     player.facingY = player.facingY || -1;
-    const hitX = player.x + player.facingX * 78;
-    const hitY = player.y + player.facingY * 78;
+    const forwardDist = activeWep === 'frost_spear' ? 98 : activeWep === 'ice_axe' ? 84 : 78;
+    const hitX = player.x + player.facingX * forwardDist;
+    const hitY = player.y + player.facingY * forwardDist;
     let hitCount = 0;
 
     if (gameModeRef.current === 'shooting') {
@@ -1698,35 +2074,96 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       }
       s.shooterEnemies = s.shooterEnemies.filter((enemy) => enemy.hp > 0);
     } else {
-      for (const enemy of s.entities) {
-        if (enemy.id !== 'player' && !enemy.eliminated && Math.hypot(enemy.x - hitX, enemy.y - hitY) < 52) {
-          enemy.hp = Math.max(0, enemy.hp - 35);
-          enemy.hurtUntil = Date.now() + 450;
-          enemy.eliminated = enemy.hp === 0;
-          player.score += enemy.eliminated ? 90 : 25;
+      const hasIceAxe = activeWep === 'ice_axe';
+      const hasFrostSpear = activeWep === 'frost_spear';
+      const hasGlaive = activeWep === 'plasma_glaive';
+      const isMeleeBoosted = hasIceAxe || hasFrostSpear || hasGlaive;
+
+      const meleeDmg = hasIceAxe ? 135 : hasGlaive ? 115 : hasFrostSpear ? 105 : 46;
+      const meleeReach = hasIceAxe ? 98 : hasGlaive ? 92 : hasFrostSpear ? 78 : 46;
+      const knockbackForce = hasIceAxe ? 310 : hasGlaive ? 290 : hasFrostSpear ? 275 : 180;
+
+      if (isMeleeBoosted) {
+        player.weaponAmmo = Math.max(0, (player.weaponAmmo || 1) - 1);
+        if (player.weaponAmmo <= 0) player.weaponKind = 'standard';
+      }
+
+      for (let mIdx = s.monsters.length - 1; mIdx >= 0; mIdx--) {
+        const mon = s.monsters[mIdx];
+        const nearStrike = Math.hypot(mon.x - hitX, mon.y - hitY) < mon.radius + meleeReach;
+        const nearCleave =
+          hasIceAxe && Math.hypot(mon.x - player.x, mon.y - player.y) < mon.radius + 78;
+        if (nearStrike || nearCleave) {
+          mon.hp = Math.max(0, mon.hp - meleeDmg);
+          mon.hitUntil = nowMs + 250;
+          if (hasIceAxe || hasFrostSpear) {
+            mon.slowUntil = nowMs + (hasIceAxe ? 2600 : 2100);
+          }
+          const kbMag = Math.hypot(mon.x - player.x, mon.y - player.y) || 1;
+          mon.vx += ((mon.x - player.x) / kbMag) * knockbackForce;
+          mon.vy += ((mon.y - player.y) / kbMag) * knockbackForce;
+          player.score += isMeleeBoosted ? 60 : 30;
+          s.hitsLanded += 1;
           hitCount += 1;
+          if (mon.hp <= 0) {
+            awardMonsterDefeat(mon, player, player);
+            s.monsters.splice(mIdx, 1);
+          }
         }
       }
     }
 
     let brokeProp = false;
+    const propDmg = activeWep === 'ice_axe' ? 3 : 2;
+    const propHitLabel =
+      activeWep === 'ice_axe'
+        ? 'Ice-Axe Cleave'
+        : activeWep === 'frost_spear'
+        ? 'Frost-Spear Thrust'
+        : 'Sword Smash';
     for (let c = s.crates.length - 1; c >= 0; c--) {
       const cr = s.crates[c];
       const propRadius = cr.radius || 22;
       if (
-        Math.hypot(cr.x - hitX, cr.y - hitY) < propRadius + 38 ||
-        Math.hypot(cr.x - player.x, cr.y - player.y) < propRadius + 30
+        Math.hypot(cr.x - hitX, cr.y - hitY) < propRadius + 42 ||
+        Math.hypot(cr.x - player.x, cr.y - player.y) < propRadius + 34
       ) {
         hitCount += 1;
-        const destroyed = damageDestructibleProp(c, 2, player, 'Sword Smash');
+        const destroyed = damageDestructibleProp(c, propDmg, player, propHitLabel);
         if (destroyed) brokeProp = true;
       }
     }
 
-    queueBurst(hitX, hitY, '#facc15', hitCount ? 14 : 6);
-    queueRing(hitX, hitY, '#facc15', 2.2);
-    if (hitCount && !brokeProp) flashBanner(`Yeti Sword Strike! ${hitCount} hit${hitCount === 1 ? '' : 's'}`);
-  }, [damageDestructibleProp, flashBanner, queueBurst, queueRing]);
+    const slashCol =
+      activeWep === 'ice_axe'
+        ? '#22d3ee'
+        : activeWep === 'frost_spear'
+        ? '#60a5fa'
+        : activeWep === 'plasma_glaive'
+        ? '#e879f9'
+        : '#facc15';
+    queueBurst(hitX, hitY, slashCol, hitCount ? 18 : 7);
+    queueRing(
+      hitX,
+      hitY,
+      slashCol,
+      activeWep === 'ice_axe' ? 3.8 : activeWep === 'plasma_glaive' ? 3.4 : activeWep === 'frost_spear' ? 2.9 : 2.2
+    );
+    if (hitCount) {
+      soundEngine.playPunch(true);
+    }
+    if (hitCount && !brokeProp) {
+      flashBanner(
+        activeWep === 'ice_axe'
+          ? `Glacial Ice-Axe Cleave! ${hitCount} chilled`
+          : activeWep === 'frost_spear'
+          ? `Frost-Spear Lunge! ${hitCount} skewered`
+          : activeWep === 'plasma_glaive'
+          ? `Plasma Glaive Cleave! ${hitCount} hit${hitCount === 1 ? '' : 's'}`
+          : `Yeti Sword Strike! ${hitCount} hit${hitCount === 1 ? '' : 's'}`
+      );
+    }
+  }, [awardMonsterDefeat, damageDestructibleProp, flashBanner, queueBurst, queueRing]);
 
   const triggerThrowOrFire = useCallback((aimLogicalX?: number, aimLogicalY?: number) => {
     if (gameStateRef.current !== 'PLAYING') return;
@@ -1748,7 +2185,19 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     const player = simRef.current.entities.find((e) => e.id === 'player');
     if (!player || player.eliminated || player.throwCd > 0) return;
 
+    const nowMs = Date.now();
     const isShooter = gameModeRef.current === 'shooting';
+    if (!isShooter && player.weaponKind && player.weaponKind !== 'standard') {
+      if ((player.weaponAmmo || 0) <= 0 || nowMs >= (player.weaponUntil || 0)) {
+        player.weaponKind = 'standard';
+        player.weaponAmmo = 0;
+      }
+    }
+    const activeWep: 'standard' | QuestWeaponKind =
+      !isShooter && player.weaponKind && player.weaponKind !== 'standard'
+        ? player.weaponKind
+        : 'standard';
+
     let dirX = player.facingX;
     let dirY = player.facingY;
     const tx = aimLogicalX ?? (isShooter ? aimLogicalRef.current.x : undefined);
@@ -1765,34 +2214,90 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       }
     }
 
-    const boostMult = Date.now() < player.boostUntil ? 0.55 : 1;
-    player.throwCd = (isShooter ? 0.17 : 0.4) * boostMult;
-    player.throwPulse = 0.2;
+    const boostMult = nowMs < player.boostUntil ? 0.55 : 1;
+    player.throwCd =
+      (isShooter
+        ? 0.17
+        : activeWep === 'rail_scatter'
+        ? 0.24
+        : activeWep === 'frost_spear'
+        ? 0.26
+        : activeWep === 'plasma_glaive'
+        ? 0.32
+        : activeWep === 'ice_axe'
+        ? 0.34
+        : activeWep === 'cryo_cannon'
+        ? 0.36
+        : 0.38) * boostMult;
+    player.throwPulse = 0.22;
     player.emote = 'none';
     player.emoteUntil = 0;
 
-    const boltSpeed = isShooter ? 680 : 480;
+    const boltSpeed = isShooter
+      ? 680
+      : activeWep === 'frost_spear'
+      ? 900
+      : activeWep === 'rail_scatter'
+      ? 820
+      : activeWep === 'plasma_glaive'
+      ? 620
+      : activeWep === 'ice_axe'
+      ? 600
+      : activeWep === 'cryo_cannon'
+      ? 580
+      : 480;
     const baseAngle = Math.atan2(dirY, dirX);
-    const hasTriple = Date.now() < player.tripleUntil;
-    const spreadAngles = hasTriple ? [-0.18, 0, 0.18] : [0];
+    const hasTriple = nowMs < player.tripleUntil;
+    const spreadAngles =
+      activeWep === 'rail_scatter'
+        ? [-0.14, 0, 0.14]
+        : hasTriple
+        ? [-0.18, 0, 0.18]
+        : [0];
+    const isPiercing = activeWep === 'plasma_glaive' || activeWep === 'frost_spear';
 
     spreadAngles.forEach((off, idx) => {
       const ang = baseAngle + off;
       const sx = Math.cos(ang);
       const sy = Math.sin(ang);
       simRef.current.snowballs.push({
-        id: `sb_${Date.now()}_${idx}_${Math.random()}`,
+        id: `sb_${nowMs}_${idx}_${Math.random()}`,
         ownerId: player.id,
         x: player.x + sx * 22,
         y: player.y + sy * 22,
         vx: sx * boltSpeed,
         vy: sy * boltSpeed,
-        ttl: isShooter ? 1.25 : 1.45,
-        isBlaster: isShooter,
+        ttl: isShooter ? 1.25 : activeWep === 'frost_spear' ? 1.5 : 1.45,
+        isBlaster: isShooter || activeWep !== 'standard',
+        weaponKind: activeWep === 'standard' ? undefined : activeWep,
+        piercing: isPiercing,
+        hitIds: isPiercing ? [] : undefined,
+        damage:
+          activeWep === 'frost_spear'
+            ? 84
+            : activeWep === 'ice_axe'
+            ? 74
+            : activeWep === 'plasma_glaive'
+            ? 64
+            : activeWep === 'cryo_cannon'
+            ? 58
+            : activeWep === 'rail_scatter'
+            ? 46
+            : undefined,
       });
     });
-    if (isShooter) soundEngine.playBlaster();
-    else soundEngine.playThrow();
+
+    if (activeWep !== 'standard') {
+      player.weaponAmmo = Math.max(0, (player.weaponAmmo || 1) - 1);
+      if (player.weaponAmmo <= 0) {
+        player.weaponKind = 'standard';
+      }
+      soundEngine.playBlaster();
+    } else if (isShooter) {
+      soundEngine.playBlaster();
+    } else {
+      soundEngine.playThrow();
+    }
   }, []);
 
   const triggerWellRitualBlessing = useCallback(
@@ -1923,7 +2428,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       } else if (gm === 'shooting') {
         flashBanner('Wave 1: Aim with Mouse, Grab Power-Ups & Shatter Drones!');
       } else {
-        flashBanner('2:30 Match: Collect Power-Ups & Bank Drops at the Well!');
+        flashBanner('5-Yeti Quest! Awaken 3 Waystones, Slay Monsters & Escape!');
       }
     },
     [connectTunnel, disconnectTunnel, flashBanner, initSoloMatch]
@@ -2157,6 +2662,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     const actorsGroup = new THREE.Group();
     const kartsGroup = new THREE.Group();
     const shooterGroup = new THREE.Group();
+    const monstersGroup = new THREE.Group();
+    const questGroup = new THREE.Group();
+    const weaponPodGroup = new THREE.Group();
     const pickupsGroup = new THREE.Group();
     const cratesGroup = new THREE.Group();
     const snowballsGroup = new THREE.Group();
@@ -2167,6 +2675,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       actorsGroup,
       kartsGroup,
       shooterGroup,
+      monstersGroup,
+      questGroup,
+      weaponPodGroup,
       pickupsGroup,
       cratesGroup,
       snowballsGroup,
@@ -2211,9 +2722,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     const yetiRigs = new Map<string, YetiRigParts>();
     const kartRigs = new Map<string, YetiKartRigParts>();
     const shooterMeshes = new Map<string, ShooterTargetMesh | YetiRigParts>();
+    const monsterRigs = new Map<string, QuestMonsterRig>();
+    const relicRigs = new Map<string, WaystoneRelicRig>();
+    const weaponPodRigs = new Map<string, WeaponPodRig>();
+    let escapePortalRig: EscapePortalRig | null = null;
     const pickupMeshes = new Map<string, THREE.Object3D>();
     const crateMeshes = new Map<string, THREE.Group>();
-    const snowballMeshes = new Map<string, THREE.Mesh>();
+    const snowballMeshes = new Map<string, THREE.Object3D>();
     const hazardMeshes = new Map<string, { group: THREE.Group; spike: THREE.Mesh; ring: THREE.Mesh }>();
     const activeBursts: BurstParticle3D[] = [];
     const activeRings: ShockwaveRing3D[] = [];
@@ -2335,6 +2850,26 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     const blasterBoltGeo = new THREE.SphereGeometry(0.22, 8, 8);
     const blasterBoltMat = new THREE.MeshBasicMaterial({ color: '#22d3ee' });
     const enemyOrbMat = new THREE.MeshBasicMaterial({ color: '#f43f5e' });
+    const cryoBoltMat = new THREE.MeshBasicMaterial({ color: '#38bdf8' });
+    const glaiveBoltMat = new THREE.MeshBasicMaterial({ color: '#e879f9' });
+    const railBoltMat = new THREE.MeshBasicMaterial({ color: '#fbbf24' });
+    const axeBoltMat = new THREE.MeshBasicMaterial({ color: '#22d3ee' });
+    const axeHaftMat = new THREE.MeshStandardMaterial({
+      color: '#334155',
+      roughness: 0.55,
+      metalness: 0.3,
+    });
+    const spearBoltMat = new THREE.MeshBasicMaterial({ color: '#60a5fa' });
+    const glaiveDiscGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.08, 14);
+    const railSlugGeo = new THREE.ConeGeometry(0.16, 0.48, 6);
+    railSlugGeo.rotateX(Math.PI / 2);
+    const axeShaftGeo = new THREE.CylinderGeometry(0.045, 0.05, 0.72, 8);
+    axeShaftGeo.rotateX(Math.PI / 2);
+    const axeBladeGeo = new THREE.BoxGeometry(0.42, 0.08, 0.28);
+    const spearShaftGeo = new THREE.CylinderGeometry(0.04, 0.045, 1.05, 8);
+    spearShaftGeo.rotateX(Math.PI / 2);
+    const spearHeadGeo = new THREE.ConeGeometry(0.14, 0.42, 4);
+    spearHeadGeo.rotateX(Math.PI / 2);
 
     const applyMapAssetPalette = (mId: MapId) => {
       const bRingMat = beaconRing.material as THREE.MeshBasicMaterial;
@@ -2550,7 +3085,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             const distTrack = getDistanceToRaceTrack(k.x, k.y, mapIdRef.current);
             const offRoad = distTrack > 105;
             if (!k.isBot) playerOffRoad = offRoad;
-            const offRoadMult = offRoad && !boosting ? 0.84 : 1.0;
+            const offRoadMult = offRoad && !boosting ? 0.76 : 1.0;
 
             const maxSpd =
               (k.isBot ? 430 * k.aiSpeedBias : 455) *
@@ -2578,6 +3113,20 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
             k.x = THREE.MathUtils.clamp(k.x + k.vx * dt, RACE_BOUNDS.minX, RACE_BOUNDS.maxX);
             k.y = THREE.MathUtils.clamp(k.y + k.vy * dt, RACE_BOUNDS.minY, RACE_BOUNDS.maxY);
+
+            const obsHit = resolveRaceObstacleCollision(k.x, k.y, k.vx, k.vy, 17, mapIdRef.current);
+            if (obsHit.hit) {
+              k.x = obsHit.x;
+              k.y = obsHit.y;
+              k.vx = obsHit.vx;
+              k.vy = obsHit.vy;
+              k.speed *= 0.68;
+              if (!k.isBot) {
+                s.shake = Math.max(s.shake, 0.28);
+                soundEngine.playHit();
+                queueBurst(k.x, k.y, '#94a3b8', 7);
+              }
+            }
 
             if (boosting && Math.random() < 0.65) {
               queueBurst(k.x, k.y, '#22d3ee', 1);
@@ -2912,19 +3461,25 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 }
 
                 en.fireCd -= dt;
-                if (en.fireCd <= 0 && distP < 560) {
+                if (en.fireCd <= 0 && distP < 580) {
                   en.fireCd =
-                    (en.kind === 'boss_yeti' ? 1.05 : en.kind === 'yeti_rival' ? 1.85 : 2.5) +
-                    Math.random() * 0.8;
-                  s.snowballs.push({
-                    id: `eb_${now}_${en.id}`,
-                    ownerId: en.id,
-                    x: en.x + (dxP / distP) * 20,
-                    y: en.y + (dyP / distP) * 20,
-                    vx: (dxP / distP) * 290,
-                    vy: (dyP / distP) * 290,
-                    ttl: 2.1,
-                    isEnemyOrb: true,
+                    (en.kind === 'boss_yeti' ? 0.82 : en.kind === 'yeti_rival' ? 1.44 : 1.95) +
+                    Math.random() * 0.65;
+                  const baseAng = Math.atan2(dyP, dxP);
+                  const fan = en.kind === 'boss_yeti' ? [-0.22, 0, 0.22] : [0];
+                  const orbSpd = en.kind === 'boss_yeti' ? 320 : 295;
+                  fan.forEach((off, oIdx) => {
+                    const ang = baseAng + off;
+                    s.snowballs.push({
+                      id: `eb_${now}_${en.id}_${oIdx}`,
+                      ownerId: en.id,
+                      x: en.x + Math.cos(ang) * 20,
+                      y: en.y + Math.sin(ang) * 20,
+                      vx: Math.cos(ang) * orbSpd,
+                      vy: Math.sin(ang) * orbSpd,
+                      ttl: 2.2,
+                      isEnemyOrb: true,
+                    });
                   });
                 }
               }
@@ -3101,29 +3656,29 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             }
           }
         } else {
-          // ===== SURVIVAL FLURRY SIMULATION (EXPANDED 2400x1600 MAP · 150s) =====
+          // ===== 5-YETI SQUAD MONSTER ESCAPE QUEST SIMULATION (2400x1600 · 180s) =====
           s.elapsed += dt;
           s.timeLeft = Math.max(0, s.timeLeft - dt);
-          s.ringRadius = Math.max(210, ARENA_INITIAL_RING_RADIUS - s.elapsed * 3.2);
+          s.ringRadius = Math.max(480, ARENA_INITIAL_RING_RADIUS + 40 - s.elapsed * 1.15);
 
-          while (s.pickups.length < 28) {
+          while (s.pickups.length < 24) {
             s.pickups.push(spawnPickup(Math.floor(s.elapsed * 10), mapIdRef.current));
           }
           while (s.crates.length < 10) {
-            s.crates.push(spawnCrate(Math.floor(s.elapsed * 10)));
+            s.crates.push(spawnCrate(Math.floor(s.elapsed * 10), mapIdRef.current));
           }
 
           if (s.beacon.active) {
             s.beacon.timeLeft = Math.max(0, s.beacon.timeLeft - dt);
             if (s.beacon.timeLeft <= 0) {
               s.beacon.active = false;
-              s.beacon.nextIn = 11.0;
+              s.beacon.nextIn = 12.0;
             }
           } else {
             s.beacon.nextIn -= dt;
             if (s.beacon.nextIn <= 0) {
               const a = Math.random() * Math.PI * 2;
-              const d = 150 + Math.random() * Math.max(90, s.ringRadius - 210);
+              const d = 140 + Math.random() * 240;
               const bPos = nudgeOutsideObstacles(
                 ARENA_CENTER_X + Math.cos(a) * d,
                 ARENA_CENTER_Y + Math.sin(a) * d,
@@ -3136,17 +3691,16 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 y: bPos.y,
                 radius: 78,
                 timeLeft: 12.0,
-                nextIn: 11.0,
+                nextIn: 12.0,
                 tickAccum: 0,
               };
-              flashBanner('Shrine Beacon Activated! Stand inside for Drops');
             }
           }
 
           s.nextHazardIn -= dt;
           if (s.nextHazardIn <= 0) {
             const angle = Math.random() * Math.PI * 2;
-            const dist = 95 + Math.random() * Math.max(100, s.ringRadius - 95);
+            const dist = 120 + Math.random() * 380;
             const hPos = nudgeOutsideObstacles(
               ARENA_CENTER_X + Math.cos(angle) * dist,
               ARENA_CENTER_Y + Math.sin(angle) * dist,
@@ -3158,10 +3712,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               x: hPos.x,
               y: hPos.y,
               radius: 44,
-              timer: 1.45,
-              maxTimer: 1.45,
+              timer: 1.55,
+              maxTimer: 1.55,
             });
-            s.nextHazardIn = Math.max(1.5, 3.6 - s.elapsed * 0.018);
+            s.nextHazardIn = Math.max(2.0, 4.4 - s.elapsed * 0.015);
           }
 
           const hazardBurstCol =
@@ -3181,7 +3735,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 if (ent.eliminated) continue;
                 if (Math.hypot(ent.x - hz.x, ent.y - hz.y) < hz.radius + 10) {
                   if (now >= ent.shieldUntil && now >= ent.hurtUntil) {
-                    ent.hp = Math.max(0, ent.hp - 20);
+                    ent.hp = Math.max(0, ent.hp - 18);
                     ent.hurtUntil = now + 900;
                     if (!ent.isBot) {
                       s.shake = 0.45;
@@ -3195,12 +3749,96 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             }
           }
 
+          const player = s.entities.find((e) => e.id === 'player');
+          const relicsDoneNow = s.relics.filter((r) => r.completed).length;
+
+          // Expire uncollected temporary weapon pods after 30s to keep loot rotating cleanly
+          for (let wIdx = s.weaponPods.length - 1; wIdx >= 0; wIdx--) {
+            const wp = s.weaponPods[wIdx];
+            if (wp.expiresAt && now >= wp.expiresAt) {
+              s.weaponPods.splice(wIdx, 1);
+            }
+          }
+
+          // Strategic & Randomized Quest Weapon Pod Loot Drops
+          if (s.strategicPodStage === 0 && s.elapsed >= 4) {
+            s.strategicPodStage = 1;
+            const starterKind: QuestWeaponKind = Math.random() < 0.5 ? 'ice_axe' : 'frost_spear';
+            spawnWeaponLootDrop(
+              ARENA_CENTER_X + 125,
+              ARENA_CENTER_Y + 95,
+              'Supply Drop',
+              starterKind
+            );
+          } else if (s.strategicPodStage === 1 && relicsDoneNow >= 1) {
+            s.strategicPodStage = 2;
+            spawnWeaponLootDrop(
+              ARENA_CENTER_X - 185,
+              ARENA_CENTER_Y - 70,
+              'Waystone Cache'
+            );
+          } else if (s.strategicPodStage === 2 && relicsDoneNow >= 2) {
+            s.strategicPodStage = 3;
+            spawnWeaponLootDrop(
+              ARENA_CENTER_X + 185,
+              ARENA_CENTER_Y - 140,
+              'Heavy Loot Drop'
+            );
+          } else if (s.strategicPodStage === 3 && s.escapePortal.open) {
+            s.strategicPodStage = 4;
+            spawnWeaponLootDrop(
+              s.escapePortal.x - 115,
+              s.escapePortal.y + 95,
+              'Portal Defense Cache'
+            );
+          }
+
+          // Periodic Randomized Arena Weapon Loot Air-Drops against larger monster waves
+          s.lootDropCd -= dt;
+          if (s.lootDropCd <= 0) {
+            s.lootDropCd = 16 + Math.random() * 6;
+            if (s.weaponPods.length < 4) {
+              const ang = Math.random() * Math.PI * 2;
+              const dist = 140 + Math.random() * Math.max(180, s.ringRadius * 0.65 - 140);
+              spawnWeaponLootDrop(
+                ARENA_CENTER_X + Math.cos(ang) * dist,
+                ARENA_CENTER_Y + Math.sin(ang) * (dist * 0.8),
+                'Random Loot Air-Drop'
+              );
+            }
+          }
+
+          // Spawn continuous monster waves scaling with awakened Waystones
+          const maxMonsters = 7 + relicsDoneNow * 3 + (s.escapePortal.open ? 3 : 0);
+          s.monsterSpawnCd -= dt;
+          if (s.monsterSpawnCd <= 0 && s.monsters.length < maxMonsters) {
+            const pool: QuestMonsterKind[] =
+              relicsDoneNow >= 2
+                ? ['stalker', 'brute', 'wraith', 'brute']
+                : relicsDoneNow === 1
+                ? ['stalker', 'brute', 'wraith']
+                : ['stalker', 'brute', 'wraith', 'stalker'];
+            const mk = pool[Math.floor(Math.random() * pool.length)];
+            s.monsters.push(spawnQuestMonster(mk, mapIdRef.current));
+            s.monsterSpawnCd = Math.max(1.5, 3.4 - relicsDoneNow * 0.6);
+          }
+
+          // Update 5-Yeti Squad Explorers (Player + 4 Co-op Allies)
+          const nextRelic = s.relics.find((r) => !r.completed) || null;
           for (const ent of s.entities) {
             if (ent.eliminated) continue;
             ent.dashCd = Math.max(0, ent.dashCd - dt);
             ent.dashTime = Math.max(0, ent.dashTime - dt);
             ent.throwCd = Math.max(0, ent.throwCd - dt);
             ent.throwPulse = Math.max(0, ent.throwPulse - dt);
+            if (
+              ent.weaponKind &&
+              ent.weaponKind !== 'standard' &&
+              (now >= (ent.weaponUntil || 0) || (ent.weaponAmmo || 0) <= 0)
+            ) {
+              ent.weaponKind = 'standard';
+              ent.weaponAmmo = 0;
+            }
             if (ent.emote !== 'none' && now >= ent.emoteUntil) {
               ent.emote = 'none';
             }
@@ -3217,58 +3855,78 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               if (k['a'] || k['arrowleft']) ix -= 1;
               if (k['d'] || k['arrowright']) ix += 1;
             } else {
-              const dxC = ARENA_CENTER_X - ent.x;
-              const dyC = ARENA_CENTER_Y - ent.y;
-              const dC = Math.hypot(dxC, dyC);
-              if (ent.gatherAtWellUntil && now < ent.gatherAtWellUntil && dC > 68) {
-                ix = dxC / (dC || 1);
-                iy = dyC / (dC || 1);
-              } else if (ent.gatherAtWellUntil && now < ent.gatherAtWellUntil) {
-                ix = 0;
-                iy = 0;
-              } else if (dC > s.ringRadius - 55 || ent.carriedDrops >= 3) {
-                ix = dxC / (dC || 1);
-                iy = dyC / (dC || 1);
-              } else {
-                let bestPk = s.pickups[0];
-                let bestDist = Infinity;
-                for (const pk of s.pickups) {
-                  const d = Math.hypot(pk.x - ent.x, pk.y - ent.y);
-                  if (d < bestDist) {
-                    bestDist = d;
-                    bestPk = pk;
-                  }
-                }
-                if (bestPk) {
-                  const d = Math.hypot(bestPk.x - ent.x, bestPk.y - ent.y) || 1;
-                  ix = (bestPk.x - ent.x) / d;
-                  iy = (bestPk.y - ent.y) / d;
+              // Allied AI Squadmate: fight monsters, follow quest objective (Relics -> Escape Portal)
+              let nearestMon: QuestMonster | null = null;
+              let nearestMonDist = Infinity;
+              for (const m of s.monsters) {
+                const dm = Math.hypot(m.x - ent.x, m.y - ent.y);
+                if (dm < nearestMonDist) {
+                  nearestMonDist = dm;
+                  nearestMon = m;
                 }
               }
 
-              if (ent.throwCd <= 0) {
-                const target = s.entities.find(
-                  (o) => o.id !== ent.id && !o.eliminated && Math.hypot(o.x - ent.x, o.y - ent.y) < 340
-                );
-                if (target) {
-                  const d = Math.hypot(target.x - ent.x, target.y - ent.y) || 1;
-                  ent.throwPulse = 0.24;
-                  s.snowballs.push({
-                    id: `sb_${now}_${ent.id}`,
-                    ownerId: ent.id,
-                    x: ent.x + ((target.x - ent.x) / d) * 20,
-                    y: ent.y + ((target.y - ent.y) / d) * 20,
-                    vx: ((target.x - ent.x) / d) * 370,
-                    vy: ((target.y - ent.y) / d) * 370,
-                    ttl: 1.4,
-                  });
-                  ent.throwCd = 2.2 + Math.random() * 1.4;
+              // Priority goal: Escape Portal if open, else nearest unawakened Relic (or stick near player)
+              const goalX = s.escapePortal.open
+                ? s.escapePortal.x
+                : nextRelic
+                ? nextRelic.x
+                : player?.x ?? ARENA_CENTER_X;
+              const goalY = s.escapePortal.open
+                ? s.escapePortal.y
+                : nextRelic
+                ? nextRelic.y
+                : player?.y ?? ARENA_CENTER_Y;
+
+              const allyIdx = Math.max(0, s.entities.indexOf(ent) - 1);
+              const spreadAngle = allyIdx * (Math.PI * 0.5) + s.elapsed * 0.45;
+              const targetX = goalX + Math.cos(spreadAngle) * 46;
+              const targetY = goalY + Math.sin(spreadAngle) * 46;
+              const distGoal = Math.hypot(targetX - ent.x, targetY - ent.y);
+
+              if (nearestMon && nearestMonDist < 115) {
+                // Kite back slightly while firing snowballs
+                const kd = Math.max(1, nearestMonDist);
+                ix = (ent.x - nearestMon.x) / kd * 0.75 + (targetX - ent.x) / Math.max(1, distGoal) * 0.45;
+                iy = (ent.y - nearestMon.y) / kd * 0.75 + (targetY - ent.y) / Math.max(1, distGoal) * 0.45;
+              } else if (ent.hp < 55) {
+                const medkit = s.pickups.find((p) => p.kind === 'medkit' || p.kind === 'shield');
+                if (medkit) {
+                  const md = Math.hypot(medkit.x - ent.x, medkit.y - ent.y) || 1;
+                  ix = (medkit.x - ent.x) / md;
+                  iy = (medkit.y - ent.y) / md;
+                } else if (distGoal > 30) {
+                  ix = (targetX - ent.x) / distGoal;
+                  iy = (targetY - ent.y) / distGoal;
                 }
+              } else if (distGoal > 28) {
+                ix = (targetX - ent.x) / distGoal;
+                iy = (targetY - ent.y) / distGoal;
+              }
+
+              // Fire friendly snowballs ONLY at Monsters
+              if (ent.throwCd <= 0 && nearestMon && nearestMonDist < 420) {
+                const d = Math.hypot(nearestMon.x - ent.x, nearestMon.y - ent.y) || 1;
+                const dirX = (nearestMon.x - ent.x) / d;
+                const dirY = (nearestMon.y - ent.y) / d;
+                ent.facingX = dirX;
+                ent.facingY = dirY;
+                ent.throwPulse = 0.24;
+                s.snowballs.push({
+                  id: `sb_${now}_${ent.id}`,
+                  ownerId: ent.id,
+                  x: ent.x + dirX * 20,
+                  y: ent.y + dirY * 20,
+                  vx: dirX * 430,
+                  vy: dirY * 430,
+                  ttl: 1.35,
+                });
+                ent.throwCd = 1.15 + Math.random() * 0.55;
               }
             }
 
             const boostFactor = now < ent.boostUntil ? 1.38 : 1;
-            const baseSpeed = (ent.isBot ? 205 : 245) * boostFactor * mapSpec.speedMult;
+            const baseSpeed = (ent.isBot ? 215 : 250) * boostFactor * mapSpec.speedMult;
             const mag = Math.hypot(ix, iy);
             const dampRate = Math.max(
               2.5,
@@ -3317,6 +3975,20 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   damageDestructibleProp(c, cr.maxHp || 3, ent, 'Frost Dash');
                 }
               }
+              for (let mIdx = s.monsters.length - 1; mIdx >= 0; mIdx--) {
+                const mon = s.monsters[mIdx];
+                if (now >= mon.hitUntil && Math.hypot(mon.x - ent.x, mon.y - ent.y) < mon.radius + 22) {
+                  mon.hp = Math.max(0, mon.hp - 36);
+                  mon.hitUntil = now + 350;
+                  const km = Math.hypot(mon.x - ent.x, mon.y - ent.y) || 1;
+                  mon.vx += ((mon.x - ent.x) / km) * 220;
+                  mon.vy += ((mon.y - ent.y) / km) * 220;
+                  if (mon.hp <= 0) {
+                    awardMonsterDefeat(mon, player, ent);
+                    s.monsters.splice(mIdx, 1);
+                  }
+                }
+              }
             } else {
               for (const cr of s.crates) {
                 const dxCr = ent.x - cr.x;
@@ -3342,31 +4014,15 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               if (!ent.isBot) {
                 s.wellBanks += 1;
                 soundEngine.playPickup('power');
-                flashBanner(`Well Deposit! +${bonus} pts & +25 HP`);
-                updateTaskProgress('task_bank', s.wellBanks, ent);
-              }
-            }
-
-            if (!ent.isBot && s.beacon.active) {
-              if (Math.hypot(ent.x - s.beacon.x, ent.y - s.beacon.y) < s.beacon.radius) {
-                s.beacon.tickAccum += dt;
-                if (s.beacon.tickAccum >= 0.75) {
-                  s.beacon.tickAccum = 0;
-                  s.beaconTicks += 1;
-                  ent.score += 25;
-                  ent.wellDrops += 1;
-                  queueBurst(ent.x, ent.y, '#fde047', 6);
-                  soundEngine.playPickup('drop');
-                  updateTaskProgress('task_crates', s.cratesSmashed + s.beaconTicks, ent);
-                }
+                flashBanner(`Well Blessing! +${bonus} pts & +25 HP`);
               }
             }
 
             if (distCenter > s.ringRadius && now >= ent.hurtUntil && now >= ent.shieldUntil) {
-              ent.hp = Math.max(0, ent.hp - 15);
+              ent.hp = Math.max(0, ent.hp - 12);
               ent.hurtUntil = now + 1100;
               if (!ent.isBot) {
-                s.shake = 0.4;
+                s.shake = 0.36;
                 soundEngine.playHit();
               }
               if (ent.hp === 0) ent.eliminated = true;
@@ -3431,6 +4087,255 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 s.pickups.splice(i, 1);
               }
             }
+
+            if (!ent.isBot) {
+              for (let wIdx = s.weaponPods.length - 1; wIdx >= 0; wIdx--) {
+                const wp = s.weaponPods[wIdx];
+                if (Math.hypot(wp.x - ent.x, wp.y - ent.y) < 38) {
+                  const spec = getQuestWeaponSpec(wp.kind);
+                  ent.weaponKind = wp.kind;
+                  ent.weaponAmmo = spec.ammo;
+                  ent.weaponUntil = now + spec.durationMs;
+                  ent.score += 75;
+                  soundEngine.playPickup('power');
+                  queueBurst(wp.x, wp.y, spec.colorHex, 16);
+                  queueRing(wp.x, wp.y, spec.colorHex, 2.9);
+                  flashBanner(spec.bannerText);
+                  s.weaponPods.splice(wIdx, 1);
+                }
+              }
+            }
+          }
+
+          // Awaken 3 Waystone Relics (Player + nearby Squadmates charge them faster)
+          let highestActiveRelicCharge = 0;
+          for (const relic of s.relics) {
+            if (relic.completed) continue;
+            let chargers = 0;
+            let playerInside = false;
+            for (const ent of s.entities) {
+              if (ent.eliminated) continue;
+              if (Math.hypot(ent.x - relic.x, ent.y - relic.y) <= relic.radius) {
+                chargers += 1;
+                if (!ent.isBot) playerInside = true;
+              }
+            }
+            if (chargers > 0) {
+              const rate = 0.22 + (chargers - 1) * 0.08;
+              relic.charge = Math.min(1, relic.charge + rate * dt);
+              if (playerInside) {
+                highestActiveRelicCharge = Math.max(highestActiveRelicCharge, relic.charge);
+              }
+              if (relic.charge >= 1) {
+                relic.completed = true;
+                const completedCount = s.relics.filter((r) => r.completed).length;
+                queueBurst(relic.x, relic.y, '#34d399', 22);
+                queueRing(relic.x, relic.y, '#34d399', 4.2);
+                soundEngine.playLap(false);
+
+                for (const ent of s.entities) {
+                  if (!ent.eliminated) {
+                    ent.hp = Math.min(ent.maxHp, ent.hp + 25);
+                    ent.score += 180;
+                  }
+                }
+                if (player) {
+                  updateTaskProgress('task_relics', completedCount, player);
+                }
+
+                // Ambush surge when a Relic awakens
+                const surgeKinds: QuestMonsterKind[] = ['stalker', 'brute', 'wraith'];
+                surgeKinds.forEach((sk, kIdx) => {
+                  const sa = (kIdx / surgeKinds.length) * Math.PI * 2 + Math.random();
+                  s.monsters.push(
+                    spawnQuestMonster(
+                      sk,
+                      mapIdRef.current,
+                      relic.x + Math.cos(sa) * 260,
+                      relic.y + Math.sin(sa) * 260
+                    )
+                  );
+                });
+
+                if (completedCount >= s.relics.length) {
+                  s.escapePortal.open = true;
+                  if (!s.bossSpawned) {
+                    s.bossSpawned = true;
+                    s.monsters.push(
+                      spawnQuestMonster(
+                        'boss',
+                        mapIdRef.current,
+                        s.escapePortal.x,
+                        s.escapePortal.y + 160
+                      )
+                    );
+                  }
+                  flashBanner('All 3 Waystones Awakened! Escape Portal OPEN — Boss Incoming!');
+                } else {
+                  flashBanner(`Waystone ${completedCount}/3 Awakened! +25 Squad HP · Monsters Incoming!`);
+                }
+              }
+            }
+          }
+          s.activeRelicCharge = highestActiveRelicCharge;
+
+          // Escape Portal Extraction once unlocked
+          if (!s.escaped && s.escapePortal.open && player && !player.eliminated) {
+            let insideCount = 0;
+            let playerInPortal = false;
+            for (const ent of s.entities) {
+              if (ent.eliminated) continue;
+              if (Math.hypot(ent.x - s.escapePortal.x, ent.y - s.escapePortal.y) <= s.escapePortal.radius) {
+                insideCount += 1;
+                if (!ent.isBot) playerInPortal = true;
+              }
+            }
+            if (playerInPortal) {
+              s.escapePortal.extractProgress = Math.min(
+                1,
+                s.escapePortal.extractProgress + (0.42 + (insideCount - 1) * 0.1) * dt
+              );
+              if (s.escapePortal.extractProgress >= 1) {
+                s.escaped = true;
+                updateTaskProgress('task_escape', 1, player);
+                queueBurst(s.escapePortal.x, s.escapePortal.y, '#fde047', 26);
+                queueRing(s.escapePortal.x, s.escapePortal.y, '#34d399', 4.8);
+                finishSoloMatch(player);
+              }
+            } else {
+              s.escapePortal.extractProgress = Math.max(0, s.escapePortal.extractProgress - 0.16 * dt);
+            }
+          }
+
+          // Update Monster AI & Attacks against living Yetis
+          for (const mon of s.monsters) {
+            mon.attackCd = Math.max(0, mon.attackCd - dt);
+            mon.fireCd -= dt;
+
+            let targetYeti: LocalYeti | null = null;
+            let targetDist = Infinity;
+            for (const ent of s.entities) {
+              if (ent.eliminated) continue;
+              const d = Math.hypot(ent.x - mon.x, ent.y - mon.y);
+              if (d < targetDist) {
+                targetDist = d;
+                targetYeti = ent;
+              }
+            }
+            if (!targetYeti) continue;
+
+            const dxT = targetYeti.x - mon.x;
+            const dyT = targetYeti.y - mon.y;
+            const distT = Math.max(1, targetDist);
+            const nx = dxT / distT;
+            const ny = dyT / distT;
+            mon.facingX = nx;
+            mon.facingY = ny;
+
+            const preferredDist = mon.kind === 'wraith' ? 210 : 12;
+            const chaseDir = distT > preferredDist ? 1 : distT < preferredDist - 40 ? -0.5 : 0;
+            const slowMult = mon.slowUntil && now < mon.slowUntil ? 0.52 : 1;
+            const mSpd = mon.speed * mapSpec.speedMult * slowMult;
+            mon.vx = mon.vx * 0.85 + nx * mSpd * chaseDir * 0.15;
+            mon.vy = mon.vy * 0.85 + ny * mSpd * chaseDir * 0.15;
+
+            mon.x = Math.max(55, Math.min(W - 55, mon.x + mon.vx * dt));
+            mon.y = Math.max(55, Math.min(H - 55, mon.y + mon.vy * dt));
+            const mRes = resolveArenaObstacleCollision(mon.x, mon.y, mon.vx, mon.vy, mon.radius, mapIdRef.current);
+            mon.x = mRes.x;
+            mon.y = mRes.y;
+            mon.vx = mRes.vx;
+            mon.vy = mRes.vy;
+
+            // Melee Claw / Greataxe / Maul Attack on contact
+            if (distT < mon.radius + 20 && mon.attackCd <= 0) {
+              mon.attackCd = mon.kind === 'stalker' ? 0.88 : mon.kind === 'boss' ? 1.05 : 1.15;
+              const dmg =
+                mon.kind === 'boss'
+                  ? 32
+                  : mon.kind === 'brute'
+                  ? 24
+                  : mon.kind === 'wraith'
+                  ? 18
+                  : 15;
+              if (now >= targetYeti.shieldUntil && now >= targetYeti.hurtUntil) {
+                targetYeti.hp = Math.max(0, targetYeti.hp - dmg);
+                targetYeti.hurtUntil = now + 700;
+                targetYeti.vx += nx * 195;
+                targetYeti.vy += ny * 195;
+                queueBurst(targetYeti.x, targetYeti.y, '#f43f5e', 10);
+                if (!targetYeti.isBot) {
+                  s.shake = 0.52;
+                  soundEngine.playHit();
+                }
+                if (targetYeti.hp === 0) targetYeti.eliminated = true;
+              }
+            }
+
+            // Boss Ground Slam Shockwave & <50% HP Stalker Minion Summon
+            if (mon.kind === 'boss') {
+              mon.slamCd = (mon.slamCd ?? 4.6) - dt;
+              if (mon.slamCd <= 0 && distT < 210) {
+                mon.slamCd = 4.6;
+                queueBurst(mon.x, mon.y, '#f59e0b', 22);
+                queueRing(mon.x, mon.y, '#f59e0b', 4.8);
+                s.shake = Math.max(s.shake, 0.65);
+                soundEngine.playSlam();
+                for (const ent of s.entities) {
+                  if (ent.eliminated) continue;
+                  const sd = Math.hypot(ent.x - mon.x, ent.y - mon.y);
+                  if (sd < 130 && now >= ent.shieldUntil && now >= ent.hurtUntil) {
+                    ent.hp = Math.max(0, ent.hp - 24);
+                    ent.hurtUntil = now + 800;
+                    const sn = Math.max(1, sd);
+                    ent.vx += ((ent.x - mon.x) / sn) * 260;
+                    ent.vy += ((ent.y - mon.y) / sn) * 260;
+                    if (!ent.isBot) soundEngine.playHit();
+                    if (ent.hp === 0) ent.eliminated = true;
+                  }
+                }
+              }
+
+              if (!mon.minionsSummoned && mon.hp < mon.maxHp * 0.5) {
+                mon.minionsSummoned = true;
+                for (let sIdx = 0; sIdx < 2; sIdx++) {
+                  const sa = Math.random() * Math.PI * 2;
+                  s.monsters.push(
+                    spawnQuestMonster(
+                      'stalker',
+                      mapIdRef.current,
+                      mon.x + Math.cos(sa) * 90,
+                      mon.y + Math.sin(sa) * 90
+                    )
+                  );
+                }
+                queueRing(mon.x, mon.y, '#f43f5e', 3.8);
+                flashBanner('Dread Boss Enraged — Stalker Pack Summoned!');
+              }
+            }
+
+            // Wraith & Boss ranged crimson monster orbs (Boss fires 5-orb crimson fan)
+            if ((mon.kind === 'wraith' || mon.kind === 'boss') && mon.fireCd <= 0 && distT < 540) {
+              mon.fireCd = mon.kind === 'boss' ? 1.4 : 2.1;
+              const orbSpeed = mon.kind === 'boss' ? 335 : 285;
+              const baseAng = Math.atan2(ny, nx);
+              const fan = mon.kind === 'boss' ? [-0.36, -0.18, 0, 0.18, 0.36] : [0];
+              fan.forEach((off, oIdx) => {
+                const ang = baseAng + off;
+                const ox = Math.cos(ang);
+                const oy = Math.sin(ang);
+                s.snowballs.push({
+                  id: `morb_${now}_${mon.id}_${oIdx}`,
+                  ownerId: mon.id,
+                  x: mon.x + ox * (mon.radius + 6),
+                  y: mon.y + oy * (mon.radius + 6),
+                  vx: ox * orbSpeed,
+                  vy: oy * orbSpeed,
+                  ttl: 2.1,
+                  isEnemyOrb: true,
+                });
+              });
+            }
           }
 
           if (now >= s.ritualCooldownUntil) {
@@ -3453,6 +4358,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             }
           }
 
+          // Projectiles: Friendly Snowballs & Heavy Weapons hit Monsters + Props (NO friendly fire!); Monster Orbs hit Explorers
           for (let i = s.snowballs.length - 1; i >= 0; i--) {
             const sb = s.snowballs[i];
             sb.x += sb.vx * dt;
@@ -3460,35 +4366,103 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             sb.ttl -= dt;
             let hit = false;
 
-            for (const ent of s.entities) {
-              if (ent.id === sb.ownerId || ent.eliminated) continue;
-              if (Math.hypot(ent.x - sb.x, ent.y - sb.y) < 23) {
-                hit = true;
-                queueBurst(sb.x, sb.y, '#f8fafc', 9);
-                queueRing(sb.x, sb.y, '#7dd3fc', 1.8);
-                if (now >= ent.shieldUntil) {
-                  ent.vx += sb.vx * 0.65;
-                  ent.vy += sb.vy * 0.65;
-                  const shooter = s.entities.find((e) => e.id === sb.ownerId);
-                  if (now >= ent.hurtUntil) {
-                    ent.hp = Math.max(0, ent.hp - 20);
+            if (sb.isEnemyOrb) {
+              for (const ent of s.entities) {
+                if (ent.eliminated) continue;
+                if (Math.hypot(ent.x - sb.x, ent.y - sb.y) < 22) {
+                  hit = true;
+                  queueBurst(sb.x, sb.y, '#f43f5e', 9);
+                  if (now >= ent.shieldUntil && now >= ent.hurtUntil) {
+                    ent.hp = Math.max(0, ent.hp - 22);
                     ent.hurtUntil = now + 750;
-                    if (shooter) {
-                      shooter.score += 45;
-                      if (ent.hp === 0) shooter.knockouts += 1;
-                      if (!shooter.isBot) {
-                        s.hitsLanded += 1;
-                        updateTaskProgress('task_hits', s.hitsLanded, shooter);
-                      }
-                    }
                     if (!ent.isBot) {
                       s.shake = 0.45;
                       soundEngine.playHit();
                     }
                     if (ent.hp === 0) ent.eliminated = true;
                   }
+                  break;
                 }
-                break;
+              }
+            } else {
+              const shooter = s.entities.find((e) => e.id === sb.ownerId);
+              for (let mIdx = s.monsters.length - 1; mIdx >= 0; mIdx--) {
+                const mon = s.monsters[mIdx];
+                if (sb.hitIds?.includes(mon.id)) continue;
+                if (Math.hypot(mon.x - sb.x, mon.y - sb.y) < mon.radius + 10) {
+                  const dmg = sb.damage ?? (shooter && !shooter.isBot ? 28 : 18);
+                  mon.hp = Math.max(0, mon.hp - dmg);
+                  mon.hitUntil = now + 180;
+                  mon.vx += sb.vx * 0.14;
+                  mon.vy += sb.vy * 0.14;
+                  const impactCol = sb.weaponKind
+                    ? getQuestWeaponSpec(sb.weaponKind).colorHex
+                    : '#f8fafc';
+                  queueBurst(sb.x, sb.y, impactCol, 9);
+                  queueRing(sb.x, sb.y, impactCol, 1.8);
+
+                  if (sb.weaponKind === 'frost_spear') {
+                    mon.slowUntil = now + 2200;
+                  } else if (sb.weaponKind === 'ice_axe') {
+                    mon.slowUntil = now + 2200;
+                    queueBurst(sb.x, sb.y, '#22d3ee', 12);
+                    queueRing(sb.x, sb.y, '#22d3ee', 2.4);
+                    for (let spIdx = s.monsters.length - 1; spIdx >= 0; spIdx--) {
+                      const other = s.monsters[spIdx];
+                      if (other.id === mon.id) continue;
+                      if (Math.hypot(other.x - sb.x, other.y - sb.y) <= 70) {
+                        other.hp = Math.max(0, other.hp - 34);
+                        other.slowUntil = now + 2200;
+                        other.hitUntil = now + 180;
+                        if (other.hp <= 0) {
+                          awardMonsterDefeat(other, player, shooter);
+                          s.monsters.splice(spIdx, 1);
+                          if (spIdx < mIdx) mIdx -= 1;
+                        }
+                      }
+                    }
+                  } else if (sb.weaponKind === 'cryo_cannon') {
+                    mon.slowUntil = now + 2200;
+                    queueBurst(sb.x, sb.y, '#38bdf8', 16);
+                    queueRing(sb.x, sb.y, '#38bdf8', 3.4);
+                    for (let spIdx = s.monsters.length - 1; spIdx >= 0; spIdx--) {
+                      const other = s.monsters[spIdx];
+                      if (other.id === mon.id) continue;
+                      if (Math.hypot(other.x - sb.x, other.y - sb.y) <= 115) {
+                        other.hp = Math.max(0, other.hp - 34);
+                        other.slowUntil = now + 2200;
+                        other.hitUntil = now + 180;
+                        if (other.hp <= 0) {
+                          awardMonsterDefeat(other, player, shooter);
+                          s.monsters.splice(spIdx, 1);
+                          if (spIdx < mIdx) mIdx -= 1;
+                        }
+                      }
+                    }
+                  }
+
+                  if (shooter) {
+                    shooter.score += sb.weaponKind ? 34 : 22;
+                    if (!shooter.isBot) s.hitsLanded += 1;
+                  }
+                  if (mon.hp <= 0) {
+                    awardMonsterDefeat(mon, player, shooter);
+                    s.monsters.splice(mIdx, 1);
+                  }
+
+                  if (sb.piercing) {
+                    sb.hitIds = sb.hitIds || [];
+                    sb.hitIds.push(mon.id);
+                    const maxPierce = sb.weaponKind === 'frost_spear' ? 5 : 3;
+                    if (sb.hitIds.length >= maxPierce) {
+                      hit = true;
+                      break;
+                    }
+                  } else {
+                    hit = true;
+                    break;
+                  }
+                }
               }
             }
 
@@ -3503,13 +4477,15 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               }
             }
 
-            if (!hit) {
+            if (!hit && !sb.isEnemyOrb) {
               for (let c = s.crates.length - 1; c >= 0; c--) {
                 const cr = s.crates[c];
                 if (Math.hypot(cr.x - sb.x, cr.y - sb.y) < (cr.radius || 21) + 6) {
                   hit = true;
                   const shooter = s.entities.find((e) => e.id === sb.ownerId) || null;
-                  damageDestructibleProp(c, 1, shooter);
+                  const propHitDmg =
+                    sb.weaponKind === 'ice_axe' || sb.weaponKind === 'frost_spear' ? 2 : 1;
+                  damageDestructibleProp(c, propHitDmg, shooter);
                   break;
                 }
               }
@@ -3520,14 +4496,19 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             }
           }
 
-          const player = s.entities.find((e) => e.id === 'player');
           if (player) {
+            const squadAliveCount = s.entities.filter((e) => !e.eliminated).length;
             hudSyncAccum += dt;
             if (hudSyncAccum > 0.08) {
               hudSyncAccum = 0;
               const distWell = Math.hypot(player.x - ARENA_CENTER_X, player.y - ARENA_CENTER_Y);
               const blessingLeft =
                 s.blessingUntil > now ? Math.ceil((s.blessingUntil - now) / 1000) : 0;
+              const hasActiveWep =
+                player.weaponKind &&
+                player.weaponKind !== 'standard' &&
+                (player.weaponAmmo || 0) > 0 &&
+                now < (player.weaponUntil || 0);
               setHud((prev) => ({
                 ...prev,
                 score: player.score,
@@ -3537,7 +4518,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 hp: player.hp,
                 maxHp: player.maxHp,
                 timeLeft: Math.ceil(s.timeLeft),
-                wave: Math.max(1, Math.ceil(s.elapsed / 25)),
+                wave: 1 + relicsDoneNow,
                 shieldSec: player.shieldUntil > now ? Math.ceil((player.shieldUntil - now) / 1000) : 0,
                 boostSec: player.boostUntil > now ? Math.ceil((player.boostUntil - now) / 1000) : 0,
                 magnetSec: player.magnetUntil > now ? Math.ceil((player.magnetUntil - now) / 1000) : 0,
@@ -3549,11 +4530,39 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 nearWell: distWell <= WELL_RITUAL_RADIUS,
                 blessingLeft,
                 ritualReady: now >= s.ritualCooldownUntil,
+                relicsDone: relicsDoneNow,
+                totalRelics: s.relics.length,
+                escapeOpen: s.escapePortal.open,
+                extractPct: Math.round(s.escapePortal.extractProgress * 100),
+                relicChargePct: Math.round(s.activeRelicCharge * 100),
+                squadAlive: squadAliveCount,
+                squadTotal: s.entities.length,
+                monstersAlive: s.monsters.length,
+                monstersSlain: s.monstersSlain,
+                activeWeapon: hasActiveWep ? player.weaponKind! : 'standard',
+                weaponAmmo: hasActiveWep ? player.weaponAmmo || 0 : 0,
+                weaponSec: hasActiveWep
+                  ? Math.max(1, Math.ceil(((player.weaponUntil || 0) - now) / 1000))
+                  : 0,
               }));
               setMinimapData({
                 dots: [
                   { x: ARENA_CENTER_X, y: ARENA_CENTER_Y, kind: 'well' },
-                  ...(s.beacon.active ? [{ x: s.beacon.x, y: s.beacon.y, kind: 'beacon' as const }] : []),
+                  ...s.relics.map((r) => ({
+                    x: r.x,
+                    y: r.y,
+                    kind: 'relic' as const,
+                    completed: r.completed,
+                  })),
+                  ...(s.escapePortal.open
+                    ? [{ x: s.escapePortal.x, y: s.escapePortal.y, kind: 'escape' as const }]
+                    : []),
+                  ...s.weaponPods.map((wp) => ({
+                    x: wp.x,
+                    y: wp.y,
+                    kind: 'weapon' as const,
+                    color: getQuestWeaponSpec(wp.kind).colorHex,
+                  })),
                   ...s.crates.map((cr) => ({ x: cr.x, y: cr.y, kind: 'crate' as const })),
                   ...s.pickups
                     .filter((pk) => pk.kind !== 'drop' && pk.kind !== 'gem')
@@ -3563,13 +4572,20 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                       kind: 'powerup' as const,
                       color: getPowerUpRadarColor(pk.kind),
                     })),
+                  ...s.monsters.map((m) => ({
+                    x: m.x,
+                    y: m.y,
+                    kind: 'monster' as const,
+                    label: m.kind,
+                    color: m.kind === 'boss' ? '#f59e0b' : m.kind === 'wraith' ? '#e879f9' : '#f43f5e',
+                  })),
                   ...s.entities
                     .filter((e) => !e.eliminated)
                     .map((e) => ({
                       x: e.x,
                       y: e.y,
-                      kind: (e.isBot ? 'bot' : 'player') as MiniMapDot['kind'],
-                      color: getYetiColorway(e.colorway).accentHex,
+                      kind: (e.isBot ? 'ally' : 'player') as MiniMapDot['kind'],
+                      color: e.isBot ? '#34d399' : getYetiColorway(e.colorway).accentHex,
                     })),
                 ],
                 ringRadius: s.ringRadius,
@@ -3579,9 +4595,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               });
             }
 
-            const botsAlive = s.entities.filter((e) => e.isBot && !e.eliminated).length;
-            if (player.eliminated || s.timeLeft <= 0 || botsAlive === 0) {
-              if (botsAlive === 0 && !player.eliminated) player.score += 150;
+            if (!s.escaped && (player.eliminated || s.timeLeft <= 0)) {
               finishSoloMatch(player);
             }
           }
@@ -3608,10 +4622,14 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       const showYetis = gm !== 'car_racing';
       const showKarts = gm === 'car_racing';
       const showShooterTargets = gm === 'shooting';
+      const showSurvivalQuest = gm === 'survival' && !tunnelSnap;
 
       actorsGroup.visible = showYetis;
       kartsGroup.visible = showKarts;
       shooterGroup.visible = showShooterTargets;
+      monstersGroup.visible = showSurvivalQuest;
+      questGroup.visible = showSurvivalQuest;
+      weaponPodGroup.visible = showSurvivalQuest;
       cratesGroup.visible = gm === 'survival' || gm === 'shooting';
       hazardsGroup.visible = gm === 'survival';
       aimReticle.visible = gm === 'shooting' && gameStateRef.current === 'PLAYING';
@@ -3621,7 +4639,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       }
 
       const activeBeacon = tunnelSnap ? tunnelSnap.beacon : s.beacon;
-      beaconGroup.visible = gm === 'survival' && activeBeacon.active;
+      beaconGroup.visible = gm === 'survival' && Boolean(tunnelSnap) && activeBeacon.active;
       if (beaconGroup.visible) {
         beaconGroup.position.set(toWorldX(activeBeacon.x), 0, toWorldZ(activeBeacon.y));
         beaconRing.scale.setScalar(1 + Math.sin(elapsedTime * 5) * 0.08);
@@ -3637,6 +4655,16 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           shooterGroup.remove('group' in sm ? sm.group : sm.root);
         }
         shooterMeshes.clear();
+        for (const mr of monsterRigs.values()) monstersGroup.remove(mr.root);
+        monsterRigs.clear();
+        for (const rr of relicRigs.values()) questGroup.remove(rr.root);
+        relicRigs.clear();
+        for (const wr of weaponPodRigs.values()) weaponPodGroup.remove(wr.root);
+        weaponPodRigs.clear();
+        if (escapePortalRig) {
+          questGroup.remove(escapePortalRig.root);
+          escapePortalRig = null;
+        }
         rigVersionDirtyRef.current = false;
       }
 
@@ -3675,6 +4703,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               isMe: p.id === tunnelPlayerIdRef.current,
               emote: (p.emote || 'none') as YetiEmoteKind,
               emoteUntil: p.emoteUntil || 0,
+              weaponKind: 'standard' as 'standard' | QuestWeaponKind,
             }))
           : s.entities.map((e) => ({
               id: e.id,
@@ -3701,6 +4730,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               isMe: e.id === 'player',
               emote: e.emote,
               emoteUntil: e.emoteUntil,
+              weaponKind: (e.weaponKind || 'standard') as 'standard' | QuestWeaponKind,
             }));
 
         const seenActorIds = new Set<string>();
@@ -3729,6 +4759,35 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
           rig.root.visible = !act.eliminated;
           if (act.eliminated) continue;
+
+          if (act.isMe && gm === 'survival' && rig.weaponGroup) {
+            const desiredWep = act.weaponKind || 'standard';
+            if (rig.root.userData.equippedPodWeapon !== desiredWep) {
+              rig.root.userData.equippedPodWeapon = desiredWep;
+              for (let cIdx = rig.weaponGroup.children.length - 1; cIdx >= 0; cIdx--) {
+                const ch = rig.weaponGroup.children[cIdx];
+                if (ch.userData.isPodWeapon) {
+                  ch.traverse((obj) => {
+                    const m = obj as THREE.Mesh;
+                    if (m.geometry) m.geometry.dispose();
+                    if (m.material) {
+                      if (Array.isArray(m.material)) m.material.forEach((mt) => mt.dispose());
+                      else m.material.dispose();
+                    }
+                  });
+                  rig.weaponGroup.remove(ch);
+                } else {
+                  ch.visible = desiredWep === 'standard';
+                }
+              }
+              if (desiredWep !== 'standard') {
+                const held = buildHeldWeaponMesh(desiredWep);
+                held.userData.isPodWeapon = true;
+                rig.weaponGroup.add(held);
+              }
+            }
+            rig.weaponGroup.rotation.x = act.throwPulse > 0 ? -1.15 : 0;
+          }
 
           const wx = toWorldX(act.x);
           const wz = toWorldZ(act.y);
@@ -3887,6 +4946,108 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         }
       }
 
+      if (showSurvivalQuest) {
+        const accentHex = getMapSpec(mapIdRef.current).accentHex;
+
+        // Sync 3 Waystone Relics
+        const seenRelicIds = new Set<string>();
+        for (const rel of s.relics) {
+          seenRelicIds.add(rel.id);
+          let rRig = relicRigs.get(rel.id);
+          if (!rRig) {
+            rRig = buildWaystoneRelicMesh(accentHex);
+            relicRigs.set(rel.id, rRig);
+            questGroup.add(rRig.root);
+          }
+          rRig.root.position.set(toWorldX(rel.x), 0, toWorldZ(rel.y));
+          animateWaystoneRelic(rRig, {
+            charge: rel.charge,
+            completed: rel.completed,
+            dt,
+            elapsedTime,
+          });
+        }
+        for (const [id, rRig] of relicRigs.entries()) {
+          if (!seenRelicIds.has(id)) {
+            questGroup.remove(rRig.root);
+            relicRigs.delete(id);
+          }
+        }
+
+        // Sync Escape Portal Gate
+        if (!escapePortalRig) {
+          escapePortalRig = buildEscapePortalMesh();
+          questGroup.add(escapePortalRig.root);
+        }
+        escapePortalRig.root.position.set(toWorldX(s.escapePortal.x), 0, toWorldZ(s.escapePortal.y));
+        animateEscapePortal(escapePortalRig, {
+          open: s.escapePortal.open,
+          extractProgress: s.escapePortal.extractProgress,
+          dt,
+          elapsedTime,
+        });
+
+        // Sync Attacking Quest Monsters
+        const seenMonsterIds = new Set<string>();
+        for (const mon of s.monsters) {
+          seenMonsterIds.add(mon.id);
+          let mRig = monsterRigs.get(mon.id);
+          if (!mRig) {
+            mRig = buildQuestMonsterMesh(mon.kind, accentHex);
+            monsterRigs.set(mon.id, mRig);
+            monstersGroup.add(mRig.root);
+          }
+          mRig.root.position.set(toWorldX(mon.x), 0, toWorldZ(mon.y));
+          const targetYaw = Math.atan2(mon.facingX, mon.facingY);
+          let diff = targetYaw - mRig.root.rotation.y;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          mRig.root.rotation.y += diff * Math.min(1, dt * 12);
+
+          const mSpd = Math.hypot(mon.vx, mon.vy);
+          animateQuestMonster(mRig, {
+            speed: mSpd,
+            dt,
+            elapsedTime,
+            attacking: mon.attackCd > 0.72,
+          });
+          updateHealthBar3D(mRig.hpBar, mon.hp, mon.maxHp, camera);
+        }
+        for (const [id, mRig] of monsterRigs.entries()) {
+          if (!seenMonsterIds.has(id)) {
+            monstersGroup.remove(mRig.root);
+            monsterRigs.delete(id);
+          }
+        }
+
+        // Sync Strategic Quest Weapon Pods
+        const seenPodIds = new Set<string>();
+        for (const wp of s.weaponPods) {
+          seenPodIds.add(wp.id);
+          let wRig = weaponPodRigs.get(wp.id);
+          if (!wRig) {
+            wRig = buildWeaponPodMesh(wp.kind);
+            weaponPodRigs.set(wp.id, wRig);
+            weaponPodGroup.add(wRig.root);
+          }
+          wRig.root.position.set(toWorldX(wp.x), 0, toWorldZ(wp.y));
+          animateWeaponPod(wRig, dt, elapsedTime);
+        }
+        for (const [id, wRig] of weaponPodRigs.entries()) {
+          if (!seenPodIds.has(id)) {
+            wRig.root.traverse((obj) => {
+              const mesh = obj as THREE.Mesh;
+              if (mesh.geometry) mesh.geometry.dispose();
+              const mat = mesh.material;
+              if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+              else if (mat) mat.dispose();
+            });
+            weaponPodGroup.remove(wRig.root);
+            weaponPodRigs.delete(id);
+          }
+        }
+      }
+
       // Sync Pickups (including Beach-Buggy respawning orbs & new power-ups)
       const activePickups = tunnelSnap ? tunnelSnap.pickups : s.pickups;
       const seenPickupIds = new Set<string>();
@@ -4004,24 +5165,66 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         }
       }
 
-      // Sync Snowballs / Blaster Bolts
+      // Sync Snowballs / Blaster Bolts / Quest Heavy Weapon Projectiles
       const activeSnowballs = tunnelSnap ? tunnelSnap.snowballs : s.snowballs;
       const seenBallIds = new Set<string>();
       for (const sb of activeSnowballs) {
         seenBallIds.add(sb.id);
         let mesh = snowballMeshes.get(sb.id);
+        const sbTyped = sb as Snowball;
         if (!mesh) {
-          const sbTyped = sb as Snowball;
-          if (sbTyped.isEnemyOrb) mesh = new THREE.Mesh(blasterBoltGeo, enemyOrbMat);
-          else if (sbTyped.isBlaster) mesh = new THREE.Mesh(blasterBoltGeo, blasterBoltMat);
-          else mesh = new THREE.Mesh(snowballGeo, snowballMat);
-          mesh.castShadow = !isSoftwareGl;
+          if (sbTyped.isEnemyOrb) {
+            mesh = new THREE.Mesh(blasterBoltGeo, enemyOrbMat);
+          } else if (sbTyped.weaponKind === 'ice_axe') {
+            const axeProj = new THREE.Group();
+            const shaft = new THREE.Mesh(axeShaftGeo, axeHaftMat);
+            const blade = new THREE.Mesh(axeBladeGeo, axeBoltMat);
+            blade.position.z = 0.22;
+            axeProj.add(shaft, blade);
+            mesh = axeProj;
+          } else if (sbTyped.weaponKind === 'frost_spear') {
+            const spearProj = new THREE.Group();
+            const shaft = new THREE.Mesh(spearShaftGeo, axeHaftMat);
+            const head = new THREE.Mesh(spearHeadGeo, spearBoltMat);
+            head.position.z = 0.62;
+            spearProj.add(shaft, head);
+            spearProj.rotation.y = Math.atan2(sb.vx, sb.vy);
+            mesh = spearProj;
+          } else if (sbTyped.weaponKind === 'cryo_cannon') {
+            mesh = new THREE.Mesh(snowballGeo, cryoBoltMat);
+            mesh.scale.setScalar(1.55);
+          } else if (sbTyped.weaponKind === 'plasma_glaive') {
+            mesh = new THREE.Mesh(glaiveDiscGeo, glaiveBoltMat);
+          } else if (sbTyped.weaponKind === 'rail_scatter') {
+            mesh = new THREE.Mesh(railSlugGeo, railBoltMat);
+            mesh.rotation.y = Math.atan2(sb.vx, sb.vy);
+          } else if (sbTyped.isBlaster) {
+            mesh = new THREE.Mesh(blasterBoltGeo, blasterBoltMat);
+          } else {
+            mesh = new THREE.Mesh(snowballGeo, snowballMat);
+          }
+          mesh.traverse((obj) => {
+            if ((obj as THREE.Mesh).isMesh) {
+              obj.castShadow = !isSoftwareGl;
+            }
+          });
           snowballMeshes.set(sb.id, mesh);
           snowballsGroup.add(mesh);
         }
         mesh.position.set(toWorldX(sb.x), 0.78, toWorldZ(sb.y));
-        mesh.rotation.x += dt * 8;
-        mesh.rotation.y += dt * 6;
+        if (sbTyped.weaponKind === 'plasma_glaive') {
+          mesh.rotation.y += dt * 16;
+        } else if (sbTyped.weaponKind === 'ice_axe') {
+          mesh.rotation.y += dt * 18;
+        } else if (sbTyped.weaponKind === 'frost_spear' || sbTyped.weaponKind === 'rail_scatter') {
+          mesh.rotation.y = Math.atan2(sb.vx, sb.vy);
+          if (sbTyped.weaponKind === 'frost_spear') {
+            mesh.rotation.z += dt * 10;
+          }
+        } else {
+          mesh.rotation.x += dt * 8;
+          mesh.rotation.y += dt * 6;
+        }
       }
       for (const [id, mesh] of snowballMeshes.entries()) {
         if (!seenBallIds.has(id)) {
@@ -4218,14 +5421,59 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       pillarMat.dispose();
       barrelMat.dispose();
       barrelGlowMat.dispose();
+      glaiveDiscGeo.dispose();
+      railSlugGeo.dispose();
+      axeShaftGeo.dispose();
+      axeBladeGeo.dispose();
+      spearShaftGeo.dispose();
+      spearHeadGeo.dispose();
+      cryoBoltMat.dispose();
+      glaiveBoltMat.dispose();
+      railBoltMat.dispose();
+      axeBoltMat.dispose();
+      axeHaftMat.dispose();
+      spearBoltMat.dispose();
       burstGeo.dispose();
       shockRingGeo.dispose();
       burstMatCache.forEach((mat) => mat.dispose());
       burstMatCache.clear();
+      monstersGroup.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        const mat = mesh.material;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+        else if (mat) mat.dispose();
+      });
+      questGroup.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        const mat = mesh.material;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+        else if (mat) mat.dispose();
+      });
+      weaponPodGroup.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        const mat = mesh.material;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+        else if (mat) mat.dispose();
+      });
+      actorsGroup.traverse((obj) => {
+        if (obj.userData?.isPodWeapon) {
+          obj.traverse((child) => {
+            const mesh = child as THREE.Mesh;
+            if (mesh.geometry) mesh.geometry.dispose();
+            const mat = mesh.material;
+            if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+            else if (mat) mat.dispose();
+          });
+        }
+      });
       envTex.dispose();
       renderer.dispose();
     };
   }, [
+    awardMonsterDefeat,
     damageDestructibleProp,
     finishSoloMatch,
     flashBanner,
@@ -4233,7 +5481,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     queueRing,
     spawnCrate,
     spawnPickup,
+    spawnQuestMonster,
     spawnShooterWave,
+    spawnWeaponLootDrop,
     triggerThrowOrFire,
     triggerWellRitualBlessing,
     updateTaskProgress,
@@ -4341,6 +5591,43 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 </div>
               )}
 
+              {selectedGameMode === 'survival' && hud.activeWeapon !== 'standard' && (() => {
+                const wepSpec = getQuestWeaponSpec(hud.activeWeapon);
+                const badgeCls =
+                  hud.activeWeapon === 'ice_axe'
+                    ? 'border-cyan-400/60 bg-cyan-500/20 text-cyan-200'
+                    : hud.activeWeapon === 'frost_spear'
+                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                    : hud.activeWeapon === 'cryo_cannon'
+                    ? 'border-sky-400/55 bg-sky-500/20 text-sky-200'
+                    : hud.activeWeapon === 'plasma_glaive'
+                    ? 'border-fuchsia-400/55 bg-fuchsia-500/20 text-fuchsia-200'
+                    : 'border-amber-400/55 bg-amber-500/20 text-amber-200';
+                return (
+                  <div
+                    className={`flex items-center justify-between gap-2 rounded border px-2 py-1 text-[10px] font-bold uppercase tracking-wider tabular-nums ${badgeCls}`}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {hud.activeWeapon === 'ice_axe' ? (
+                        <Axe className="h-3 w-3" />
+                      ) : hud.activeWeapon === 'frost_spear' ? (
+                        <Swords className="h-3 w-3" />
+                      ) : hud.activeWeapon === 'cryo_cannon' ? (
+                        <Snowflake className="h-3 w-3" />
+                      ) : hud.activeWeapon === 'plasma_glaive' ? (
+                        <Sparkles className="h-3 w-3" />
+                      ) : (
+                        <Crosshair className="h-3 w-3" />
+                      )}
+                      {wepSpec.shortLabel}
+                    </span>
+                    <span className="font-mono text-white">
+                      {hud.weaponAmmo}× · {hud.weaponSec}s
+                    </span>
+                  </div>
+                );
+              })()}
+
               {(hud.shieldSec > 0 || hud.boostSec > 0 || hud.magnetSec > 0 || hud.tripleSec > 0) && (
                 <div className="flex flex-wrap gap-1 pt-0.5">
                   {hud.shieldSec > 0 && (
@@ -4418,13 +5705,22 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 </>
               ) : (
                 <>
+                  <span
+                    className={`font-bold ${
+                      hud.escapeOpen ? 'text-emerald-300' : 'text-amber-300'
+                    }`}
+                  >
+                    {hud.escapeOpen
+                      ? 'ESCAPE OPEN!'
+                      : `RELICS ${hud.relicsDone}/${hud.totalRelics}`}
+                  </span>
+                  <span className="inline-flex items-center gap-1 font-bold text-emerald-300">
+                    <Users className="h-3.5 w-3.5" /> {hud.squadAlive}/{hud.squadTotal}
+                  </span>
+                  <span className="font-bold text-rose-300">{hud.monstersSlain} KO</span>
                   <span className="inline-flex items-center gap-1 font-bold text-cyan-200">
                     <Droplets className="h-3.5 w-3.5" /> {hud.wellDrops}
                   </span>
-                  <span className="inline-flex items-center gap-1 font-bold text-sky-200">
-                    <Gem className="h-3.5 w-3.5" /> {hud.frostGems}
-                  </span>
-                  <span className="font-bold text-slate-300">W{hud.wave}</span>
                 </>
               )}
             </div>
@@ -4512,15 +5808,26 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
         {gameState === 'PLAYING' &&
           selectedGameMode === 'survival' &&
-          (hud.blessingLeft > 0 || (hud.nearWell && hud.ritualReady)) && (
+          (hud.extractPct > 0 ||
+            hud.relicChargePct > 0 ||
+            hud.blessingLeft > 0 ||
+            (hud.nearWell && hud.ritualReady)) && (
             <div
-              className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 arcade-hud px-3.5 py-1.5 text-xs font-bold ${
-                hud.blessingLeft > 0
+              className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 arcade-hud px-4 py-2 text-xs font-bold tabular-nums ${
+                hud.extractPct > 0
+                  ? 'border-emerald-400/70 text-emerald-200'
+                  : hud.relicChargePct > 0
+                  ? 'border-amber-400/70 text-amber-200'
+                  : hud.blessingLeft > 0
                   ? 'border-amber-400/60 text-amber-200'
                   : 'border-cyan-400/55 text-cyan-200'
               }`}
             >
-              {hud.blessingLeft > 0
+              {hud.extractPct > 0
+                ? `Escaping Portal · ${hud.extractPct}%`
+                : hud.relicChargePct > 0
+                ? `Awakening Waystone · ${hud.relicChargePct}%`
+                : hud.blessingLeft > 0
                 ? `2× Blessing (${hud.blessingLeft}s)`
                 : 'Near Well: [1] Wave · [2] Dance'}
             </div>
@@ -4597,7 +5904,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                           ? '3 Laps · 4 Checkpoints'
                           : gm.id === 'shooting'
                           ? 'Frost Blaster · Waves'
-                          : 'Snowballs · Well Shrine';
+                          : '5-Yeti Squad · Escape Quest';
                       return (
                         <button
                           key={gm.id}
@@ -4983,6 +6290,33 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             <span className="arcade-kbd">SPACE</span>
           </button>
 
+          {selectedGameMode === 'survival' && (
+            <button
+              type="button"
+              onClick={triggerMelee}
+              disabled={gameState !== 'PLAYING'}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-cyan-500/45 bg-cyan-500/15 px-3 text-xs font-bold text-cyan-200 hover:bg-cyan-500/25 disabled:opacity-45 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              {hud.activeWeapon === 'ice_axe' ? (
+                <>
+                  <Axe className="h-3.5 w-3.5" />
+                  Cleave
+                </>
+              ) : hud.activeWeapon === 'frost_spear' ? (
+                <>
+                  <Swords className="h-3.5 w-3.5" />
+                  Thrust
+                </>
+              ) : (
+                <>
+                  <Swords className="h-3.5 w-3.5" />
+                  Strike
+                </>
+              )}
+              <span className="arcade-kbd">K</span>
+            </button>
+          )}
+
           {selectedGameMode !== 'car_racing' && (
             <button
               type="button"
@@ -4994,6 +6328,16 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 <>
                   <Crosshair className="h-3.5 w-3.5" />
                   Blast
+                </>
+              ) : hud.activeWeapon === 'ice_axe' ? (
+                <>
+                  <Axe className="h-3.5 w-3.5" />
+                  Hurl Axe
+                </>
+              ) : hud.activeWeapon === 'frost_spear' ? (
+                <>
+                  <Swords className="h-3.5 w-3.5" />
+                  Hurl Spear
                 </>
               ) : (
                 <>

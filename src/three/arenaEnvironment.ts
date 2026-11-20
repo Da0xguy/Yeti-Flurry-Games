@@ -4,6 +4,7 @@ import {
   ARENA_CENTER_X,
   ARENA_CENTER_Y,
   getMapObstacles,
+  getRaceTrackObstacles,
   getRaceTrackWaypoints,
   getRunnerRouteWaypoints,
 } from '../data/gameCatalog';
@@ -558,77 +559,94 @@ export function buildArcticEnvironment(
 
     if (obs.kind === 'basalt_pillar') {
       const rockMat = new THREE.MeshStandardMaterial({
-        color: '#262120',
-        roughness: 0.86,
+        color: '#2a2422',
+        roughness: 0.88,
         metalness: 0.14,
       });
       const darkBaseMat = new THREE.MeshStandardMaterial({
-        color: '#171413',
-        roughness: 0.92,
+        color: '#171312',
+        roughness: 0.94,
       });
       const emberMat = new THREE.MeshStandardMaterial({
         color: '#fb923c',
         emissive: '#ea580c',
-        emissiveIntensity: 0.85,
-        roughness: 0.35,
+        emissiveIntensity: 0.9,
+        roughness: 0.32,
       });
       animatedEmbers.push(emberMat);
 
       const plinth = new THREE.Mesh(
-        new THREE.CylinderGeometry(wr * 0.9, wr * 1.05, 0.36, 6),
+        new THREE.CylinderGeometry(wr * 0.95, wr * 1.14, 0.42, 7),
         darkBaseMat
       );
-      plinth.position.y = 0.18;
+      plinth.position.y = 0.21;
       plinth.castShadow = !isSoftwareGl;
       plinth.receiveShadow = true;
 
-      const colH = obs.height * 1.32;
-      const column = new THREE.Mesh(
-        new THREE.CylinderGeometry(wr * 0.66, wr * 0.8, colH, 6),
+      const colH = obs.height * 1.48;
+      // Clustered multi-column volcanic basalt rock formation
+      const mainCol = new THREE.Mesh(
+        new THREE.CylinderGeometry(wr * 0.56, wr * 0.74, colH, 6),
         rockMat
       );
-      column.position.y = colH * 0.5 + 0.12;
-      column.rotation.y = idx * 0.5;
-      column.castShadow = !isSoftwareGl;
-      column.receiveShadow = true;
+      mainCol.position.set(0, colH * 0.5 + 0.16, 0);
+      mainCol.rotation.y = idx * 0.5;
+      mainCol.castShadow = !isSoftwareGl;
+      mainCol.receiveShadow = true;
+
+      const subColA = new THREE.Mesh(
+        new THREE.CylinderGeometry(wr * 0.32, wr * 0.48, colH * 0.68, 6),
+        darkBaseMat
+      );
+      subColA.position.set(-wr * 0.42, colH * 0.34 + 0.12, wr * 0.2);
+      subColA.rotation.z = 0.12;
+      subColA.castShadow = !isSoftwareGl;
+
+      const subColB = new THREE.Mesh(
+        new THREE.CylinderGeometry(wr * 0.28, wr * 0.42, colH * 0.52, 6),
+        rockMat
+      );
+      subColB.position.set(wr * 0.44, colH * 0.26 + 0.12, -wr * 0.24);
+      subColB.rotation.z = -0.15;
+      subColB.castShadow = !isSoftwareGl;
 
       const magmaCollar = new THREE.Mesh(
-        new THREE.TorusGeometry(wr * 0.78, 0.085, 6, 18),
+        new THREE.TorusGeometry(wr * 0.74, 0.085, 6, 18),
         emberMat
       );
       magmaCollar.rotation.x = Math.PI / 2;
-      magmaCollar.position.y = 0.42;
+      magmaCollar.position.y = 0.46;
 
       const emberCrown = new THREE.Mesh(
-        new THREE.CylinderGeometry(wr * 0.46, wr * 0.62, 0.16, 6),
+        new THREE.CylinderGeometry(wr * 0.38, wr * 0.54, 0.18, 6),
         emberMat
       );
-      emberCrown.position.y = colH + 0.14;
+      emberCrown.position.y = colH + 0.18;
 
       const heatRing = new THREE.Mesh(
-        new THREE.RingGeometry(wr * 0.96, wr * 1.1, 20),
+        new THREE.RingGeometry(wr * 0.98, wr * 1.14, 24),
         new THREE.MeshBasicMaterial({
           color: '#fb923c',
           side: THREE.DoubleSide,
           transparent: true,
-          opacity: 0.45,
+          opacity: 0.48,
           depthWrite: false,
         })
       );
       heatRing.rotation.x = -Math.PI / 2;
       heatRing.position.y = 0.025;
 
-      og.add(plinth, column, magmaCollar, emberCrown, heatRing);
+      og.add(plinth, mainCol, subColA, subColB, magmaCollar, emberCrown, heatRing);
     } else if (obs.kind === 'aurora_obelisk') {
       const pedMat = new THREE.MeshStandardMaterial({
         color: '#1e1b4b',
         roughness: 0.55,
-        metalness: 0.28,
+        metalness: 0.32,
       });
       const crystalObsMat = new THREE.MeshPhysicalMaterial({
         color: '#99f6e4',
         emissive: '#8b5cf6',
-        emissiveIntensity: 0.62,
+        emissiveIntensity: 0.65,
         roughness: 0.1,
         metalness: 0.15,
         clearcoat: 1.0,
@@ -636,101 +654,119 @@ export function buildArcticEnvironment(
       const violetRingMat = new THREE.MeshStandardMaterial({
         color: '#c084fc',
         emissive: '#7c3aed',
-        emissiveIntensity: 0.55,
+        emissiveIntensity: 0.58,
         roughness: 0.25,
       });
 
       const base = new THREE.Mesh(
-        new THREE.CylinderGeometry(wr * 0.72, wr * 0.94, 0.34, 8),
+        new THREE.CylinderGeometry(wr * 0.78, wr * 1.02, 0.4, 8),
         pedMat
       );
-      base.position.y = 0.17;
+      base.position.y = 0.2;
       base.castShadow = !isSoftwareGl;
       base.receiveShadow = true;
 
+      // Four carved shrine buttress fins around pedestal
+      for (let f = 0; f < 4; f++) {
+        const ang = (f / 4) * Math.PI * 2 + Math.PI * 0.25;
+        const fin = new THREE.Mesh(new THREE.BoxGeometry(wr * 0.24, 1.15, wr * 0.38), pedMat);
+        fin.position.set(Math.cos(ang) * wr * 0.68, 0.62, Math.sin(ang) * wr * 0.68);
+        fin.rotation.y = -ang;
+        fin.castShadow = !isSoftwareGl;
+        og.add(fin);
+      }
+
       const runeRing = new THREE.Mesh(
-        new THREE.RingGeometry(wr * 0.92, wr * 1.08, 24),
+        new THREE.RingGeometry(wr * 0.94, wr * 1.1, 24),
         new THREE.MeshBasicMaterial({
           color: '#2dd4bf',
           side: THREE.DoubleSide,
           transparent: true,
-          opacity: 0.55,
+          opacity: 0.58,
           depthWrite: false,
         })
       );
       runeRing.rotation.x = -Math.PI / 2;
       runeRing.position.y = 0.026;
 
-      const crystalGeo = new THREE.OctahedronGeometry(wr * 0.58, 0);
-      crystalGeo.scale(0.85, obs.height * 0.85, 0.85);
+      const crystalGeo = new THREE.OctahedronGeometry(wr * 0.56, 0);
+      crystalGeo.scale(0.88, obs.height * 0.96, 0.88);
       const obeliskCrystal = new THREE.Mesh(crystalGeo, crystalObsMat);
-      const baseY = 1.48;
+      const baseY = 1.72;
       obeliskCrystal.position.y = baseY;
       obeliskCrystal.castShadow = !isSoftwareGl;
       animatedObelisks.push({ mesh: obeliskCrystal, baseY, phase: idx * 1.1 });
 
       const haloTorus = new THREE.Mesh(
-        new THREE.TorusGeometry(wr * 0.74, 0.048, 6, 20),
+        new THREE.TorusGeometry(wr * 0.78, 0.052, 6, 22),
         violetRingMat
       );
       haloTorus.rotation.x = Math.PI / 2;
-      haloTorus.position.y = 0.44;
+      haloTorus.position.y = 0.52;
 
       og.add(base, runeRing, obeliskCrystal, haloTorus);
     } else {
-      // glacier_well: Sculpted multi-spire glacial iceberg
+      // glacier_well: Multi-spire faceted glacial iceberg massif with snowbank shelf
       const snowMat = new THREE.MeshStandardMaterial({
-        color: '#f1f5f9',
-        roughness: 0.9,
+        color: '#e2e8f0',
+        roughness: 0.88,
       });
       const glacierMat = new THREE.MeshPhysicalMaterial({
         color: '#7dd3fc',
         emissive: '#0284c7',
-        emissiveIntensity: 0.28,
+        emissiveIntensity: 0.3,
         roughness: 0.14,
-        metalness: 0.06,
+        metalness: 0.08,
         clearcoat: 1.0,
       });
 
       const skirt = new THREE.Mesh(
-        new THREE.CylinderGeometry(wr * 0.86, wr * 1.04, 0.34, 7),
+        new THREE.CylinderGeometry(wr * 0.88, wr * 1.08, 0.38, 8),
         snowMat
       );
-      skirt.position.y = 0.17;
+      skirt.position.y = 0.19;
       skirt.castShadow = !isSoftwareGl;
       skirt.receiveShadow = true;
 
       const mainSpire = new THREE.Mesh(
-        new THREE.ConeGeometry(wr * 0.7, obs.height * 1.45, 5),
+        new THREE.ConeGeometry(wr * 0.66, obs.height * 1.62, 6),
         glacierMat
       );
-      mainSpire.position.set(0, obs.height * 0.72 + 0.18, 0);
+      mainSpire.position.set(0, obs.height * 0.81 + 0.18, 0);
       mainSpire.rotation.y = idx * 0.8;
       mainSpire.castShadow = !isSoftwareGl;
       mainSpire.receiveShadow = true;
 
-      const sideShard = new THREE.Mesh(
-        new THREE.ConeGeometry(wr * 0.4, obs.height * 0.95, 5),
-        glacierMat
-      );
-      sideShard.position.set(wr * 0.32, obs.height * 0.48 + 0.15, wr * 0.16);
-      sideShard.rotation.z = -0.26;
-      sideShard.castShadow = !isSoftwareGl;
+      const shardConfigs = [
+        { x: wr * 0.36, z: wr * 0.18, s: 0.68, rz: -0.28, rx: 0.14 },
+        { x: -wr * 0.34, z: -wr * 0.22, s: 0.56, rz: 0.26, rx: -0.18 },
+        { x: -wr * 0.12, z: wr * 0.4, s: 0.48, rz: 0.12, rx: 0.28 },
+      ];
+      shardConfigs.forEach((sc) => {
+        const shard = new THREE.Mesh(
+          new THREE.ConeGeometry(wr * 0.42 * sc.s, obs.height * 1.12 * sc.s, 5),
+          glacierMat
+        );
+        shard.position.set(sc.x, obs.height * 0.52 * sc.s + 0.18, sc.z);
+        shard.rotation.set(sc.rx, idx, sc.rz);
+        shard.castShadow = !isSoftwareGl;
+        og.add(shard);
+      });
 
       const frostHalo = new THREE.Mesh(
-        new THREE.RingGeometry(wr * 0.96, wr * 1.1, 24),
+        new THREE.RingGeometry(wr * 0.98, wr * 1.12, 24),
         new THREE.MeshBasicMaterial({
           color: '#38bdf8',
           side: THREE.DoubleSide,
           transparent: true,
-          opacity: 0.42,
+          opacity: 0.45,
           depthWrite: false,
         })
       );
       frostHalo.rotation.x = -Math.PI / 2;
       frostHalo.position.y = 0.025;
 
-      og.add(skirt, mainSpire, sideShard, frostHalo);
+      og.add(skirt, mainSpire, frostHalo);
     }
 
     obstaclesGroup.add(og);
@@ -1183,6 +1219,70 @@ export function buildArcticEnvironment(
         pad.position.set((wp.x - ARENA_CENTER_X) / 25, 0.045, (wp.y - ARENA_CENTER_Y) / 25);
         group.add(pad);
       }
+    });
+
+    // Real 3D Trackside Boulders & Chicane Cryo Pylons along the racing circuit
+    const raceObsRockMat = new THREE.MeshStandardMaterial({
+      color: mapId === 'volcanic_springs' ? '#292524' : '#334155',
+      roughness: 0.9,
+      metalness: 0.12,
+    });
+    const raceObsPylonMat = new THREE.MeshStandardMaterial({
+      color: '#1e293b',
+      emissive: mapId === 'volcanic_springs' ? '#f97316' : '#f43f5e',
+      emissiveIntensity: 0.65,
+      roughness: 0.3,
+      metalness: 0.45,
+    });
+    const raceObsWarnMat = new THREE.MeshBasicMaterial({
+      color: '#fbbf24',
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+    });
+
+    getRaceTrackObstacles(mapId).forEach((ro, rIdx) => {
+      const wr = ro.radius / 25;
+      const rg = new THREE.Group();
+      rg.position.set((ro.x - ARENA_CENTER_X) / 25, 0, (ro.y - ARENA_CENTER_Y) / 25);
+
+      const warnRing = new THREE.Mesh(
+        new THREE.RingGeometry(wr * 0.88, wr * 1.06, 20),
+        raceObsWarnMat
+      );
+      warnRing.rotation.x = -Math.PI / 2;
+      warnRing.position.y = 0.046;
+      rg.add(warnRing);
+
+      if (ro.kind === 'rock') {
+        const boulder = new THREE.Mesh(new THREE.DodecahedronGeometry(wr * 0.78, 0), raceObsRockMat);
+        boulder.position.y = wr * 0.56;
+        boulder.rotation.set(rIdx * 0.4, rIdx * 1.1, 0.2);
+        boulder.scale.set(1.1, 0.92, 1.0);
+        boulder.castShadow = !isSoftwareGl;
+        boulder.receiveShadow = true;
+        const sideBoulder = new THREE.Mesh(new THREE.DodecahedronGeometry(wr * 0.42, 0), raceObsRockMat);
+        sideBoulder.position.set(wr * 0.42, wr * 0.28, wr * 0.22);
+        sideBoulder.castShadow = !isSoftwareGl;
+        rg.add(boulder, sideBoulder);
+      } else {
+        const plinth = new THREE.Mesh(
+          new THREE.CylinderGeometry(wr * 0.75, wr * 0.9, 0.35, 8),
+          raceObsRockMat
+        );
+        plinth.position.y = 0.175;
+        plinth.castShadow = !isSoftwareGl;
+        const spire = new THREE.Mesh(
+          new THREE.ConeGeometry(wr * 0.52, 1.85, 6),
+          raceObsPylonMat
+        );
+        spire.position.y = 1.2;
+        spire.castShadow = !isSoftwareGl;
+        rg.add(plinth, spire);
+      }
+
+      group.add(rg);
     });
   }
 

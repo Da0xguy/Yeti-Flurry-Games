@@ -62,7 +62,7 @@ export const ArenaGameOverOverlay: React.FC<ArenaGameOverOverlayProps> = ({
               ) : isWinner ? (
                 <span className="inline-flex items-center gap-1 text-amber-300">
                   <Trophy className="h-3.5 w-3.5" />
-                  #1 Victory
+                  {summary.gameMode === 'survival' ? 'Escaped Alive' : '#1 Victory'}
                 </span>
               ) : null}
               <span className="text-sky-300">
@@ -74,7 +74,15 @@ export const ArenaGameOverOverlay: React.FC<ArenaGameOverOverlayProps> = ({
               id="arena-gameover-title"
               className="title-3d-game-sm text-3xl sm:text-4xl leading-none pt-0.5"
             >
-              {lifeDepleted ? 'Game Over' : isWinner ? 'Victory!' : 'Run Complete'}
+              {lifeDepleted
+                ? summary.gameMode === 'survival'
+                  ? 'Quest Failed'
+                  : 'Game Over'
+                : isWinner
+                ? summary.gameMode === 'survival'
+                  ? 'Quest Escaped!'
+                  : 'Victory!'
+                : 'Run Complete'}
             </h3>
           </div>
 

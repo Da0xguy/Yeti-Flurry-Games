@@ -7,12 +7,18 @@ import {
   ARENA_W,
   getMapObstacles,
   getMapSpec,
+  getRaceTrackObstacles,
   getRaceTrackWaypoints,
 } from '../data/gameCatalog';
 
 export type MiniMapDotKind =
   | 'player'
   | 'bot'
+  | 'ally'
+  | 'monster'
+  | 'relic'
+  | 'escape'
+  | 'weapon'
   | 'enemy'
   | 'bullseye'
   | 'powerup'
@@ -26,6 +32,7 @@ export interface MiniMapDot {
   kind: MiniMapDotKind;
   color?: string;
   label?: string;
+  completed?: boolean;
 }
 
 interface ArenaMiniMapProps {
@@ -55,6 +62,7 @@ export const ArenaMiniMap: React.FC<ArenaMiniMapProps> = ({
 }) => {
   const mapSpec = getMapSpec(mapId);
   const obstacles = useMemo(() => getMapObstacles(mapId), [mapId]);
+  const raceObstacles = useMemo(() => getRaceTrackObstacles(mapId), [mapId]);
   const waypoints = useMemo(() => getRaceTrackWaypoints(mapId), [mapId]);
 
   const raceBounds = useMemo(() => {
@@ -136,6 +144,22 @@ export const ArenaMiniMap: React.FC<ArenaMiniMapProps> = ({
                 strokeWidth={2.2}
                 strokeLinejoin="round"
               />
+
+              {/* Trackside Rock & Cryo Pylon Obstacles */}
+              {raceObstacles.map((ro) => {
+                const p = mapPoint(ro.x, ro.y);
+                return (
+                  <circle
+                    key={ro.id}
+                    cx={p.cx}
+                    cy={p.cy}
+                    r={2.1}
+                    fill={ro.kind === 'rock' ? '#94a3b8' : '#fb7185'}
+                    stroke="#061120"
+                    strokeWidth={0.6}
+                  />
+                );
+              })}
 
               {/* Boost Pads */}
               {waypoints.map((w, idx) => {
@@ -321,9 +345,16 @@ export const ArenaMiniMap: React.FC<ArenaMiniMapProps> = ({
             );
           })()}
 
-          {/* Objectives: Central Well, Active Beacon, Crates & Power-Ups */}
+          {/* Objectives: Central Well, Active Beacon, Relics, Escape Portal, Crates & Power-Ups */}
           {dots.map((d, i) => {
-            if (d.kind === 'player' || d.kind === 'bot' || d.kind === 'enemy' || d.kind === 'bullseye') {
+            if (
+              d.kind === 'player' ||
+              d.kind === 'bot' ||
+              d.kind === 'ally' ||
+              d.kind === 'monster' ||
+              d.kind === 'enemy' ||
+              d.kind === 'bullseye'
+            ) {
               return null;
             }
             const p = mapPoint(d.x, d.y);
@@ -332,6 +363,34 @@ export const ArenaMiniMap: React.FC<ArenaMiniMapProps> = ({
                 <g key={`obj_${i}`}>
                   <circle cx={p.cx} cy={p.cy} r={6.2} fill="#22d3ee" fillOpacity={0.22} stroke="#67e8f9" strokeWidth={1.1} />
                   <circle cx={p.cx} cy={p.cy} r={2.3} fill="#67e8f9" />
+                </g>
+              );
+            }
+            if (d.kind === 'relic') {
+              const fill = d.completed ? '#10b981' : '#fde047';
+              return (
+                <g key={`obj_${i}`}>
+                  <circle
+                    cx={p.cx}
+                    cy={p.cy}
+                    r={6.4}
+                    fill={fill}
+                    fillOpacity={d.completed ? 0.14 : 0.24}
+                    stroke={fill}
+                    strokeWidth={1.3}
+                  />
+                  <polygon
+                    points={`${p.cx},${p.cy - 3.6} ${p.cx + 3.6},${p.cy} ${p.cx},${p.cy + 3.6} ${p.cx - 3.6},${p.cy}`}
+                    fill={fill}
+                  />
+                </g>
+              );
+            }
+            if (d.kind === 'escape') {
+              return (
+                <g key={`obj_${i}`}>
+                  <circle cx={p.cx} cy={p.cy} r={9} fill="#10b981" fillOpacity={0.22} stroke="#fde047" strokeWidth={1.6} />
+                  <circle cx={p.cx} cy={p.cy} r={4.2} fill="#34d399" stroke="#ffffff" strokeWidth={1} />
                 </g>
               );
             }
@@ -369,18 +428,69 @@ export const ArenaMiniMap: React.FC<ArenaMiniMapProps> = ({
                 />
               );
             }
+            if (d.kind === 'weapon') {
+              const col = d.color || '#38bdf8';
+              return (
+                <g key={`obj_${i}`}>
+                  <circle cx={p.cx} cy={p.cy} r={6.2} fill={col} fillOpacity={0.22} stroke={col} strokeWidth={1.2} />
+                  <polygon
+                    points={`${p.cx},${p.cy - 3.6} ${p.cx + 3.6},${p.cy} ${p.cx},${p.cy + 3.6} ${p.cx - 3.6},${p.cy}`}
+                    fill={col}
+                    stroke="#ffffff"
+                    strokeWidth={0.7}
+                  />
+                </g>
+              );
+            }
             return null;
           })}
 
-          {/* Rival Yetis, Shooter Drones & Bullseyes */}
+          {/* Squad Allies, Quest Monsters, Shooter Drones & Bullseyes */}
           {dots.map((d, i) => {
-            if (d.kind !== 'bot' && d.kind !== 'enemy' && d.kind !== 'bullseye') return null;
+            if (
+              d.kind !== 'bot' &&
+              d.kind !== 'ally' &&
+              d.kind !== 'monster' &&
+              d.kind !== 'enemy' &&
+              d.kind !== 'bullseye'
+            ) {
+              return null;
+            }
             const p = mapPoint(d.x, d.y);
             if (d.kind === 'bullseye') {
               return (
                 <g key={`en_${i}`}>
                   <circle cx={p.cx} cy={p.cy} r={3.4} fill="none" stroke="#fbbf24" strokeWidth={1.2} />
                   <circle cx={p.cx} cy={p.cy} r={1.3} fill="#fbbf24" />
+                </g>
+              );
+            }
+            if (d.kind === 'ally') {
+              return (
+                <circle
+                  key={`ally_${i}`}
+                  cx={p.cx}
+                  cy={p.cy}
+                  r={3.2}
+                  fill={d.color || '#34d399'}
+                  stroke="#ffffff"
+                  strokeWidth={0.9}
+                />
+              );
+            }
+            if (d.kind === 'monster') {
+              const isBoss = d.label === 'boss';
+              return (
+                <g key={`mon_${i}`}>
+                  {isBoss && (
+                    <circle cx={p.cx} cy={p.cy} r={6.2} fill="none" stroke="#f59e0b" strokeWidth={1.1} />
+                  )}
+                  <polygon
+                    points={`${p.cx},${p.cy - (isBoss ? 4.4 : 3.2)} ${p.cx + (isBoss ? 4.4 : 3.2)},${p.cy} ${p.cx},${p.cy + (isBoss ? 4.4 : 3.2)} ${p.cx - (isBoss ? 4.4 : 3.2)},${p.cy}`}
+                    fill={d.color || '#f43f5e'}
+                    stroke="#061120"
+                    strokeWidth={0.8}
+                  />
                 </g>
               );
             }
@@ -459,13 +569,17 @@ export const ArenaMiniMap: React.FC<ArenaMiniMapProps> = ({
           </>
         ) : (
           <>
-            <span className="inline-flex items-center gap-1 text-cyan-300">
-              <span className="h-2 w-2 rounded-full bg-cyan-400" />
-              Well
+            <span className="inline-flex items-center gap-1 text-emerald-300">
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              Squad
+            </span>
+            <span className="inline-flex items-center gap-1 text-rose-300">
+              <span className="h-2 w-2 rounded-full bg-rose-500" />
+              Monsters
             </span>
             <span className="inline-flex items-center gap-1 text-amber-300">
               <span className="h-2 w-2 rounded-full bg-amber-400" />
-              Beacon/Crate
+              Relic/Exit
             </span>
           </>
         )}

@@ -13,7 +13,12 @@ import {
   type YetiKartRigParts,
 } from '../three/kartAndShooter';
 import {
+  drawArcticOutpostParallax,
+  drawExtractionBunker,
   drawPowerUpIcon,
+  drawRaidParallaxBuildings,
+  drawRaidPlatformSupports,
+  drawRunnerPlatformFoundations,
   drawStickmanCharacter,
   type StickmanPose,
 } from '../lib/stickmanRenderer';
@@ -28,16 +33,7 @@ interface GameVideoPreviewProps {
 
 const LOGICAL_W = 1200;
 const LOGICAL_H = 675;
-const RING_LEFT = 175;
-const RING_RIGHT = 1025;
-const RING_FLOOR = 535;
-const BRAWL_FLOOR = 565;
-
-const BRAWL_PLATFORMS = [
-  { x: 170, y: 425, w: 230 },
-  { x: 485, y: 335, w: 230 },
-  { x: 800, y: 425, w: 230 },
-];
+const RAID_FLOOR = 565;
 
 type Preview3DMode = 'survival' | 'car_racing' | 'shooting';
 
@@ -620,388 +616,376 @@ function render2DGameplayVideoFrame(
   ctx.globalAlpha = 1;
 
   if (mode === 'stickman_wrestling') {
-    const cycle = t % 7.2; // 7.2-second choreographed championship match loop
-    const slamImpact = cycle >= 3.2 && cycle < 3.65;
-    const ropeBendT = cycle >= 0.7 && cycle < 1.35 ? Math.sin(((cycle - 0.7) / 0.65) * Math.PI) * 30 : 0;
-
-    if (slamImpact) {
-      const shake = (1 - (cycle - 3.2) / 0.45) * 10;
-      ctx.translate(Math.sin(t * 70) * shake, Math.cos(t * 65) * shake);
-    }
-
-    // Arena Spotlights
-    ctx.save();
-    ctx.fillStyle = 'rgba(186, 230, 253, 0.08)';
-    ctx.beginPath();
-    ctx.moveTo(260 + Math.sin(t * 1.1) * 35, 0);
-    ctx.lineTo(440, RING_FLOOR);
-    ctx.lineTo(760, RING_FLOOR);
-    ctx.lineTo(540 + Math.sin(t * 1.1) * 35, 0);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(940 - Math.sin(t * 1.1) * 35, 0);
-    ctx.lineTo(440, RING_FLOOR);
-    ctx.lineTo(760, RING_FLOOR);
-    ctx.lineTo(660 - Math.sin(t * 1.1) * 35, 0);
-    ctx.fill();
-    ctx.restore();
-
-    // Cheering Crowd Silhouettes
-    ctx.fillStyle = '#050c18';
-    for (let cx = 30; cx < LOGICAL_W; cx += 52) {
-      const bounce = Math.abs(Math.sin(t * 5.2 + cx)) * 6;
-      ctx.beginPath();
-      ctx.arc(cx, 548 - bounce, 14, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillRect(cx - 16, 560 - bounce, 32, 115);
-    }
-
-    // Ring Posts & Turnbuckles
-    ctx.fillStyle = '#0284c7';
-    ctx.strokeStyle = '#e0f2fe';
-    ctx.lineWidth = 3;
-    ctx.fillRect(RING_LEFT - 14, 330, 22, 210);
-    ctx.strokeRect(RING_LEFT - 14, 330, 22, 210);
-    ctx.fillStyle = '#e11d48';
-    ctx.fillRect(RING_RIGHT - 8, 330, 22, 210);
-    ctx.strokeRect(RING_RIGHT - 8, 330, 22, 210);
-
-    [355, 405, 455].forEach((ry) => {
-      ctx.fillStyle = '#38bdf8';
-      ctx.fillRect(RING_LEFT - 2, ry - 9, 18, 18);
-      ctx.fillStyle = '#f43f5e';
-      ctx.fillRect(RING_RIGHT - 16, ry - 9, 18, 18);
-    });
-
-    // Elastic Bending Ropes
-    const ropeColors = ['#38bdf8', '#e2e8f0', '#f43f5e'];
-    [355, 405, 455].forEach((ry, idx) => {
-      ctx.strokeStyle = ropeColors[idx];
-      ctx.lineWidth = 5;
-      ctx.beginPath();
-      ctx.moveTo(RING_LEFT + 8, ry);
-      ctx.quadraticCurveTo(
-        RING_LEFT - ropeBendT * 1.2 + (RING_RIGHT - RING_LEFT) * 0.25,
-        ry,
-        (RING_LEFT + RING_RIGHT) / 2,
-        ry
-      );
-      ctx.quadraticCurveTo(
-        RING_RIGHT + (RING_RIGHT - RING_LEFT) * -0.25,
-        ry,
-        RING_RIGHT - 8,
-        ry
-      );
-      ctx.stroke();
-    });
-
-    // Ring Canvas & Apron
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(RING_LEFT - 28, RING_FLOOR, RING_RIGHT - RING_LEFT + 56, 22);
-    ctx.fillStyle = '#123154';
-    ctx.fillRect(RING_LEFT - 28, RING_FLOOR + 22, RING_RIGHT - RING_LEFT + 56, 75);
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(RING_LEFT - 28, RING_FLOOR, RING_RIGHT - RING_LEFT + 56, 22);
-
-    ctx.fillStyle = 'rgba(255,255,255,0.16)';
-    ctx.font = '700 18px Oxanium, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('LOFI SLAM · SUI WRESTLING', LOGICAL_W / 2, RING_FLOOR + 62);
-
-    // Choreographed Wrestler Poses
-    let pX = 360;
-    let pY = RING_FLOOR;
-    let pFacing: 1 | -1 = 1;
-    let pPose: StickmanPose = 'run';
-    let pAct = 0;
-
-    let eX = 760;
-    let eY = RING_FLOOR;
-    let eFacing: 1 | -1 = -1;
-    let ePose: StickmanPose = 'guard';
-    let eHp = 100;
-    let eFlash = false;
-
-    if (cycle < 0.85) {
-      // Sprint left to hit ropes
-      const u = cycle / 0.85;
-      pX = 430 - Math.sin(u * Math.PI * 0.5) * 235;
-      pFacing = -1;
-      pPose = 'run';
-      eX = 720 - u * 60;
-      ePose = 'guard';
-    } else if (cycle < 1.85) {
-      // Rope rebound flying lariat!
-      const u = (cycle - 0.85) / 1.0;
-      pX = 195 + u * 395;
-      pFacing = 1;
-      pPose = u > 0.65 ? 'jab' : 'run';
-      pAct = u > 0.65 ? (u - 0.65) / 0.35 : 0;
-      eX = 660;
-      ePose = u > 0.8 ? 'hurt' : 'guard';
-      eFlash = u > 0.8;
-      eHp = u > 0.8 ? 72 : 100;
-    } else if (cycle < 3.25) {
-      // Grapple & High-Angle Overhead Suplex Slam!
-      const u = (cycle - 1.85) / 1.4;
-      pX = 590;
-      pFacing = 1;
-      pPose = u < 0.25 ? 'grapple' : 'suplex';
-      pAct = u < 0.25 ? u / 0.25 : (u - 0.25) / 0.75;
-      const arc = u >= 0.25 ? Math.sin(((u - 0.25) / 0.75) * Math.PI) : 0;
-      eX = 650 - (u >= 0.25 ? ((u - 0.25) / 0.75) * 140 : 0);
-      eY = RING_FLOOR - arc * 135;
-      ePose = 'hurt';
-      eHp = 45;
-    } else if (cycle < 5.4) {
-      // Down on mat -> 1-2-3 Pinfall!
-      pX = 510;
-      pY = RING_FLOOR;
-      pFacing = 1;
-      pPose = 'pin';
-      eX = 515;
-      eY = RING_FLOOR;
-      ePose = 'down';
-      eHp = 18;
-    } else {
-      // Champion victory pose!
-      pX = 560;
-      pY = RING_FLOOR;
-      pFacing = 1;
-      pPose = 'victory';
-      eX = 430;
-      eY = RING_FLOOR;
-      ePose = 'down';
-      eHp = 0;
-    }
-
-    // Power-up orb on ring corner
-    drawPowerUpIcon(ctx, 'rage', 900, RING_FLOOR - 24, t);
-
-    drawStickmanCharacter(ctx, {
-      x: eX,
-      y: eY,
-      facing: eFacing,
-      pose: ePose,
-      animTime: t + 0.7,
-      scale: 1.24,
-      isLofiYeti: true,
-      colorwayId: 'sunset_ember',
-      hp: eHp,
-      maxHp: 115,
-      label: 'Baron Basalt',
-      flashHit: eFlash,
-      weapon: 'sword',
-    });
-
-    drawStickmanCharacter(ctx, {
-      x: pX,
-      y: pY,
-      facing: pFacing,
-      pose: pPose,
-      animTime: t,
-      actionProgress: pAct,
-      scale: 1.28,
-      isLofiYeti: true,
-      colorwayId: colorway,
-      hatId,
-      scarfId,
-      hasBelt: true,
-      finisherReady: cycle >= 1.4 && cycle < 3.4,
-      hp: 100,
-      maxHp: 100,
-      label: 'Lofi Yeti',
-      weapon: 'sword',
-    });
-
-    if (slamImpact) {
-      // Impact shockwave burst
-      const p = (cycle - 3.2) / 0.45;
-      ctx.save();
-      ctx.strokeStyle = '#fbbf24';
-      ctx.lineWidth = 5 * (1 - p);
-      ctx.beginPath();
-      ctx.ellipse(515, RING_FLOOR - 10, 40 + p * 120, 14 + p * 30, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.font = '700 32px "Pixel Forge", Oxanium, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#040c18';
-      ctx.fillText('LOFI SLAM!', 602, 178);
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillText('LOFI SLAM!', 600, 176);
-      ctx.restore();
-    } else if (cycle >= 5.5) {
-      ctx.save();
-      ctx.font = '700 30px "Pixel Forge", Oxanium, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#38bdf8';
-      ctx.fillText('1 · 2 · 3 PINFALL!', 600, 176);
-      ctx.restore();
-    }
-  } else if (mode === 'stickman_brawl') {
+    // === KILLER BEAN-STYLE SIDE-SCROLLING COMPOUND RAID & EXIT GATE ===
     const cycle = t % 6.8;
-    const finisherSplash = cycle >= 4.5 && cycle < 5.05;
-    if (finisherSplash) {
-      const shake = (1 - (cycle - 4.5) / 0.55) * 9;
-      ctx.translate(Math.sin(t * 70) * shake, Math.cos(t * 60) * shake);
-    }
+    const scroll = t * 180;
 
-    // Frozen Floor & Two-Tier Frost Ledges matching StickmanArcadeCanvas
-    ctx.fillStyle = '#0e283e';
-    ctx.fillRect(0, BRAWL_FLOOR, LOGICAL_W, LOGICAL_H - BRAWL_FLOOR);
-    ctx.fillStyle = '#2dd4bf';
-    ctx.fillRect(0, BRAWL_FLOOR, LOGICAL_W, 6);
+    drawRaidParallaxBuildings(ctx, scroll, LOGICAL_W, RAID_FLOOR, '#38bdf8', t);
 
-    for (const pl of BRAWL_PLATFORMS) {
-      ctx.fillStyle = '#16385d';
-      ctx.strokeStyle = '#2dd4bf';
-      ctx.lineWidth = 3;
+    // Compound Steel Floor
+    ctx.fillStyle = '#0f233c';
+    ctx.fillRect(0, RAID_FLOOR, LOGICAL_W, LOGICAL_H - RAID_FLOOR);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(0, RAID_FLOOR, LOGICAL_W, 6);
+
+    // Elevated Catwalks with Steel Support Trusses & Cargo Containers
+    const catwalks = [
+      { x: 170, y: 430, w: 260 },
+      { x: 520, y: 350, w: 250 },
+    ];
+    drawRaidPlatformSupports(ctx, catwalks, RAID_FLOOR, '#38bdf8');
+
+    // Explosive Fuel Barrel & Armored Extraction Gatehouse on Far Right
+    const barrelBurst = cycle >= 3.9 && cycle < 4.55;
+    if (!barrelBurst) {
+      ctx.fillStyle = '#dc2626';
+      ctx.strokeStyle = '#fca5a5';
+      ctx.lineWidth = 2.5;
+      ctx.fillRect(635, RAID_FLOOR - 50, 34, 50);
+      ctx.strokeRect(635, RAID_FLOOR - 50, 34, 50);
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(635, RAID_FLOOR - 30, 34, 10);
+    } else {
+      const bp = (cycle - 3.9) / 0.65;
+      ctx.strokeStyle = '#fb923c';
+      ctx.lineWidth = 6 * (1 - bp);
       ctx.beginPath();
-      ctx.roundRect(pl.x, pl.y, pl.w, 16, 8);
-      ctx.fill();
+      ctx.arc(652, RAID_FLOOR - 25, 25 + bp * 115, 0, Math.PI * 2);
       ctx.stroke();
     }
 
-    // Power-up Orbs on ledges
-    drawPowerUpIcon(ctx, 'shield', 285, 395, t);
-    drawPowerUpIcon(ctx, 'gem', 600, 305, t);
+    // Armored Extraction Gatehouse Building
+    drawExtractionBunker(ctx, 1045, RAID_FLOOR, false, t);
 
-    // Choreographed Multi-Ledge Combat
-    let pX = 290;
-    let pY = BRAWL_FLOOR;
-    let pFacing: 1 | -1 = 1;
+    drawPowerUpIcon(ctx, 'rage', 295, 396, t);
+
+    // Choreographed Slow-Mo Dive + Dual-Pistol Gun-Fu
+    let pX = 210;
+    let pY = RAID_FLOOR;
     let pPose: StickmanPose = 'run';
     let pAct = 0;
-
-    let e1X = 720;
-    let e1Y = BRAWL_FLOOR;
-    let e1Pose: StickmanPose = 'guard';
+    let e1Pose: StickmanPose = 'jab';
     let e1Hp = 100;
+    let e2Pose: StickmanPose = 'guard';
+    let e2Hp = 100;
 
-    let e2X = 915;
-    const e2Y = 425;
-    let e2Pose: StickmanPose = 'idle';
-    let e2Hp = 120;
-
-    if (cycle < 1.3) {
-      const u = cycle / 1.3;
-      pX = 240 + u * 350;
-      pPose = u > 0.7 ? 'heavy' : 'run';
-      pAct = u > 0.7 ? (u - 0.7) / 0.3 : 0;
-      e1X = 680 + (u > 0.8 ? (u - 0.8) * 180 : 0);
-      e1Pose = u > 0.8 ? 'hurt' : 'jab';
-      e1Hp = u > 0.8 ? 64 : 100;
-    } else if (cycle < 2.7) {
-      // Leap smoothly up onto middle ledge!
-      const u = (cycle - 1.3) / 1.4;
-      pX = 590 + u * 110;
-      pY = BRAWL_FLOOR - Math.sin(u * Math.PI * 0.65) * 245;
-      pY = Math.min(BRAWL_FLOOR, Math.max(335, pY));
-      pPose = u < 0.75 ? 'jump' : 'run';
-      e1X = 710;
-      e1Pose = 'run';
-      e1Hp = 64;
-    } else if (cycle < 4.5) {
-      // Dash across to right platform & unleash sword combo
-      const u = (cycle - 2.7) / 1.8;
-      pX = 700 + u * 135;
-      pY = 335 + u * 90;
-      pPose = u > 0.55 ? 'heavy' : 'run';
-      pAct = u > 0.55 ? (u - 0.55) / 0.45 : 0;
-      e2X = 925 + (u > 0.75 ? 45 : 0);
-      e2Pose = u > 0.75 ? 'hurt' : 'jab';
-      e2Hp = u > 0.75 ? 55 : 120;
-      e1X = 640;
-      e1Pose = 'run';
-      e1Hp = 64;
-    } else {
-      // Avalanche Finisher Dive Slam!
-      const u = (cycle - 4.5) / 2.3;
-      pX = 760;
-      pY = u < 0.25 ? 425 + (u / 0.25) * (BRAWL_FLOOR - 425) : BRAWL_FLOOR;
-      pPose = u < 0.35 ? 'finisher' : 'victory';
-      pAct = Math.min(1, u / 0.35);
-      e1X = 610;
+    if (cycle < 1.8) {
+      const u = cycle / 1.8;
+      pX = 180 + u * 230;
+      pPose = u > 0.55 ? 'jab' : 'run';
+      pAct = (t * 4) % 1;
+      e1Pose = u > 0.72 ? 'hurt' : 'jab';
+      e1Hp = u > 0.72 ? 35 : 100;
+    } else if (cycle < 3.6) {
+      // Slow-Mo Gun-Fu Bullet-Time Dive!
+      const u = (cycle - 1.8) / 1.8;
+      pX = 410 + u * 275;
+      pY = RAID_FLOOR - Math.sin(u * Math.PI) * 145;
+      pPose = u < 0.7 ? 'slide' : 'heavy';
+      pAct = u;
       e1Pose = 'down';
-      e1Hp = 10;
-      e2X = 955;
-      e2Pose = 'hurt';
-      e2Hp = 35;
+      e1Hp = 0;
+      e2Pose = u > 0.65 ? 'hurt' : 'jab';
+      e2Hp = u > 0.65 ? 40 : 100;
+    } else if (cycle < 5.3) {
+      // Blast barrel & finish syndicate guard
+      const u = (cycle - 3.6) / 1.7;
+      pX = 685 + u * 210;
+      pPose = u < 0.45 ? 'jab' : 'run';
+      pAct = (t * 5) % 1;
+      e1Pose = 'down';
+      e1Hp = 0;
+      e2Pose = 'down';
+      e2Hp = 0;
+    } else {
+      // Reach Extraction Exit Gate!
+      const u = (cycle - 5.3) / 1.5;
+      pX = 895 + u * 135;
+      pPose = u > 0.65 ? 'victory' : 'run';
+      e1Pose = 'down';
+      e1Hp = 0;
+      e2Pose = 'down';
+      e2Hp = 0;
     }
 
-    // Snowball laser projectile flying right
-    const ballX = ((t * 580) % 720) + 260;
-    ctx.fillStyle = '#38bdf8';
-    ctx.beginPath();
-    ctx.arc(ballX, 460, 10, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
+    // Dual-pistol yellow tracer rounds
+    const tracerX = pX + 55 + ((t * 920) % 420);
+    ctx.fillStyle = '#fde047';
+    ctx.fillRect(tracerX, pY - 58, 28, 4.5);
+    ctx.fillRect(tracerX - 65, pY - 46, 24, 4.5);
 
+    // Syndicate Hitman Enemy 1 & 2
     drawStickmanCharacter(ctx, {
-      x: e1X,
-      y: e1Y,
+      x: 560,
+      y: RAID_FLOOR,
       facing: -1,
       pose: e1Pose,
-      animTime: t + 1,
-      scale: 1.18,
-      isLofiYeti: true,
-      colorwayId: 'glacier_mint',
+      animTime: t + 0.5,
+      scale: 1.15,
+      isLofiYeti: false,
+      customStroke: '#fb7185',
+      customAccent: '#f43f5e',
       hp: e1Hp,
       maxHp: 100,
-      label: 'Frost Striker',
-      weapon: 'sword',
+      label: 'Syndicate Enforcer',
+      weapon: 'pistols',
     });
 
     drawStickmanCharacter(ctx, {
-      x: e2X,
-      y: e2Y,
+      x: 840,
+      y: RAID_FLOOR,
       facing: -1,
       pose: e2Pose,
-      animTime: t + 2.1,
+      animTime: t + 1.4,
+      scale: 1.2,
+      isLofiYeti: false,
+      customStroke: '#f97316',
+      customAccent: '#facc15',
+      hp: e2Hp,
+      maxHp: 100,
+      label: 'Vault Captain',
+      weapon: 'pistols',
+    });
+
+    drawStickmanCharacter(ctx, {
+      x: pX,
+      y: pY,
+      facing: 1,
+      pose: pPose,
+      animTime: t,
+      actionProgress: pAct,
       scale: 1.24,
       isLofiYeti: true,
-      colorwayId: 'aurora_violet',
-      hp: e2Hp,
-      maxHp: 120,
-      label: 'Glacier Warden',
+      colorwayId: colorway,
+      hatId,
+      scarfId,
+      raged: cycle >= 1.8 && cycle < 3.6,
+      hp: 100,
+      maxHp: 100,
+      label: 'Lofi Bean',
+      weapon: 'pistols',
+    });
+
+    if (cycle >= 1.8 && cycle < 3.3) {
+      ctx.font = '700 26px "Pixel Forge", Oxanium, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText('SLOW-MO GUN-FU!', 600, 150);
+    } else if (cycle >= 5.6) {
+      ctx.font = '700 28px "Pixel Forge", Oxanium, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#34d399';
+      ctx.fillText('STAGE CLEAR · EXIT REACHED!', 600, 150);
+    }
+  } else if (mode === 'stickman_brawl') {
+    // === AMONG US-STYLE MULTI-ROOM CLUE & ESCAPE PREVIEW ===
+    const cycle = t % 7.2;
+
+    // Station Deck Background & 4 Interconnected Rooms
+    ctx.fillStyle = '#071324';
+    ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
+
+    const rooms = [
+      { name: 'CAFETERIA', x: 75, y: 110, w: 340, h: 245, floor: '#11253e', accent: '#38bdf8' },
+      { name: 'MEDBAY', x: 455, y: 110, w: 320, h: 245, floor: '#112c3c', accent: '#2dd4bf' },
+      { name: 'REACTOR', x: 75, y: 390, w: 340, h: 225, floor: '#1b1d36', accent: '#c084fc' },
+      { name: 'AIRLOCK EXIT', x: 815, y: 180, w: 310, h: 350, floor: '#0f2b33', accent: '#34d399' },
+    ];
+
+    // Corridors connecting rooms
+    ctx.fillStyle = '#162d47';
+    ctx.fillRect(405, 195, 60, 82); // Cafeteria -> Medbay
+    ctx.fillRect(210, 345, 76, 55); // Cafeteria -> Reactor
+    ctx.fillRect(765, 250, 60, 88); // Medbay -> Airlock
+
+    for (const r of rooms) {
+      ctx.fillStyle = r.floor;
+      ctx.strokeStyle = r.accent;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.roundRect(r.x, r.y, r.w, r.h, 14);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.16)';
+      ctx.font = '700 18px Oxanium, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(r.name, r.x + 18, r.y + 32);
+    }
+
+    // Security Blast Door between Medbay & Airlock (unlocks after Clue collected!)
+    const doorUnlocked = cycle >= 3.6;
+    ctx.fillStyle = doorUnlocked ? 'rgba(52, 211, 153, 0.25)' : 'rgba(244, 63, 94, 0.65)';
+    ctx.strokeStyle = doorUnlocked ? '#34d399' : '#fb7185';
+    ctx.lineWidth = 3;
+    ctx.fillRect(790, 248, 16, 92);
+    ctx.strokeRect(790, 248, 16, 92);
+
+    // Cafeteria Emergency Table, Medbay Bio-Tanks, Reactor Turbine & Airlock Escape Shuttle
+    ctx.fillStyle = '#1e3a5f';
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(245, 225, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(245, 225, 9, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Medbay Cryo Tanks
+    [482, 512].forEach((tx) => {
+      ctx.fillStyle = 'rgba(45, 212, 191, 0.24)';
+      ctx.strokeStyle = '#2dd4bf';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(tx, 162, 22, 54, 8);
+      ctx.fill();
+      ctx.stroke();
+    });
+
+    // Reactor Turbine + Conduits
+    ctx.strokeStyle = 'rgba(192, 132, 252, 0.35)';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(115, 502);
+    ctx.lineTo(375, 502);
+    ctx.stroke();
+    ctx.fillStyle = '#2e1065';
+    ctx.strokeStyle = '#c084fc';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(245, 502, 36, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Floor Vent in Medbay
+    ctx.fillStyle = '#334155';
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 2;
+    ctx.fillRect(605, 152, 48, 28);
+    ctx.strokeRect(605, 152, 48, 28);
+
+    // Glowing Clue Data Pad in Medbay
+    if (cycle < 3.6) {
+      const pulse = 18 + Math.sin(t * 7) * 4;
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.25)';
+      ctx.beginPath();
+      ctx.arc(620, 285, pulse, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fde047';
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2;
+      ctx.fillRect(608, 274, 24, 20);
+      ctx.strokeRect(608, 274, 24, 20);
+      ctx.font = '700 11px Oxanium, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fef08a';
+      ctx.fillText('CLUE 3/3', 620, 260);
+    }
+
+    // Docked Escape Shuttle Craft inside Airlock Room
+    ctx.fillStyle = doorUnlocked ? 'rgba(16, 185, 129, 0.26)' : 'rgba(51, 65, 85, 0.5)';
+    ctx.strokeStyle = doorUnlocked ? '#34d399' : '#94a3b8';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(985, 355, 48, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#0f2744';
+    ctx.beginPath();
+    ctx.moveTo(1022, 355);
+    ctx.lineTo(968, 326);
+    ctx.lineTo(950, 342);
+    ctx.lineTo(950, 368);
+    ctx.lineTo(968, 384);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.font = '700 13px Oxanium, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(doorUnlocked ? 'ESCAPE!' : 'LOCKED', 985, 420);
+
+    // Animated Player & Red-Visor Imposter Stickman
+    let pX = 240;
+    let pY = 260;
+    let pPose: StickmanPose = 'run';
+    let iX = 630;
+    let iY = 200;
+    let iPose: StickmanPose = 'idle';
+
+    if (cycle < 2.2) {
+      const u = cycle / 2.2;
+      pX = 210 + u * 375;
+      pY = 265;
+      pPose = 'run';
+      iX = 628;
+      iY = 185 + u * 30;
+      iPose = 'idle';
+    } else if (cycle < 3.8) {
+      const u = (cycle - 2.2) / 1.6;
+      pX = 585;
+      pY = 265;
+      pPose = u < 0.5 ? 'jab' : 'victory';
+      iX = 628 - u * 40;
+      iY = 215 + u * 75;
+      iPose = 'run';
+    } else {
+      const u = (cycle - 3.8) / 3.4;
+      pX = 585 + Math.min(1, u * 1.15) * 380;
+      pY = 285 + Math.min(1, u * 1.15) * 65;
+      pPose = u > 0.85 ? 'victory' : 'run';
+      iX = 590 + u * 165;
+      iY = 290;
+      iPose = 'run';
+    }
+
+    drawPowerUpIcon(ctx, 'shield', 235, 515, t);
+
+    drawStickmanCharacter(ctx, {
+      x: iX,
+      y: iY,
+      facing: pX >= iX ? 1 : -1,
+      pose: iPose,
+      animTime: t + 0.8,
+      scale: 1.05,
+      isLofiYeti: false,
+      imposterVisor: true,
+      customStroke: '#ef4444',
+      customAccent: '#fb7185',
+      hp: 100,
+      maxHp: 100,
+      label: 'Imposter!',
       weapon: 'sword',
     });
 
     drawStickmanCharacter(ctx, {
       x: pX,
       y: pY,
-      facing: pFacing,
+      facing: 1,
       pose: pPose,
       animTime: t,
-      actionProgress: pAct,
-      scale: 1.26,
+      scale: 1.1,
       isLofiYeti: true,
       colorwayId: colorway,
       hatId,
       scarfId,
-      shielded: cycle >= 1.2 && cycle < 4.4,
-      raged: cycle >= 3.2,
       hp: 100,
       maxHp: 100,
       label: 'Lofi Yeti',
-      weapon: 'sword',
+      weapon: 'scanner',
     });
 
-    if (finisherSplash) {
-      const p = (cycle - 4.5) / 0.55;
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 5 * (1 - p);
-      ctx.beginPath();
-      ctx.arc(760, BRAWL_FLOOR - 22, 40 + p * 165, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.font = '700 28px "Pixel Forge", Oxanium, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#2dd4bf';
-      ctx.fillText('FROST FINISHER!', 600, 164);
-    }
+    ctx.font = '700 24px "Pixel Forge", Oxanium, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = doorUnlocked ? '#34d399' : '#fde047';
+    ctx.fillText(
+      doorUnlocked ? 'AIRLOCK UNLOCKED · ESCAPE!' : 'FIND CLUES TO UNLOCK NEXT ROOM',
+      600,
+      68
+    );
   } else {
     // 'stickman_run': Continuous Side-Scrolling Glacier Canyon Runner
     const scroll = t * 420;
@@ -1009,14 +993,20 @@ function render2DGameplayVideoFrame(
     const gapW = 140;
     const stride = platW + gapW;
 
+    drawArcticOutpostParallax(ctx, scroll, LOGICAL_W, 388, '#38bdf8', t);
+
+    const previewPlats: { x: number; y: number; w: number }[] = [];
     for (let i = -1; i < 4; i++) {
       const baseIdx = Math.floor(scroll / stride) + i;
       const px = baseIdx * stride - scroll;
       const py = 545 - ((Math.abs(baseIdx) % 2) * 32);
-      ctx.fillStyle = '#123154';
-      ctx.fillRect(px, py, platW, LOGICAL_H - py);
-      ctx.fillStyle = '#38bdf8';
-      ctx.fillRect(px, py, platW, 7);
+      previewPlats.push({ x: px, y: py, w: platW });
+    }
+    drawRunnerPlatformFoundations(ctx, previewPlats, LOGICAL_H, '#123154', '#38bdf8');
+
+    for (const pl of previewPlats) {
+      const px = pl.x;
+      const py = pl.y;
 
       // Ice spike on platform middle
       const spikeX = px + 260;
