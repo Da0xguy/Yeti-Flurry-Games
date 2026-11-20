@@ -3593,7 +3593,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               player.vx,
               player.vy,
               17,
-              mapIdRef.current
+              mapIdRef.current,
+              gameModeRef.current
             );
             player.x = res.x;
             player.y = res.y;
@@ -3679,7 +3680,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 en.vy = en.vy * 0.85 + ty * spd * 0.15;
                 en.x = Math.max(70, Math.min(W - 70, en.x + en.vx * dt));
                 en.y = Math.max(70, Math.min(H - 70, en.y + en.vy * dt));
-                const er = resolveArenaObstacleCollision(en.x, en.y, en.vx, en.vy, 17, mapIdRef.current);
+                const er = resolveArenaObstacleCollision(en.x, en.y, en.vx, en.vy, 17, mapIdRef.current, gameModeRef.current);
                 en.x = er.x;
                 en.y = er.y;
                 for (const cr of s.crates) {
@@ -3835,7 +3836,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               }
 
               if (!hit) {
-                for (const obs of getMapObstacles(mapIdRef.current)) {
+                for (const obs of getMapObstacles(mapIdRef.current, gameModeRef.current)) {
                   if (Math.hypot(obs.x - sb.x, obs.y - sb.y) < obs.radius + 5) {
                     hit = true;
                     queueBurst(sb.x, sb.y, '#94a3b8', 5);
@@ -4238,7 +4239,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               ent.vx,
               ent.vy,
               16,
-              mapIdRef.current
+              mapIdRef.current,
+              gameModeRef.current
             );
             ent.x = resolved.x;
             ent.y = resolved.y;
@@ -4519,7 +4521,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
             mon.x = Math.max(55, Math.min(W - 55, mon.x + mon.vx * dt));
             mon.y = Math.max(55, Math.min(H - 55, mon.y + mon.vy * dt));
-            const mRes = resolveArenaObstacleCollision(mon.x, mon.y, mon.vx, mon.vy, mon.radius, mapIdRef.current);
+            const mRes = resolveArenaObstacleCollision(mon.x, mon.y, mon.vx, mon.vy, mon.radius, mapIdRef.current, gameModeRef.current);
             mon.x = mRes.x;
             mon.y = mRes.y;
             mon.vx = mRes.vx;
@@ -4767,7 +4769,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             }
 
             if (!hit) {
-              for (const obs of getMapObstacles(mapIdRef.current)) {
+              for (const obs of getMapObstacles(mapIdRef.current, gameModeRef.current)) {
                 if (Math.hypot(obs.x - sb.x, obs.y - sb.y) < obs.radius + 5) {
                   hit = true;
                   queueBurst(sb.x, sb.y, hazardBurstCol, 8);

@@ -551,7 +551,7 @@ export function buildArcticEnvironment(
   const animatedObelisks: { mesh: THREE.Mesh; baseY: number; phase: number }[] = [];
   const animatedEmbers: THREE.MeshStandardMaterial[] = [];
 
-  const mapObstacles = getMapObstacles(mapId);
+  const mapObstacles = getMapObstacles(mapId, gameMode);
   mapObstacles.forEach((obs, idx) => {
     const wx = (obs.x - ARENA_CENTER_X) / 25;
     const wz = (obs.y - ARENA_CENTER_Y) / 25;

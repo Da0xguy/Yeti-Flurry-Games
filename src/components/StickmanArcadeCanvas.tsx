@@ -74,7 +74,7 @@ const CANVAS_W = 1200;
 const CANVAS_H = 675;
 const RAID_FLOOR = 565;
 
-// Top-Down Station Map Constants (Among Us Style 12-Room Facility Escape)
+// Side-View Station Map Constants (12-Room Facility Escape)
 const STATION_W = 2520;
 const STATION_H = 1540;
 const WING_B_CLUES_REQUIRED = 2;
@@ -2312,7 +2312,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           }
         }
       } else if (st.mode === 'stickman_brawl') {
-        // === MODE 2: AMONG US-STYLE TOP-DOWN MULTI-ROOM CLUE & ESCAPE ===
+        // === MODE 2: SIDE-VIEW MULTI-ROOM CLUE & ESCAPE ===
         const moveLeft = Boolean(keys['a'] || keys['arrowleft']);
         const moveRight = Boolean(keys['d'] || keys['arrowright']);
         const moveUp = Boolean(keys['w'] || keys['arrowup']);
@@ -3398,7 +3398,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
       }
 
       if (mode === 'stickman_brawl') {
-        // === TOP-DOWN MULTI-ROOM STATION RENDERER ===
+        // === SIDE-VIEW MULTI-ROOM STATION CUTAWAY ===
         ctx.fillStyle = '#050d1a';
         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
@@ -3407,20 +3407,41 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         ctx.save();
         ctx.translate(-camX, -camY);
 
-        // Floor Rooms + Subtle Sci-Fi Deck Tiles
+        // Side-on room cutaways: tall back walls, overhead light rails and a
+        // narrow deck strip establish a side view instead of a flat floor map.
         for (const r of STATION_ROOMS) {
           ctx.fillStyle = r.floor;
           ctx.fillRect(r.x, r.y, r.w, r.h);
+
+          const wallShade = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
+          wallShade.addColorStop(0, 'rgba(148, 196, 230, 0.15)');
+          wallShade.addColorStop(0.72, 'rgba(7, 18, 32, 0.02)');
+          wallShade.addColorStop(1, 'rgba(3, 9, 18, 0.36)');
+          ctx.fillStyle = wallShade;
+          ctx.fillRect(r.x, r.y, r.w, r.h);
+
+          ctx.fillStyle = 'rgba(148, 163, 184, 0.08)';
+          ctx.fillRect(r.x + 12, r.y + 12, r.w - 24, 8);
+          ctx.fillStyle = r.accent;
+          ctx.globalAlpha = 0.38;
+          ctx.fillRect(r.x + 18, r.y + 14, 54, 4);
+          ctx.fillRect(r.x + r.w - 72, r.y + 14, 54, 4);
+          ctx.globalAlpha = 1;
+
+          ctx.fillStyle = 'rgba(2, 8, 16, 0.68)';
+          ctx.fillRect(r.x, r.y + r.h - 42, r.w, 42);
+          ctx.fillStyle = 'rgba(148, 163, 184, 0.16)';
+          ctx.fillRect(r.x, r.y + r.h - 46, r.w, 4);
 
           ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
           ctx.lineWidth = 1;
           for (let gx = r.x; gx < r.x + r.w; gx += 46) {
             ctx.beginPath();
-            ctx.moveTo(gx, r.y);
+            ctx.moveTo(gx, r.y + r.h - 42);
             ctx.lineTo(gx, r.y + r.h);
             ctx.stroke();
           }
-          for (let gy = r.y; gy < r.y + r.h; gy += 46) {
+          for (let gy = r.y + r.h - 42; gy < r.y + r.h; gy += 14) {
             ctx.beginPath();
             ctx.moveTo(r.x, gy);
             ctx.lineTo(r.x + r.w, gy);
@@ -4483,8 +4504,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
 
         {/* === GAMISH 2D LAUNCHER OVERLAY === */}
         {phase === 'MENU' && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#040B16]/80 p-3 sm:p-5 overflow-y-auto">
-            <div className="w-full max-w-3xl arcade-panel p-4 sm:p-6 space-y-4">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#040B16]/55 p-3 sm:p-5 overflow-y-auto">
+            <div className="w-full max-w-3xl arcade-panel bg-[#081322]/90 backdrop-blur-sm p-4 sm:p-6 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sky-400/15 pb-3.5">
                 <div className="flex items-center gap-3">
                   <h2 className="title-3d-game-sm text-2xl sm:text-3xl leading-none">

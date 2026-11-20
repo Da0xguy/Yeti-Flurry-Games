@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import type { GameModeId, YetiColorId } from '../types';
+import type { GameModeId, MapId, YetiColorId } from '../types';
 import { ARENA_CENTER_X, ARENA_CENTER_Y, getRaceTrackWaypoints } from '../data/gameCatalog';
 import { buildArcticEnvironment } from '../three/arenaEnvironment';
 import { animateYetiWalk, buildYetiRig, type YetiRigParts } from '../three/yetiBuilder';
@@ -31,6 +31,7 @@ import {
 
 interface GameVideoPreviewProps {
   mode: GameModeId;
+  mapId?: MapId;
   colorway?: YetiColorId;
   hatId?: string;
   scarfId?: string;
@@ -45,6 +46,7 @@ type Preview3DMode = 'survival' | 'car_racing' | 'shooting';
 
 interface Preview3DSubscriber {
   mode: Preview3DMode;
+  mapId: MapId;
   canvas: HTMLCanvasElement;
   visible: boolean;
 }
@@ -66,7 +68,7 @@ class Shared3DPreviewManager {
   private isSoftwareGl = false;
   private failed = false;
   private subscribers = new Set<Preview3DSubscriber>();
-  private scenes = new Map<Preview3DMode, Preview3DSceneRig>();
+  private scenes = new Map<string, Preview3DSceneRig>();
   private rafId = 0;
   private timeoutId = 0;
   private startMs = 0;
@@ -150,19 +152,13 @@ class Shared3DPreviewManager {
     }
   }
 
-  private getOrBuildScene(mode: Preview3DMode): Preview3DSceneRig | null {
-    const existing = this.scenes.get(mode);
+  private getOrBuildScene(mode: Preview3DMode, mapId: MapId): Preview3DSceneRig | null {
+    const cacheKey = `${mode}:${mapId}`;
+    const existing = this.scenes.get(cacheKey);
     if (existing) return existing;
     if (!this.renderer) return null;
 
     const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
-    const mapId =
-      mode === 'car_racing'
-        ? 'glacier_well'
-        : mode === 'shooting'
-        ? 'aurora_summit'
-        : 'volcanic_springs';
-
     const scene = new THREE.Scene();
     const bgHex =
       mapId === 'volcanic_springs' ? '#160b10' : mapId === 'aurora_summit' ? '#091128' : '#071324';
@@ -486,7 +482,7 @@ class Shared3DPreviewManager {
     }
 
     const rig: Preview3DSceneRig = { scene, camera, update: updateFn };
-    this.scenes.set(mode, rig);
+    this.scenes.set(`${mode}:${mapId}`, rig);
     return rig;
   }
 
@@ -510,7 +506,7 @@ class Shared3DPreviewManager {
       for (const sub of this.subscribers) {
         if (!sub.visible) continue;
         anyVisible = true;
-        const rig = this.getOrBuildScene(sub.mode);
+        const rig = this.getOrBuildScene(sub.mode, sub.mapId);
         if (!rig) continue;
 
         rig.update(t, dt);
@@ -806,25 +802,25 @@ function render2DGameplayVideoFrame(
       ctx.fillText('STAGE CLEAR · EXIT REACHED!', 600, 150);
     }
   } else if (mode === 'stickman_brawl') {
-    // === AMONG US-STYLE MULTI-ROOM CLUE & ESCAPE PREVIEW ===
+    // Side-view station cutaway: rooms remain separate, but characters and floors read horizontally.
     const cycle = t % 7.2;
 
-    // Station Deck Background & 4 Interconnected Rooms
+    // Station Deck Background & Horizontal Room Cutaway
     ctx.fillStyle = '#071324';
     ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
 
     const rooms = [
-      { name: 'CAFETERIA', x: 75, y: 110, w: 340, h: 245, floor: '#11253e', accent: '#38bdf8' },
-      { name: 'MEDBAY', x: 455, y: 110, w: 320, h: 245, floor: '#112c3c', accent: '#2dd4bf' },
-      { name: 'REACTOR', x: 75, y: 390, w: 340, h: 225, floor: '#1b1d36', accent: '#c084fc' },
-      { name: 'AIRLOCK EXIT', x: 815, y: 180, w: 310, h: 350, floor: '#0f2b33', accent: '#34d399' },
+      { name: 'CAFETERIA', x: 55, y: 105, w: 285, h: 390, floor: '#11253e', accent: '#38bdf8' },
+      { name: 'MEDBAY', x: 340, y: 105, w: 270, h: 390, floor: '#112c3c', accent: '#2dd4bf' },
+      { name: 'REACTOR', x: 610, y: 105, w: 255, h: 390, floor: '#1b1d36', accent: '#c084fc' },
+      { name: 'AIRLOCK EXIT', x: 865, y: 105, w: 260, h: 390, floor: '#0f2b33', accent: '#34d399' },
     ];
 
     // Corridors connecting rooms
     ctx.fillStyle = '#162d47';
-    ctx.fillRect(405, 195, 60, 82); // Cafeteria -> Medbay
-    ctx.fillRect(210, 345, 76, 55); // Cafeteria -> Reactor
-    ctx.fillRect(765, 250, 60, 88); // Medbay -> Airlock
+    ctx.fillRect(330, 425, 20, 70);
+    ctx.fillRect(600, 425, 20, 70);
+    ctx.fillRect(855, 425, 20, 70);
 
     for (const r of rooms) {
       ctx.fillStyle = r.floor;
@@ -840,6 +836,15 @@ function render2DGameplayVideoFrame(
       ctx.textAlign = 'left';
       ctx.fillText(r.name, r.x + 18, r.y + 32);
     }
+
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(55, 495, 1070, 100);
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(55, 495);
+    ctx.lineTo(1125, 495);
+    ctx.stroke();
 
     // Security Blast Door between Medbay & Airlock (unlocks after Clue collected!)
     const doorUnlocked = cycle >= 3.6;
@@ -938,35 +943,35 @@ function render2DGameplayVideoFrame(
 
     // Animated Player & Red-Visor Imposter Stickman
     let pX = 240;
-    let pY = 260;
+    let pY = 492;
     let pPose: StickmanPose = 'run';
     let iX = 630;
-    let iY = 200;
+    let iY = 492;
     let iPose: StickmanPose = 'idle';
 
     if (cycle < 2.2) {
       const u = cycle / 2.2;
       pX = 210 + u * 375;
-      pY = 265;
+      pY = 492;
       pPose = 'run';
       iX = 628;
-      iY = 185 + u * 30;
+      iY = 492;
       iPose = 'idle';
     } else if (cycle < 3.8) {
       const u = (cycle - 2.2) / 1.6;
       pX = 585;
-      pY = 265;
+      pY = 492;
       pPose = u < 0.5 ? 'jab' : 'victory';
       iX = 628 - u * 40;
-      iY = 215 + u * 75;
+      iY = 492;
       iPose = 'run';
     } else {
       const u = (cycle - 3.8) / 3.4;
       pX = 585 + Math.min(1, u * 1.15) * 380;
-      pY = 285 + Math.min(1, u * 1.15) * 65;
+      pY = 492;
       pPose = u > 0.85 ? 'victory' : 'run';
       iX = 590 + u * 165;
-      iY = 290;
+      iY = 492;
       iPose = 'run';
     }
 
@@ -1109,6 +1114,7 @@ function render2DGameplayVideoFrame(
 
 export const GameVideoPreview: React.FC<GameVideoPreviewProps> = ({
   mode,
+  mapId = 'glacier_well',
   colorway = 'classic_lofi',
   hatId = 'hat_goggles',
   scarfId = 'scarf_lofi',
@@ -1156,6 +1162,7 @@ export const GameVideoPreview: React.FC<GameVideoPreviewProps> = ({
       shared3DManager.setCustomization(colorway, hatId, scarfId);
       subRef = {
         mode: mode as Preview3DMode,
+        mapId,
         canvas,
         visible: isVisible,
       };
@@ -1203,7 +1210,7 @@ export const GameVideoPreview: React.FC<GameVideoPreviewProps> = ({
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', resize);
     };
-  }, [mode, is2D, colorway, hatId, scarfId]);
+  }, [mode, mapId, is2D, colorway, hatId, scarfId]);
 
   if (!is2D && fallback3D) {
     return (

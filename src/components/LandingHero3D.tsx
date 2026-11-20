@@ -763,9 +763,9 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
               initial={{ opacity: 0, x: 24 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="lg:col-span-5 flex flex-col rounded-2xl border border-amber-400/35 bg-[#071324] overflow-hidden shadow-[0_24px_50px_rgba(2,8,20,0.75)]"
+              className="lg:col-span-5 relative min-h-[280px] overflow-visible"
             >
-              <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2.5 text-xs">
+              <div className="absolute z-10 left-4 right-4 top-3 flex items-center justify-between text-xs pointer-events-none">
                 <span className="font-bold uppercase tracking-wider text-amber-300">
                   Live 2D Feed ·{' '}
                   {heroShot === 'squad'
@@ -791,7 +791,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                   <ChevronRight className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <div className="aspect-[16/9] w-full bg-[#06101f]">
+              <div className="absolute inset-0 aspect-auto w-full">
                 <Hero2DActionStage
                   shotId={heroShot}
                   colorway={yeti?.colorway}
@@ -1397,6 +1397,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                     <div className="relative h-48 overflow-hidden bg-[#061224]">
                       <GameVideoPreview
                         mode={gm.id}
+                        mapId={(['glacier_well', 'volcanic_springs', 'aurora_summit'] as const)[idx]}
                         colorway={yeti?.colorway}
                         hatId={yeti?.equipped.hat}
                         scarfId={yeti?.equipped.scarf}

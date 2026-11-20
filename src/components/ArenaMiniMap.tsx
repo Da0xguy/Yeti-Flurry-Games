@@ -61,7 +61,7 @@ export const ArenaMiniMap: React.FC<ArenaMiniMapProps> = ({
   totalCheckpoints = 4,
 }) => {
   const mapSpec = getMapSpec(mapId);
-  const obstacles = useMemo(() => getMapObstacles(mapId), [mapId]);
+  const obstacles = useMemo(() => getMapObstacles(mapId, gameMode), [mapId, gameMode]);
   const raceObstacles = useMemo(() => getRaceTrackObstacles(mapId), [mapId]);
   const waypoints = useMemo(() => getRaceTrackWaypoints(mapId), [mapId]);
 

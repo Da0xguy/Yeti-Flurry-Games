@@ -73,9 +73,9 @@ export const GAME_MODES: GameModeSpec[] = [
     dimension: '2D',
     name: 'Frost Station Escape',
     shortLabel: 'Room Escape 2D',
-    subtitle: 'Among Us Mystery · Search Rooms · Find Clues · Unlock Doors',
+    subtitle: 'Side-View Mystery · Search Rooms · Find Clues · Unlock Doors',
     description:
-      'Explore interconnected station rooms in top-down 2D! Search Cafeteria, Medbay, Lab, Reactor & Electrical for hidden Clues to unlock sealed doors, dodge vent Imposters, and escape through the Airlock.',
+      'Explore interconnected station rooms in a side-view 2D cutaway! Search Cafeteria, Medbay, Lab, Reactor & Electrical for hidden Clues to unlock sealed doors, dodge vent Imposters, and escape through the Airlock.',
     controlsSummary: 'WASD / Arrows Move · E / J Inspect Clue or Stun · K Cryo Taser · Space Sprint · L Clue Radar',
     supportsTunnel: false,
   },
@@ -316,16 +316,20 @@ export function getMapSpec(id?: MapId): ArenaMapSpec {
   return ARENA_MAPS.find((m) => m.id === id) || ARENA_MAPS[0];
 }
 
-export function getMapObstacles(mapId: MapId): ArenaObstacle[] {
+export function getMapObstacles(mapId: MapId, gameMode: GameModeId = 'survival'): ArenaObstacle[] {
   const cx = ARENA_CENTER_X;
   const cy = ARENA_CENTER_Y;
 
+  // Each 3D game gets its own route through the same biome. Racing keeps its
+  // track clear; combat modes use offset formations to create different lanes.
+  const modeOffset = gameMode === 'shooting' ? 145 : 0;
+
   if (mapId === 'volcanic_springs') {
     return [
-      { id: 'v1', x: cx - 375, y: cy - 255, radius: 42, kind: 'basalt_pillar', height: 3.1 },
-      { id: 'v2', x: cx + 375, y: cy - 255, radius: 42, kind: 'basalt_pillar', height: 3.3 },
-      { id: 'v3', x: cx - 390, y: cy + 255, radius: 44, kind: 'basalt_pillar', height: 2.8 },
-      { id: 'v4', x: cx + 390, y: cy + 255, radius: 44, kind: 'basalt_pillar', height: 3.0 },
+      { id: 'v1', x: cx - 375 + modeOffset, y: cy - 255, radius: 42, kind: 'basalt_pillar', height: 3.1 },
+      { id: 'v2', x: cx + 375 - modeOffset, y: cy - 255, radius: 42, kind: 'basalt_pillar', height: 3.3 },
+      { id: 'v3', x: cx - 390 - modeOffset, y: cy + 255, radius: 44, kind: 'basalt_pillar', height: 2.8 },
+      { id: 'v4', x: cx + 390 + modeOffset, y: cy + 255, radius: 44, kind: 'basalt_pillar', height: 3.0 },
       { id: 'v5', x: cx, y: cy - 420, radius: 38, kind: 'basalt_pillar', height: 2.7 },
       { id: 'v6', x: cx - 540, y: cy + 15, radius: 38, kind: 'basalt_pillar', height: 2.9 },
       { id: 'v7', x: cx + 540, y: cy + 15, radius: 38, kind: 'basalt_pillar', height: 2.9 },
@@ -334,8 +338,8 @@ export function getMapObstacles(mapId: MapId): ArenaObstacle[] {
   if (mapId === 'aurora_summit') {
     return [
       { id: 'a1', x: cx, y: cy - 395, radius: 40, kind: 'aurora_obelisk', height: 3.2 },
-      { id: 'a2', x: cx + 415, y: cy - 60, radius: 42, kind: 'aurora_obelisk', height: 2.9 },
-      { id: 'a3', x: cx - 415, y: cy - 60, radius: 42, kind: 'aurora_obelisk', height: 2.9 },
+      { id: 'a2', x: cx + 415 - modeOffset, y: cy - 60, radius: 42, kind: 'aurora_obelisk', height: 2.9 },
+      { id: 'a3', x: cx - 415 + modeOffset, y: cy - 60, radius: 42, kind: 'aurora_obelisk', height: 2.9 },
       { id: 'a4', x: cx + 285, y: cy + 345, radius: 38, kind: 'aurora_obelisk', height: 2.7 },
       { id: 'a5', x: cx - 285, y: cy + 345, radius: 38, kind: 'aurora_obelisk', height: 2.7 },
       { id: 'a6', x: cx + 295, y: cy - 310, radius: 36, kind: 'aurora_obelisk', height: 2.8 },
@@ -343,8 +347,8 @@ export function getMapObstacles(mapId: MapId): ArenaObstacle[] {
     ];
   }
   return [
-    { id: 'g1', x: cx - 390, y: cy - 235, radius: 42, kind: 'iceberg', height: 3.0 },
-    { id: 'g2', x: cx + 390, y: cy - 235, radius: 42, kind: 'iceberg', height: 2.8 },
+    { id: 'g1', x: cx - 390 + modeOffset, y: cy - 235, radius: 42, kind: 'iceberg', height: 3.0 },
+    { id: 'g2', x: cx + 390 - modeOffset, y: cy - 235, radius: 42, kind: 'iceberg', height: 2.8 },
     { id: 'g3', x: cx - 340, y: cy + 285, radius: 40, kind: 'iceberg', height: 2.7 },
     { id: 'g4', x: cx + 340, y: cy + 285, radius: 40, kind: 'iceberg', height: 3.1 },
     { id: 'g5', x: cx - 545, y: cy + 20, radius: 38, kind: 'iceberg', height: 2.9 },
@@ -498,7 +502,8 @@ export function resolveArenaObstacleCollision(
   vx: number,
   vy: number,
   actorRadius: number,
-  mapId: MapId
+  mapId: MapId,
+  gameMode: GameModeId = 'survival'
 ): { x: number; y: number; vx: number; vy: number } {
   let rx = x;
   let ry = y;
@@ -523,7 +528,7 @@ export function resolveArenaObstacleCollision(
     }
   }
 
-  for (const obs of getMapObstacles(mapId)) {
+  for (const obs of getMapObstacles(mapId, gameMode)) {
     const dx = rx - obs.x;
     const dy = ry - obs.y;
     const dist = Math.hypot(dx, dy);
