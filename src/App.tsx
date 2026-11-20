@@ -390,64 +390,46 @@ export default function App() {
           />
         </main>
       ) : (
-        <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 sm:px-6 py-6 sm:py-8">
+        <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 sm:px-6 py-4 sm:py-5">
           {activeTab === 'arena' && (
-            <div className="space-y-5">
-              {/* Group of Games Switcher (3D Arena + 2D Stickman & Wrestling + Back to Landing) */}
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-[#0B1729] px-4 py-3">
-                <div className="flex flex-wrap items-center gap-2">
+            <div className="space-y-3">
+              {/* Compact Arcade Game Switcher Ribbon */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl arcade-hud px-3 py-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => setActiveTab('home')}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-white transition-colors whitespace-nowrap shrink-0 mr-1"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900/90 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-white transition-colors whitespace-nowrap shrink-0 mr-1"
                   >
                     <Home className="h-3.5 w-3.5 text-sky-400" />
-                    Landing Page
+                    Home
                   </button>
 
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-sky-400 mr-1">
-                    3D Games:
-                  </span>
-                  {GAME_MODES.filter((g) => g.dimension === '3D').map((gm) => (
-                    <button
-                      key={gm.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedGameMode(gm.id);
-                        setAutoLaunchMode('choose_map');
-                      }}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                        selectedGameMode === gm.id
-                          ? 'bg-sky-500 text-slate-950'
-                          : 'border border-slate-700/80 bg-slate-900/70 text-slate-300 hover:border-sky-400 hover:text-white'
-                      }`}
-                    >
-                      {gm.shortLabel}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300 mr-1">
-                    2D Stickman:
-                  </span>
-                  {GAME_MODES.filter((g) => g.dimension === '2D').map((gm) => (
-                    <button
-                      key={gm.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedGameMode(gm.id);
-                        setAutoLaunchMode('choose_map');
-                      }}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                        selectedGameMode === gm.id
-                          ? 'bg-amber-400 text-slate-950'
-                          : 'border border-slate-700/80 bg-slate-900/70 text-amber-200/90 hover:border-amber-400 hover:text-white'
-                      }`}
-                    >
-                      {gm.shortLabel}
-                    </button>
-                  ))}
+                  {GAME_MODES.map((gm) => {
+                    const isActive = selectedGameMode === gm.id;
+                    const is2D = gm.dimension === '2D';
+                    return (
+                      <button
+                        key={gm.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedGameMode(gm.id);
+                          setAutoLaunchMode('choose_map');
+                        }}
+                        className={`rounded-lg px-2.5 py-1.5 text-xs font-bold tracking-wide transition-all whitespace-nowrap shrink-0 ${
+                          isActive
+                            ? is2D
+                              ? 'bg-amber-400 text-slate-950 shadow-[0_0_12px_rgba(251,191,36,0.35)]'
+                              : 'bg-sky-400 text-slate-950 shadow-[0_0_12px_rgba(56,189,248,0.35)]'
+                            : is2D
+                            ? 'border border-amber-500/25 bg-[#081527] text-amber-200/85 hover:border-amber-400 hover:text-amber-100'
+                            : 'border border-sky-500/25 bg-[#081527] text-sky-100/85 hover:border-sky-400 hover:text-white'
+                        }`}
+                      >
+                        {gm.shortLabel}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -488,35 +470,6 @@ export default function App() {
                   onReturnHome={() => setActiveTab('home')}
                 />
               )}
-
-              <div className="grid gap-4 md:grid-cols-3 text-xs text-slate-300 border-t border-slate-800/80 pt-5">
-                <div className="space-y-1">
-                  <span className="font-semibold text-white block">
-                    Owned Sui Object State
-                  </span>
-                  <p className="text-slate-400 leading-relaxed">
-                    {yeti
-                      ? `${yeti.name} (${yeti.stage}) · ${yeti.frostGems} Frost Gems · ${yeti.tasksCompleted} tasks completed.`
-                      : 'Mint a zero-gas starter Yeti in My Yeti to persist XP, Gems, quests, and colorways.'}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <span className="font-semibold text-white block">
-                    2D Stickman &amp; Wrestling Suite
-                  </span>
-                  <p className="text-slate-400 leading-relaxed">
-                    Play as an articulated 2D Lofi the Yeti figure in Stickman Yeti Wrestling, Frost Brawl waves, and Glacier Runs.
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <span className="font-semibold text-white block">
-                    Multi-Map 3D Sui Tunnels
-                  </span>
-                  <p className="text-slate-400 leading-relaxed">
-                    Every 3D map runs its own real-time WebSocket Tunnel room with crates, beacons, and AI Yetis filling open slots.
-                  </p>
-                </div>
-              </div>
             </div>
           )}
 

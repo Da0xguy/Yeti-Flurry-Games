@@ -2029,21 +2029,21 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           className="h-full w-full block object-contain"
         />
 
-        {/* === IN-GAME FULLSCREEN MINI-HUD === */}
+        {/* === IN-GAME ARCADE MINI-HUD === */}
         {phase !== 'MENU' && (
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start justify-between gap-3 p-3 sm:p-4 bg-gradient-to-b from-[#040c18]/90 via-[#040c18]/45 to-transparent">
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap items-start justify-between gap-3 p-3 sm:p-4 bg-gradient-to-b from-[#040c18]/85 via-[#040c18]/35 to-transparent">
             {/* Left: Lofi Yeti Life Bar & Finisher/Level */}
-            <div className="pointer-events-auto min-w-[215px] rounded-xl border border-slate-700/70 bg-[#081526]/88 px-3 py-2 backdrop-blur-sm space-y-1.5">
+            <div className="pointer-events-auto min-w-[215px] arcade-hud px-3 py-2 space-y-1.5">
               <div className="flex items-center justify-between gap-3 text-xs font-bold tabular-nums">
                 <span className="text-sky-200 inline-flex items-center gap-1.5">
                   <Heart className="h-3.5 w-3.5 text-rose-400 fill-rose-400" />
                   {playerName}
                 </span>
                 <span className="font-mono text-[11px] text-slate-200">
-                  HP {hud.hp}/{hud.maxHp} · {hpStateLabel}
+                  {hud.hp}/{hud.maxHp} · {hpStateLabel}
                 </span>
               </div>
-              <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-950 border border-white/15">
                 <div
                   className={`h-full transition-all duration-150 ${
                     hpPct > 50 ? 'bg-emerald-400' : hpPct > 25 ? 'bg-amber-400' : 'bg-rose-500'
@@ -2054,11 +2054,11 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
 
               {selectedGameMode === 'stickman_wrestling' ? (
                 <div className="space-y-0.5">
-                  <div className="flex items-center justify-between text-[10px] font-semibold text-cyan-300 tabular-nums">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-cyan-300 tabular-nums">
                     <span>FINISHER (L) · BOUT {hud.waveOrBout}/3</span>
                     <span>{hud.finisher}%</span>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-950">
                     <div
                       className={`h-full transition-all duration-150 ${
                         hud.finisher >= 100 ? 'bg-amber-400' : 'bg-cyan-400'
@@ -2068,9 +2068,9 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between text-[10px] text-slate-300 tabular-nums">
-                  <span>Level {hud.waveOrBout}</span>
-                  {hud.combo > 1 && <span className="text-amber-300 font-bold">{hud.combo}x COMBO</span>}
+                <div className="flex items-center justify-between text-[10px] font-bold text-slate-300 tabular-nums">
+                  <span>LVL {hud.waveOrBout}</span>
+                  {hud.combo > 1 && <span className="text-amber-300">{hud.combo}× COMBO</span>}
                 </div>
               )}
 
@@ -2096,7 +2096,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
             </div>
 
             {/* Center: Timer, Score, Drops & Gems */}
-            <div className="pointer-events-auto flex items-center gap-4 rounded-xl border border-slate-700/70 bg-[#081526]/88 px-4 py-2 backdrop-blur-sm text-xs tabular-nums">
+            <div className="pointer-events-auto flex items-center gap-4 arcade-hud px-4 py-2 text-xs tabular-nums">
               <div>
                 <span className="text-[10px] uppercase tracking-wider text-slate-400 block">Time</span>
                 <span className="font-mono text-base font-bold text-white">{formatTime(hud.timeLeft)}</span>
@@ -2119,16 +2119,16 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               </div>
             </div>
 
-            {/* Right: Opponent HP Bar + Landing Page / Menu / Pause / Fullscreen */}
+            {/* Right: Opponent HP Bar + Home / Menu / Pause / Fullscreen */}
             <div className="pointer-events-auto flex flex-col items-end gap-2">
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={handleExitToLanding}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-[#081526]/90 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-white whitespace-nowrap shrink-0"
+                  className="arcade-hud inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-slate-100 hover:border-sky-400 hover:text-white whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <Home className="h-3.5 w-3.5 text-sky-400" />
-                  Landing
+                  Home
                 </button>
                 <button
                   type="button"
@@ -2136,7 +2136,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                     if (stateRef.current) stateRef.current.phase = 'MENU';
                     setPhase('MENU');
                   }}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-[#081526]/90 px-2.5 py-1.5 text-xs font-semibold text-white hover:border-sky-400 whitespace-nowrap shrink-0"
+                  className="arcade-hud inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-sky-200 hover:border-sky-400 whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   <Menu className="h-3.5 w-3.5 text-sky-400" />
                   Menu
@@ -2149,7 +2149,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                     stateRef.current.phase = next;
                     setPhase(next);
                   }}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-[#081526]/90 px-2.5 py-1.5 text-xs font-semibold text-white hover:border-sky-400 whitespace-nowrap shrink-0"
+                  className="arcade-hud inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white hover:border-sky-400 whitespace-nowrap shrink-0 cursor-pointer"
                   aria-label="Pause or resume"
                 >
                   {phase === 'PAUSED' ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
@@ -2160,7 +2160,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                     soundEngine.muted = !muted;
                     setMuted(soundEngine.muted);
                   }}
-                  className="rounded-lg border border-slate-700 bg-[#081526]/90 p-1.5 text-slate-200 hover:border-sky-400"
+                  className="arcade-hud p-1.5 text-slate-200 hover:border-sky-400 cursor-pointer"
                   aria-label="Toggle sound"
                 >
                   {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
@@ -2168,7 +2168,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                 <button
                   type="button"
                   onClick={toggleFullscreen}
-                  className="rounded-lg border border-slate-700 bg-[#081526]/90 p-1.5 text-slate-200 hover:border-sky-400"
+                  className="arcade-hud p-1.5 text-slate-200 hover:border-sky-400 cursor-pointer"
                   aria-label="Toggle fullscreen"
                 >
                   {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
@@ -2176,14 +2176,14 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               </div>
 
               {hud.enemyName && selectedGameMode !== 'stickman_run' && (
-                <div className="min-w-[205px] rounded-xl border border-rose-500/40 bg-[#081526]/88 px-3 py-1.5 backdrop-blur-sm space-y-1">
+                <div className="min-w-[205px] arcade-hud border-rose-500/45 px-3 py-1.5 space-y-1">
                   <div className="flex items-center justify-between text-[11px] font-bold tabular-nums">
                     <span className="text-orange-200">{hud.enemyName}</span>
                     <span className="font-mono text-slate-300">
                       {hud.enemyHp}/{hud.enemyMaxHp}
                     </span>
                   </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-950">
                     <div
                       className="h-full bg-rose-500 transition-all duration-150"
                       style={{ width: `${enemyHpPct}%` }}
@@ -2191,7 +2191,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                   </div>
                   {hud.pinPossible && (
                     <span className="block text-[10px] font-bold text-amber-300">
-                      PRESS E TO PIN (1-2-3!)
+                      PRESS [E] TO PIN!
                     </span>
                   )}
                 </div>
@@ -2202,7 +2202,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
 
         {/* === UNIFIED POINTER TOUCH / MOUSE GAMEPLAY CONTROLS === */}
         {phase === 'PLAYING' && (
-          <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-2 p-3 bg-gradient-to-t from-[#040c18]/85 to-transparent">
+          <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-2 p-2.5 bg-gradient-to-t from-[#040c18]/80 to-transparent">
             <div className="flex items-center gap-1.5">
               {selectedGameMode !== 'stickman_run' && (
                 <>
@@ -2215,9 +2215,9 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                     onPointerUp={() => (keysRef.current['a'] = false)}
                     onPointerCancel={() => (keysRef.current['a'] = false)}
                     onPointerLeave={() => (keysRef.current['a'] = false)}
-                    className="rounded-lg border border-slate-700 bg-slate-900/85 px-3 py-2 text-xs font-bold text-white active:bg-sky-500 active:text-slate-950 touch-none"
+                    className="arcade-hud inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white active:bg-sky-500 active:text-slate-950 touch-none cursor-pointer"
                   >
-                    Left (A)
+                    <span className="arcade-kbd">A</span> Left
                   </button>
                   <button
                     type="button"
@@ -2228,9 +2228,9 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                     onPointerUp={() => (keysRef.current['d'] = false)}
                     onPointerCancel={() => (keysRef.current['d'] = false)}
                     onPointerLeave={() => (keysRef.current['d'] = false)}
-                    className="rounded-lg border border-slate-700 bg-slate-900/85 px-3 py-2 text-xs font-bold text-white active:bg-sky-500 active:text-slate-950 touch-none"
+                    className="arcade-hud inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white active:bg-sky-500 active:text-slate-950 touch-none cursor-pointer"
                   >
-                    Right (D)
+                    Right <span className="arcade-kbd">D</span>
                   </button>
                 </>
               )}
@@ -2240,9 +2240,9 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                   e.preventDefault();
                   triggerAction('jump');
                 }}
-                className="rounded-lg border border-slate-700 bg-slate-900/85 px-3 py-2 text-xs font-bold text-sky-200 active:bg-sky-500 active:text-slate-950 touch-none"
+                className="arcade-hud inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-sky-200 active:bg-sky-500 active:text-slate-950 touch-none cursor-pointer"
               >
-                Jump (W)
+                <span className="arcade-kbd">W</span> Jump
               </button>
               <button
                 type="button"
@@ -2253,9 +2253,9 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                 onPointerUp={() => (keysRef.current['s'] = false)}
                 onPointerCancel={() => (keysRef.current['s'] = false)}
                 onPointerLeave={() => (keysRef.current['s'] = false)}
-                className="rounded-lg border border-slate-700 bg-slate-900/85 px-3 py-2 text-xs font-bold text-slate-200 active:bg-sky-500 active:text-slate-950 touch-none"
+                className="arcade-hud inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-slate-200 active:bg-sky-500 active:text-slate-950 touch-none cursor-pointer"
               >
-                {selectedGameMode === 'stickman_run' ? 'Slide (S)' : 'Guard (S)'}
+                <span className="arcade-kbd">S</span> {selectedGameMode === 'stickman_run' ? 'Slide' : 'Guard'}
               </button>
             </div>
 
@@ -2266,9 +2266,9 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                   e.preventDefault();
                   triggerAction('jab');
                 }}
-                className="rounded-lg border border-sky-500/40 bg-sky-500/20 px-3 py-2 text-xs font-bold text-sky-200 hover:bg-sky-500/35 whitespace-nowrap shrink-0 touch-none"
+                className="rounded-lg border border-sky-400/50 bg-sky-500/20 px-2.5 py-1.5 text-xs font-bold text-sky-100 hover:bg-sky-500/35 whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1"
               >
-                {selectedGameMode === 'stickman_run' ? 'Blast (J)' : 'Strike (J)'}
+                <span className="arcade-kbd">J</span> {selectedGameMode === 'stickman_run' ? 'Blast' : 'Strike'}
               </button>
               {selectedGameMode !== 'stickman_run' && (
                 <>
@@ -2278,9 +2278,9 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                       e.preventDefault();
                       triggerAction('heavy');
                     }}
-                    className="rounded-lg border border-amber-500/40 bg-amber-500/20 px-3 py-2 text-xs font-bold text-amber-200 hover:bg-amber-500/35 whitespace-nowrap shrink-0 touch-none"
+                    className="rounded-lg border border-amber-400/50 bg-amber-500/20 px-2.5 py-1.5 text-xs font-bold text-amber-100 hover:bg-amber-500/35 whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1"
                   >
-                    {selectedGameMode === 'stickman_wrestling' ? 'Suplex (K)' : 'Uppercut (K)'}
+                    <span className="arcade-kbd">K</span> {selectedGameMode === 'stickman_wrestling' ? 'Suplex' : 'Upper'}
                   </button>
                   <button
                     type="button"
@@ -2288,9 +2288,9 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                       e.preventDefault();
                       triggerAction('dash');
                     }}
-                    className="rounded-lg border border-cyan-500/40 bg-cyan-500/20 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-500/35 whitespace-nowrap shrink-0 touch-none"
+                    className="rounded-lg border border-cyan-400/50 bg-cyan-500/20 px-2.5 py-1.5 text-xs font-bold text-cyan-100 hover:bg-cyan-500/35 whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1"
                   >
-                    Dash (Space)
+                    <span className="arcade-kbd">SPC</span> Dash
                   </button>
                   <button
                     type="button"
@@ -2298,11 +2298,9 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                       e.preventDefault();
                       triggerAction('special');
                     }}
-                    className="rounded-lg border border-purple-500/40 bg-purple-500/20 px-3 py-2 text-xs font-bold text-purple-200 hover:bg-purple-500/35 whitespace-nowrap shrink-0 touch-none"
+                    className="rounded-lg border border-purple-400/50 bg-purple-500/20 px-2.5 py-1.5 text-xs font-bold text-purple-100 hover:bg-purple-500/35 whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1"
                   >
-                    {selectedGameMode === 'stickman_wrestling'
-                      ? `Finisher ${hud.finisher}% (L)`
-                      : 'Ice Throw (L)'}
+                    <span className="arcade-kbd">L</span> {selectedGameMode === 'stickman_wrestling' ? `${hud.finisher}%` : 'Ice'}
                   </button>
                   {selectedGameMode === 'stickman_wrestling' && (
                     <button
@@ -2311,13 +2309,13 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                         e.preventDefault();
                         triggerAction('pin');
                       }}
-                      className={`rounded-lg px-3 py-2 text-xs font-bold whitespace-nowrap shrink-0 touch-none ${
+                      className={`rounded-lg px-2.5 py-1.5 text-xs font-bold whitespace-nowrap shrink-0 touch-none cursor-pointer inline-flex items-center gap-1 ${
                         hud.pinPossible
                           ? 'bg-amber-400 text-slate-950'
-                          : 'border border-rose-500/40 bg-rose-500/20 text-rose-200'
+                          : 'border border-rose-500/45 bg-rose-500/20 text-rose-100'
                       }`}
                     >
-                      Pin 1-2-3 (E)
+                      <span className="arcade-kbd">E</span> Pin
                     </button>
                   )}
                 </>
@@ -2326,108 +2324,119 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
           </div>
         )}
 
-        {/* === GAME MENU / GROUP LAUNCHER OVERLAY === */}
+        {/* === GAMISH 2D LAUNCHER OVERLAY (ZERO TEXT WALLS, ZERO BACKDROP-BLUR) === */}
         {phase === 'MENU' && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#061120]/82 p-4 sm:p-6 backdrop-blur-sm overflow-y-auto">
-            <div className="w-full max-w-3xl rounded-2xl border border-slate-700/80 bg-[#0B182B]/95 p-5 sm:p-6 space-y-5 shadow-2xl">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
-                <div>
-                  <span className="text-xs font-semibold text-sky-400">
-                    2D Stickman Lofi Arcade · Pick Game &amp; Stage
-                  </span>
-                  <h2 className="title-3d-game-sm text-2xl sm:text-3xl leading-tight mt-0.5">
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#040B16]/80 p-3 sm:p-5 overflow-y-auto">
+            <div className="w-full max-w-3xl arcade-panel p-4 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sky-400/15 pb-3.5">
+                <div className="flex items-center gap-3">
+                  <h2 className="title-3d-game-sm text-2xl sm:text-3xl leading-none">
                     {gameSpec.name}
                   </h2>
+                  <span className="rounded bg-amber-500/15 border border-amber-400/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+                    2D Stickman
+                  </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     type="button"
                     onClick={handleExitToLanding}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-white whitespace-nowrap shrink-0"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-200 hover:border-sky-400 hover:text-white whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <Home className="h-3.5 w-3.5 text-sky-400" />
-                    Landing Page
+                    Home
                   </button>
                   <button
                     type="button"
                     onClick={() => setMenuStep('game')}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 ${
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer ${
                       menuStep === 'game'
-                        ? 'bg-sky-500 text-slate-950'
-                        : 'border border-slate-700 text-slate-300 hover:text-white'
+                        ? 'bg-sky-400 text-slate-950'
+                        : 'border border-slate-700 bg-slate-900 text-slate-300 hover:text-white'
                     }`}
                   >
-                    1. Choose Game
+                    1 · Game
                   </button>
                   <button
                     type="button"
                     onClick={() => setMenuStep('map')}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 ${
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold whitespace-nowrap shrink-0 cursor-pointer ${
                       menuStep === 'map'
-                        ? 'bg-sky-500 text-slate-950'
-                        : 'border border-slate-700 text-slate-300 hover:text-white'
+                        ? 'bg-sky-400 text-slate-950'
+                        : 'border border-slate-700 bg-slate-900 text-slate-300 hover:text-white'
                     }`}
                   >
-                    2. Stage &amp; Yeti
+                    2 · Stage
                   </button>
                 </div>
               </div>
 
               {menuStep === 'game' ? (
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
-                      2D Stickman Games (Lofi the Yeti Face + Stickman Body)
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      {modes2D.map((gm) => {
-                        const active = gm.id === selectedGameMode;
-                        const Icon =
-                          gm.id === 'stickman_wrestling'
-                            ? Trophy
-                            : gm.id === 'stickman_brawl'
-                            ? Swords
-                            : Flame;
-                        return (
-                          <button
-                            key={gm.id}
-                            type="button"
-                            onClick={() => {
-                              onChangeGameMode(gm.id);
-                              setMenuStep('map');
-                            }}
-                            className={`text-left rounded-xl border p-3.5 transition-all space-y-1.5 ${
-                              active
-                                ? 'border-sky-400 bg-sky-500/15'
-                                : 'border-slate-800 bg-slate-900/70 hover:border-slate-600'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <Icon className="h-4 w-4 text-sky-400" />
-                              <span className="text-[10px] font-bold text-amber-300">2D STICKMAN</span>
-                            </div>
-                            <h3 className="font-display text-base text-white">{gm.name}</h3>
-                            <p className="text-[11px] text-slate-400 leading-snug">{gm.subtitle}</p>
-                          </button>
-                        );
-                      })}
-                    </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {modes2D.map((gm) => {
+                      const active = gm.id === selectedGameMode;
+                      const Icon =
+                        gm.id === 'stickman_wrestling'
+                          ? Trophy
+                          : gm.id === 'stickman_brawl'
+                          ? Swords
+                          : Flame;
+                      const grad =
+                        gm.id === 'stickman_wrestling'
+                          ? 'from-amber-500/25 via-rose-500/10 to-slate-900'
+                          : gm.id === 'stickman_brawl'
+                          ? 'from-sky-500/25 via-cyan-500/10 to-slate-900'
+                          : 'from-emerald-500/25 via-sky-500/10 to-slate-900';
+                      const quickTag =
+                        gm.id === 'stickman_wrestling'
+                          ? 'Pro Ring · 1-2-3 Pin'
+                          : gm.id === 'stickman_brawl'
+                          ? 'Ledge Brawl · Combos'
+                          : 'Cliff Runner · Blasts';
+                      return (
+                        <button
+                          key={gm.id}
+                          type="button"
+                          onClick={() => {
+                            onChangeGameMode(gm.id);
+                            setMenuStep('map');
+                          }}
+                          className={`overflow-hidden text-left rounded-xl border-2 transition-all cursor-pointer ${
+                            active
+                              ? 'border-sky-400 bg-sky-500/15 shadow-[0_0_20px_rgba(56,189,248,0.2)]'
+                              : 'border-slate-700/80 bg-slate-900/90 hover:border-sky-400/60'
+                          }`}
+                        >
+                          <div className={`bg-gradient-to-br ${grad} px-3.5 py-3 border-b border-white/10 flex items-center justify-between`}>
+                            <Icon className="h-6 w-6 text-amber-300" />
+                            <span className="rounded bg-slate-950/70 border border-amber-400/35 px-2 py-0.5 text-[10px] font-bold text-amber-200">
+                              2D
+                            </span>
+                          </div>
+                          <div className="p-3.5 space-y-1.5">
+                            <h3 className="font-display text-lg text-white leading-tight">{gm.name}</h3>
+                            <span className="text-[11px] font-semibold text-sky-300 block">{quickTag}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
 
-                  <div className="space-y-2 border-t border-slate-800 pt-3">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-sky-300">
-                      Or Switch to 3D Arena Games
-                    </p>
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-400/25 bg-sky-500/10 px-3.5 py-2.5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-sky-300">
+                      3D Games
+                    </span>
                     <div className="flex flex-wrap gap-2">
                       {modes3D.map((gm) => (
                         <button
                           key={gm.id}
                           type="button"
                           onClick={() => onChangeGameMode(gm.id)}
-                          className="rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-sky-400 hover:text-white whitespace-nowrap shrink-0"
+                          className="rounded-lg border border-sky-400/40 bg-[#081322] px-3 py-1.5 text-xs font-bold text-sky-200 hover:bg-sky-400 hover:text-slate-950 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                         >
-                          {gm.name} (3D)
+                          {gm.shortLabel}
                         </button>
                       ))}
                     </div>
@@ -2439,37 +2448,50 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                     {ARENA_MAPS.map((m) => {
                       const active = m.id === selectedMapId;
                       const detail = getMapModeDetails(m.id, selectedGameMode);
+                      const biomeGrad =
+                        m.id === 'volcanic_springs'
+                          ? 'from-orange-500/45 via-amber-500/20 to-slate-900'
+                          : m.id === 'aurora_summit'
+                          ? 'from-violet-500/45 via-fuchsia-500/20 to-slate-900'
+                          : 'from-cyan-500/45 via-sky-500/20 to-slate-900';
                       return (
                         <button
                           key={m.id}
                           type="button"
                           onClick={() => onChangeMapId(m.id)}
-                          className={`text-left rounded-xl border p-3.5 space-y-1.5 transition-all ${
+                          className={`overflow-hidden text-left rounded-xl border-2 transition-all cursor-pointer ${
                             active
-                              ? 'border-sky-400 bg-sky-500/15'
-                              : 'border-slate-800 bg-slate-900/70 hover:border-slate-600'
+                              ? 'border-sky-400 bg-sky-500/15 shadow-[0_0_20px_rgba(56,189,248,0.2)]'
+                              : 'border-slate-700/80 bg-slate-900/90 hover:border-slate-500'
                           }`}
                         >
-                          <div className="flex items-center justify-between text-xs font-bold">
-                            <span className="text-white">{m.name}</span>
-                            <span style={{ color: m.accentHex }}>{detail.tag}</span>
+                          <div className={`h-10 w-full bg-gradient-to-r ${biomeGrad} px-3 flex items-center justify-between border-b border-white/10`}>
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-950/75" style={{ color: m.accentHex }}>
+                              {detail.tag}
+                            </span>
+                            {active && (
+                              <span className="text-[10px] font-bold uppercase text-sky-300">Selected</span>
+                            )}
                           </div>
-                          <p className="text-[11px] text-slate-400 leading-snug">{detail.summary}</p>
+                          <div className="p-3 space-y-1">
+                            <span className="font-display text-lg text-white block leading-tight">{m.name}</span>
+                            <span className="text-[11px] font-medium text-slate-400 block truncate">{m.subtitle}</span>
+                          </div>
                         </button>
                       );
                     })}
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold text-slate-400">Yeti Theme:</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Yeti:</span>
                       {YETI_COLORWAYS.map((c) => (
                         <button
                           key={c.id}
                           type="button"
                           onClick={() => onChangeColorway(c.id)}
                           title={c.name}
-                          className={`h-6 w-6 rounded-full border-2 transition-transform ${
+                          className={`h-6 w-6 rounded-md border-2 transition-transform cursor-pointer ${
                             selectedColorway === c.id
                               ? 'border-white scale-110'
                               : 'border-slate-700 opacity-75 hover:opacity-100'
@@ -2482,27 +2504,41 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                       <button
                         type="button"
                         onClick={onMintPrompt}
-                        className="text-xs font-semibold text-sky-400 hover:text-sky-300 underline underline-offset-4"
+                        className="text-xs font-bold text-sky-400 hover:text-sky-300 underline underline-offset-4 cursor-pointer"
                       >
-                        Mint Lofi Yeti to save stats on Sui
+                        Mint Lofi Yeti
                       </button>
                     )}
                   </div>
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4">
-                <p className="text-xs text-slate-400 max-w-md">{gameSpec.controlsSummary}</p>
-                <div className="flex items-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={handleStartFromMenu}
-                    className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-5 py-2.5 text-sm font-bold text-slate-950 hover:bg-sky-400 transition-colors whitespace-nowrap shrink-0"
-                  >
-                    <Play className="h-4 w-4 fill-current" />
-                    Start {gameSpec.shortLabel} ({mapSpec.name})
-                  </button>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-sky-400/15 pt-3.5">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-300">
+                  {selectedGameMode === 'stickman_run' ? (
+                    <>
+                      <span><span className="arcade-kbd">W</span> Jump</span>
+                      <span><span className="arcade-kbd">S</span> Slide</span>
+                      <span><span className="arcade-kbd">J</span> Blast</span>
+                    </>
+                  ) : (
+                    <>
+                      <span><span className="arcade-kbd">A/D</span> Move</span>
+                      <span><span className="arcade-kbd">W</span> Jump</span>
+                      <span><span className="arcade-kbd">J</span> Hit</span>
+                      <span><span className="arcade-kbd">K</span> Heavy</span>
+                      <span><span className="arcade-kbd">L</span> Special</span>
+                    </>
+                  )}
                 </div>
+                <button
+                  type="button"
+                  onClick={handleStartFromMenu}
+                  className="arcade-btn-primary inline-flex items-center gap-2 px-6 py-2.5 text-sm uppercase tracking-wider whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Play className="h-4 w-4 fill-current" />
+                  Play Now
+                </button>
               </div>
             </div>
           </div>
@@ -2510,11 +2546,11 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
 
         {/* === PAUSE OVERLAY === */}
         {phase === 'PAUSED' && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#061120]/82 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-[#0B182B] p-6 text-center space-y-4">
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#040B16]/82 p-4">
+            <div className="w-full max-w-sm arcade-panel p-6 text-center space-y-4">
               <h3 className="title-3d-game-sm text-3xl">Paused</h3>
-              <p className="text-xs text-slate-400">
-                {gameSpec.name} · {mapSpec.name}
+              <p className="text-xs font-semibold text-slate-300">
+                {gameSpec.shortLabel} · {mapSpec.name}
               </p>
               <div className="grid grid-cols-2 gap-2.5">
                 <button
@@ -2523,7 +2559,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                     if (stateRef.current) stateRef.current.phase = 'PLAYING';
                     setPhase('PLAYING');
                   }}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-sky-400"
+                  className="arcade-btn-primary inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs cursor-pointer"
                 >
                   <Play className="h-3.5 w-3.5 fill-current" />
                   Resume
@@ -2531,7 +2567,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                 <button
                   type="button"
                   onClick={() => initMatchState(selectedGameMode, selectedMapId)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-bold text-white hover:bg-slate-700 cursor-pointer"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   Restart
@@ -2542,18 +2578,18 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                     if (stateRef.current) stateRef.current.phase = 'MENU';
                     setPhase('MENU');
                   }}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-bold text-slate-200 hover:text-white cursor-pointer"
                 >
                   <Menu className="h-3.5 w-3.5" />
-                  Game Menu
+                  Menu
                 </button>
                 <button
                   type="button"
                   onClick={handleExitToLanding}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-4 py-2 text-xs font-semibold text-sky-200 hover:bg-sky-500/20"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2.5 text-xs font-bold text-sky-200 hover:bg-sky-500/25 cursor-pointer"
                 >
                   <Home className="h-3.5 w-3.5" />
-                  Landing Page
+                  Home
                 </button>
               </div>
             </div>
@@ -2578,26 +2614,43 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
         )}
       </div>
 
-      {/* Quick Control Reference & Graphic Power-Up Key under 2D Canvas */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800/80 bg-[#0A1728] px-4 py-2.5 text-xs text-slate-400">
-        <span className="inline-flex items-center gap-2 text-slate-200 font-medium">
-          <Sparkles className="h-3.5 w-3.5 text-sky-400" />
-          2D Lofi Stickman Controls: {gameSpec.controlsSummary}
-        </span>
-        <span className="inline-flex items-center gap-3 text-[11px]">
+      {/* Compact Single-Row Keycap & Power-Up Console Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 arcade-hud px-3.5 py-2 text-xs text-slate-300">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {selectedGameMode === 'stickman_run' ? (
+            <>
+              <span><span className="arcade-kbd">W</span> Jump ×2</span>
+              <span><span className="arcade-kbd">S</span> Slide</span>
+              <span><span className="arcade-kbd">J</span> Blast</span>
+            </>
+          ) : (
+            <>
+              <span><span className="arcade-kbd">A/D</span> Move</span>
+              <span><span className="arcade-kbd">W</span> Jump</span>
+              <span><span className="arcade-kbd">S</span> Guard</span>
+              <span><span className="arcade-kbd">J</span> Strike</span>
+              <span><span className="arcade-kbd">K</span> Heavy</span>
+              <span><span className="arcade-kbd">L</span> {selectedGameMode === 'stickman_wrestling' ? 'Finisher' : 'Throw'}</span>
+              {selectedGameMode === 'stickman_wrestling' && (
+                <span><span className="arcade-kbd">E</span> Pin</span>
+              )}
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-3 text-[11px] font-bold">
           <span className="inline-flex items-center gap-1 text-sky-300">
-            <Shield className="h-3.5 w-3.5" /> Cryo Shield
+            <Shield className="h-3.5 w-3.5" /> Shield
           </span>
           <span className="inline-flex items-center gap-1 text-orange-300">
-            <Flame className="h-3.5 w-3.5" /> Rage 1.6x
+            <Flame className="h-3.5 w-3.5" /> Rage
           </span>
           <span className="inline-flex items-center gap-1 text-purple-300">
             <Zap className="h-3.5 w-3.5" /> Magnet
           </span>
           <span className="inline-flex items-center gap-1 text-emerald-300">
-            <Heart className="h-3.5 w-3.5" /> Medkit
+            <Heart className="h-3.5 w-3.5" /> Heal
           </span>
-        </span>
+        </div>
       </div>
     </div>
   );

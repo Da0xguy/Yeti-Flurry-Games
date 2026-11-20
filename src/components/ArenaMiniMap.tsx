@@ -99,15 +99,12 @@ export const ArenaMiniMap: React.FC<ArenaMiniMapProps> = ({
 
   return (
     <div
-      className="pointer-events-none absolute left-3 bottom-3 z-20 rounded-xl border border-white/15 bg-[#061120]/82 p-2.5 backdrop-blur-md shadow-xl select-none"
+      className="pointer-events-none absolute left-3 bottom-3 z-20 rounded-xl arcade-hud p-2 select-none"
       aria-label="Live arena mini-map"
     >
       {/* Header */}
-      <div className="flex items-center justify-between gap-2 text-[9px] font-semibold uppercase tracking-wider text-slate-300 mb-1.5 px-0.5">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          {gameMode === 'car_racing' ? 'Circuit Radar' : 'Tactical Radar'}
-        </span>
+      <div className="flex items-center justify-between gap-2 text-[9px] font-bold uppercase tracking-wider text-sky-200 mb-1 px-0.5">
+        <span>{gameMode === 'car_racing' ? 'Circuit Radar' : 'Radar'}</span>
         <span className="font-mono text-sky-300 truncate max-w-[92px]">{mapSpec.name}</span>
       </div>
 

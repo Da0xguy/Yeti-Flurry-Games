@@ -26,14 +26,12 @@ import {
   Music,
   Car,
   Crosshair,
-  Gauge,
   ChevronLeft,
   Menu,
   Maximize2,
   Minimize2,
   Heart,
   Magnet,
-  Flag,
   Flame,
   Home,
 } from 'lucide-react';
@@ -2396,6 +2394,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
     const burstGeo = new THREE.SphereGeometry(0.11, 6, 6);
     const shockRingGeo = new THREE.RingGeometry(0.65, 0.88, 28);
     shockRingGeo.rotateX(-Math.PI / 2);
+    const burstMatCache = new Map<string, THREE.MeshBasicMaterial>();
+    let smoothLookX = 0;
+    let smoothLookY = 0.9;
+    let smoothLookZ = 0;
 
     if (!isSoftwareGl) {
       renderer.compile(scene, camera);
@@ -2560,7 +2562,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             if (throttle !== 0) {
               k.speed = THREE.MathUtils.clamp(k.speed + throttle * accelRate * dt, -150, maxSpd);
             } else {
-              k.speed *= 0.97;
+              k.speed *= Math.exp(-1.85 * dt);
             }
 
             const turnAuthority = THREE.MathUtils.clamp(Math.abs(k.speed) / 95, 0.28, 1.0);
@@ -2569,8 +2571,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
             const hx = Math.cos(k.angle) * k.speed;
             const hy = Math.sin(k.angle) * k.speed;
-            k.vx = k.vx * (1 - (1 - gripFactor) * 1.4) + hx * ((1 - gripFactor) * 1.4);
-            k.vy = k.vy * (1 - (1 - gripFactor) * 1.4) + hy * ((1 - gripFactor) * 1.4);
+            const gripRate = THREE.MathUtils.clamp((1 - gripFactor) * 84, 5, 22);
+            const gripAlpha = 1 - Math.exp(-gripRate * dt);
+            k.vx += (hx - k.vx) * gripAlpha;
+            k.vy += (hy - k.vy) * gripAlpha;
 
             k.x = THREE.MathUtils.clamp(k.x + k.vx * dt, RACE_BOUNDS.minX, RACE_BOUNDS.maxX);
             k.y = THREE.MathUtils.clamp(k.y + k.vy * dt, RACE_BOUNDS.minY, RACE_BOUNDS.maxY);
@@ -2777,11 +2781,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             const mag = Math.hypot(ix, iy);
             const moveSpd = 265 * mapSpec.speedMult * (now < player.boostUntil ? 1.32 : 1);
             if (mag > 0.05) {
-              player.vx = player.vx * 0.72 + (ix / mag) * moveSpd * 0.28;
-              player.vy = player.vy * 0.72 + (iy / mag) * moveSpd * 0.28;
+              const accelAlpha = 1 - Math.exp(-19.5 * dt);
+              player.vx += ((ix / mag) * moveSpd - player.vx) * accelAlpha;
+              player.vy += ((iy / mag) * moveSpd - player.vy) * accelAlpha;
             } else {
-              player.vx *= 0.8;
-              player.vy *= 0.8;
+              const decel = Math.exp(-13.4 * dt);
+              player.vx *= decel;
+              player.vy *= decel;
             }
 
             if (gameModeRef.current === 'shooting' || pointerDownRef.current) {
@@ -3264,17 +3270,22 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             const boostFactor = now < ent.boostUntil ? 1.38 : 1;
             const baseSpeed = (ent.isBot ? 205 : 245) * boostFactor * mapSpec.speedMult;
             const mag = Math.hypot(ix, iy);
+            const dampRate = Math.max(
+              2.5,
+              -Math.log(Math.max(0.5, Math.min(0.98, mapSpec.friction))) * 60
+            );
             if (mag > 0.05 && ent.dashTime <= 0) {
               const nx = ix / mag;
               const ny = iy / mag;
               ent.facingX = nx;
               ent.facingY = ny;
-              const accel = 1 - mapSpec.friction;
-              ent.vx = ent.vx * mapSpec.friction + nx * baseSpeed * accel;
-              ent.vy = ent.vy * mapSpec.friction + ny * baseSpeed * accel;
+              const accelAlpha = 1 - Math.exp(-dampRate * dt);
+              ent.vx += (nx * baseSpeed - ent.vx) * accelAlpha;
+              ent.vy += (ny * baseSpeed - ent.vy) * accelAlpha;
             } else if (ent.dashTime <= 0) {
-              ent.vx *= mapSpec.friction;
-              ent.vy *= mapSpec.friction;
+              const frictionDecay = Math.exp(-dampRate * dt);
+              ent.vx *= frictionDecay;
+              ent.vy *= frictionDecay;
             }
 
             const moveSpeed = Math.hypot(ent.vx, ent.vy);
@@ -4070,7 +4081,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       // Spawn & Step Burst Particles + Shockwave Rings
       while (s.pendingBursts.length > 0) {
         const b = s.pendingBursts.pop()!;
-        const mat = new THREE.MeshBasicMaterial({ color: b.color });
+        let mat = burstMatCache.get(b.color);
+        if (!mat) {
+          mat = new THREE.MeshBasicMaterial({ color: b.color });
+          burstMatCache.set(b.color, mat);
+        }
         for (let i = 0; i < b.count; i++) {
           const m = new THREE.Mesh(burstGeo, mat);
           m.position.set(b.x, 0.6, b.z);
@@ -4148,9 +4163,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         lookZ = focusZ + fwdZ * 4.6;
       }
 
-      camera.position.x = THREE.MathUtils.damp(camera.position.x, targetCamX, 5.5, dt);
-      camera.position.y = THREE.MathUtils.damp(camera.position.y, targetCamY, 5.5, dt);
-      camera.position.z = THREE.MathUtils.damp(camera.position.z, targetCamZ, 5.5, dt);
+      const camLambda = gm === 'car_racing' ? 10.5 : 8.5;
+      camera.position.x = THREE.MathUtils.damp(camera.position.x, targetCamX, camLambda, dt);
+      camera.position.y = THREE.MathUtils.damp(camera.position.y, targetCamY, camLambda, dt);
+      camera.position.z = THREE.MathUtils.damp(camera.position.z, targetCamZ, camLambda, dt);
 
       if (s.shake > 0.02) {
         camera.position.x += (Math.random() - 0.5) * s.shake;
@@ -4164,7 +4180,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         camera.updateProjectionMatrix();
       }
 
-      _v3B.set(lookX, lookY, lookZ);
+      smoothLookX = THREE.MathUtils.damp(smoothLookX, lookX, 12, dt);
+      smoothLookY = THREE.MathUtils.damp(smoothLookY, lookY, 12, dt);
+      smoothLookZ = THREE.MathUtils.damp(smoothLookZ, lookZ, 12, dt);
+      _v3B.set(smoothLookX, smoothLookY, smoothLookZ);
       camera.lookAt(_v3B);
 
       renderer.render(scene, camera);
@@ -4199,6 +4218,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       pillarMat.dispose();
       barrelMat.dispose();
       barrelGlowMat.dispose();
+      burstGeo.dispose();
+      shockRingGeo.dispose();
+      burstMatCache.forEach((mat) => mat.dispose());
+      burstMatCache.clear();
       envTex.dispose();
       renderer.dispose();
     };
@@ -4253,211 +4276,29 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   const activeGame = getGameModeSpec(selectedGameMode);
 
   return (
-    <div className="space-y-4">
-      {/* Top HUD Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-[#0D1C30] px-4 py-3">
-        <div className="flex flex-wrap items-center gap-5 tabular-nums text-sm">
-          <div className="flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4 text-sky-400" aria-hidden="true" />
-            <span className="text-slate-400">Score</span>
-            <span className="font-mono font-semibold text-white">{hud.score}</span>
-          </div>
-
-              {selectedGameMode === 'car_racing' ? (
-            <>
-              <div className="flex items-center gap-1.5">
-                <Car className="h-4 w-4 text-cyan-400" aria-hidden="true" />
-                <span className="text-slate-400">Lap</span>
-                <span className="font-mono font-semibold text-cyan-300">
-                  {hud.lap}/{hud.totalLaps}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Flag className="h-4 w-4 text-amber-300" aria-hidden="true" />
-                <span className="text-slate-400">CP</span>
-                <span className="font-mono font-semibold text-amber-200">
-                  {hud.checkpoint}/{hud.totalCheckpoints}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Gauge className="h-4 w-4 text-sky-300" aria-hidden="true" />
-                <span className="text-slate-400">Pos</span>
-                <span className="font-mono font-semibold text-white">#{hud.racePos}/4</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Wind className="h-4 w-4 text-sky-300" aria-hidden="true" />
-                <span className="text-slate-400">Speed</span>
-                <span className="font-mono font-semibold text-white">{hud.speedKmh} km/h</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Zap className="h-4 w-4 text-emerald-400" aria-hidden="true" />
-                <span className="text-slate-400">Nitro</span>
-                <span className="font-mono font-semibold text-emerald-300">{hud.nitroPct}%</span>
-              </div>
-            </>
-          ) : selectedGameMode === 'shooting' ? (
-            <>
-              <div className="flex items-center gap-1.5">
-                <Crosshair className="h-4 w-4 text-cyan-400" aria-hidden="true" />
-                <span className="text-slate-400">Elims</span>
-                <span className="font-mono font-semibold text-cyan-300">{hud.elims}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Zap className="h-4 w-4 text-amber-300" aria-hidden="true" />
-                <span className="text-slate-400">Streak</span>
-                <span className="font-mono font-semibold text-amber-200">{hud.combo}×</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Droplets className="h-4 w-4 text-sky-300" aria-hidden="true" />
-                <span className="text-slate-400">Drops</span>
-                <span className="font-mono font-semibold text-sky-200">{hud.wellDrops}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Heart className="h-4 w-4 text-rose-400" aria-hidden="true" />
-                <span className="text-slate-400">Life</span>
-                <span className="font-mono font-semibold text-white">{hud.hp}/{hud.maxHp}</span>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-1.5">
-                <Droplets className="h-4 w-4 text-cyan-400" aria-hidden="true" />
-                <span className="text-slate-400">Drops</span>
-                <span className="font-mono font-semibold text-cyan-300">{hud.wellDrops}</span>
-                {hud.carriedDrops >= 2 && (
-                  <span className="text-xs font-semibold text-emerald-400">
-                    ({hud.carriedDrops} ready to bank!)
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Gem className="h-4 w-4 text-sky-300" aria-hidden="true" />
-                <span className="text-slate-400">Gems</span>
-                <span className="font-mono font-semibold text-sky-200">{hud.frostGems}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Heart className="h-4 w-4 text-rose-400" aria-hidden="true" />
-                <span className="text-slate-400">Life</span>
-                <span className="font-mono font-semibold text-white">{hud.hp}/{hud.maxHp}</span>
-              </div>
-            </>
-          )}
-
-          <div className="flex items-center gap-1.5">
-            <Snowflake className="h-4 w-4 text-slate-300" aria-hidden="true" />
-            <span className="text-slate-400">Time</span>
-            <span className="font-mono font-semibold text-white">{formatClock(hud.timeLeft)}</span>
-          </div>
-
-          <div className="flex items-center gap-1.5 border-l border-slate-700/80 pl-4">
-            <Droplets className="h-4 w-4 text-amber-300" aria-hidden="true" />
-            <span className="text-slate-400">Global Well</span>
-            <span className="font-mono font-semibold text-amber-200">
-              {wellImpact.totalDropsCollected.toLocaleString()}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400 whitespace-nowrap">
-            {activeGame.shortLabel} · {activeMap.name}
-            {selectedGameMode === 'survival' && playMode === 'tunnel'
-              ? tunnelConnected
-                ? ` · Tunnel (${tunnelPlayersCount})`
-                : ' · Tunnel'
-              : ` · Wave ${hud.wave}`}
-          </span>
-
-          {gameState !== 'TITLE_MENU' && (
-            <button
-              type="button"
-              onClick={() => openGameMapLauncher('choose_game')}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-2.5 py-1.5 text-xs font-semibold text-sky-200 hover:border-sky-400 hover:bg-sky-500/20 transition-colors whitespace-nowrap shrink-0"
-            >
-              <Menu className="h-3.5 w-3.5" />
-              Game Menu
-            </button>
-          )}
-
-          {gameState === 'PLAYING' && playMode === 'solo' && (
-            <button
-              type="button"
-              onClick={() => setGameState('PAUSED')}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 transition-colors whitespace-nowrap shrink-0"
-            >
-              <Pause className="h-3.5 w-3.5" />
-              Pause
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-            className="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-800/80 p-2 text-slate-200 hover:bg-slate-700 transition-colors shrink-0"
-          >
-            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </button>
-
-          <button
-            type="button"
-            onClick={toggleMute}
-            aria-label={muted ? 'Unmute game audio' : 'Mute game audio'}
-            className="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-800/80 p-2 text-slate-200 hover:bg-slate-700 transition-colors shrink-0"
-          >
-            {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Live In-Match Tasks Strip */}
-      <div className="grid gap-2.5 sm:grid-cols-3">
-        {tasks.map((task) => (
-          <div
-            key={task.id}
-            className={`flex items-center justify-between gap-2 rounded-xl border px-3.5 py-2 text-xs tabular-nums ${
-              task.completed
-                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
-                : 'border-slate-800 bg-[#0D1C30] text-slate-300'
-            }`}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              {task.completed ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-              ) : (
-                <Target className="h-4 w-4 text-sky-400 shrink-0" />
-              )}
-              <span className="truncate font-medium">{task.title}</span>
-            </div>
-            <span className="font-mono font-semibold shrink-0">
-              {task.progress}/{task.target} (+{task.rewardGems}G)
-            </span>
-          </div>
-        ))}
-      </div>
-
+    <div className="space-y-3">
       {/* Main 3D WebGL Game Viewport */}
       <div
         ref={viewportRef}
-        className="relative overflow-hidden rounded-2xl border border-slate-800 bg-[#050E1C] shadow-2xl aspect-[16/9]"
+        className="relative overflow-hidden rounded-2xl border-2 border-sky-400/30 bg-[#050E1C] shadow-[0_24px_60px_rgba(2,8,20,0.75)] aspect-[16/9]"
       >
         <div ref={mountRef} className="w-full h-full cursor-crosshair select-none touch-none" />
 
-        {/* IN-VIEWPORT FULLSCREEN MINI-HUD & LIFE BARS */}
+        {/* IN-VIEWPORT ARCADE MINI-HUD & LIFE BARS */}
         {gameState === 'PLAYING' && (
           <>
-            {/* Top-Left: Life Bar + Shield / Nitro Bar + Power-Up Timers */}
-            <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-col gap-1.5 rounded-xl border border-white/15 bg-[#061120]/76 px-3 py-2.5 backdrop-blur-md shadow-lg min-w-[215px]">
-              <div className="flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-wider text-slate-200">
+            {/* Top-Left: Life Bar + Nitro/Ability + Power-Ups + Mission Pips */}
+            <div className="pointer-events-none absolute left-3 top-3 z-20 flex flex-col gap-1.5 arcade-hud px-3 py-2.5 min-w-[218px]">
+              <div className="flex items-center justify-between gap-3 text-[11px] font-bold uppercase tracking-wider text-slate-100">
                 <span className="inline-flex items-center gap-1.5">
                   <Heart className="h-3.5 w-3.5 text-rose-400 fill-rose-400" />
-                  {selectedGameMode === 'car_racing' ? 'Kart Hull' : 'Yeti Life'}
+                  {selectedGameMode === 'car_racing' ? 'Hull' : 'Life'}
                 </span>
                 <span className="font-mono text-xs text-white tabular-nums">
                   {hud.hp}/{hud.maxHp}
                 </span>
               </div>
-              <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-900/90 border border-white/10">
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-950 border border-white/15">
                 <div
                   className={`h-full transition-all duration-150 ${
                     hud.hp > 55
@@ -4472,13 +4313,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
               {selectedGameMode === 'car_racing' ? (
                 <div className="space-y-1 pt-0.5">
-                  <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-cyan-200">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-cyan-300">
                     <span className="inline-flex items-center gap-1">
                       <Zap className="h-3 w-3 text-cyan-400" /> Nitro
                     </span>
                     <span className="font-mono tabular-nums">{hud.nitroPct}%</span>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-900/90">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-950">
                     <div
                       className="h-full bg-gradient-to-r from-sky-500 to-cyan-300 transition-all duration-100"
                       style={{ width: `${hud.nitroPct}%` }}
@@ -4486,91 +4327,117 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-sky-300 pt-0.5">
-                  <span>
+                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider pt-0.5">
+                  <span className={hud.novaReady || hud.dashReady ? 'text-cyan-300' : 'text-slate-400'}>
                     {selectedGameMode === 'shooting'
                       ? hud.novaReady
-                        ? 'Frost Nova: READY (Space)'
-                        : 'Frost Nova: Charging'
+                        ? 'Nova Ready'
+                        : 'Nova Charging'
                       : hud.dashReady
-                      ? 'Frost Dash: READY (Space)'
-                      : 'Frost Dash: Recharging'}
+                      ? 'Dash Ready'
+                      : 'Dash Charging'}
                   </span>
+                  <span className="arcade-kbd">SPACE</span>
                 </div>
               )}
 
               {(hud.shieldSec > 0 || hud.boostSec > 0 || hud.magnetSec > 0 || hud.tripleSec > 0) && (
-                <div className="flex flex-wrap gap-1 pt-1">
+                <div className="flex flex-wrap gap-1 pt-0.5">
                   {hud.shieldSec > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded bg-cyan-500/20 border border-cyan-400/50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-200 tabular-nums">
+                    <span className="inline-flex items-center gap-1 rounded bg-cyan-500/20 border border-cyan-400/50 px-1.5 py-0.5 text-[10px] font-bold text-cyan-200 tabular-nums">
                       <Shield className="h-2.5 w-2.5" /> {hud.shieldSec}s
                     </span>
                   )}
                   {hud.boostSec > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded bg-teal-500/20 border border-teal-400/50 px-1.5 py-0.5 text-[10px] font-semibold text-teal-200 tabular-nums">
+                    <span className="inline-flex items-center gap-1 rounded bg-teal-500/20 border border-teal-400/50 px-1.5 py-0.5 text-[10px] font-bold text-teal-200 tabular-nums">
                       <Flame className="h-2.5 w-2.5" /> {hud.boostSec}s
                     </span>
                   )}
                   {hud.magnetSec > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded bg-rose-500/20 border border-rose-400/50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-200 tabular-nums">
+                    <span className="inline-flex items-center gap-1 rounded bg-rose-500/20 border border-rose-400/50 px-1.5 py-0.5 text-[10px] font-bold text-rose-200 tabular-nums">
                       <Magnet className="h-2.5 w-2.5" /> {hud.magnetSec}s
                     </span>
                   )}
                   {hud.tripleSec > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded bg-purple-500/20 border border-purple-400/50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-200 tabular-nums">
+                    <span className="inline-flex items-center gap-1 rounded bg-purple-500/20 border border-purple-400/50 px-1.5 py-0.5 text-[10px] font-bold text-purple-200 tabular-nums">
                       <Sparkles className="h-2.5 w-2.5" /> 3× {hud.tripleSec}s
                     </span>
                   )}
                 </div>
               )}
+
+              {/* Compact Mission Pips */}
+              <div className="flex items-center gap-1.5 pt-1 border-t border-white/10 text-[10px] font-mono tabular-nums">
+                {tasks.map((t, idx) => (
+                  <span
+                    key={t.id}
+                    className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 border ${
+                      t.completed
+                        ? 'border-emerald-400/50 bg-emerald-500/20 text-emerald-200'
+                        : 'border-slate-700 bg-slate-900/90 text-slate-300'
+                    }`}
+                  >
+                    {t.completed ? (
+                      <CheckCircle2 className="h-2.5 w-2.5 text-emerald-400" />
+                    ) : (
+                      <Target className="h-2.5 w-2.5 text-sky-400" />
+                    )}
+                    M{idx + 1} {t.progress}/{t.target}
+                  </span>
+                ))}
+              </div>
             </div>
 
-            {/* Top-Center: Compact Mini-Display Info Strip */}
-            <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-20 hidden sm:flex items-center gap-3.5 rounded-xl border border-white/15 bg-[#061120]/76 px-4 py-2 text-xs backdrop-blur-md shadow-lg tabular-nums whitespace-nowrap">
-              <span className="font-mono font-bold text-white">{formatClock(hud.timeLeft)}</span>
-              <span className="text-slate-600">|</span>
-              <span className="font-mono font-semibold text-sky-300">{hud.score} pts</span>
-              <span className="text-slate-600">|</span>
+            {/* Top-Center: Crisp Arcade Scoreboard Strip */}
+            <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-20 hidden sm:flex items-center gap-3.5 arcade-hud px-4 py-2 text-xs tabular-nums whitespace-nowrap">
+              <span className="font-mono font-bold text-sm text-white">{formatClock(hud.timeLeft)}</span>
+              <span className="text-slate-600">·</span>
+              <span className="font-mono font-bold text-sky-300">{hud.score} PTS</span>
+              <span className="text-slate-600">·</span>
               {selectedGameMode === 'car_racing' ? (
                 <>
-                  <span className="font-semibold text-cyan-200">
-                    Lap {hud.lap}/{hud.totalLaps}
+                  <span className="font-bold text-cyan-200">
+                    LAP {hud.lap}/{hud.totalLaps}
                   </span>
-                  <span className="font-semibold text-amber-300">
+                  <span className="font-bold text-amber-300">
                     CP {hud.checkpoint}/{hud.totalCheckpoints}
                   </span>
-                  <span className="font-mono font-semibold text-white">#{hud.racePos}/4</span>
+                  <span className="font-mono font-bold text-white">#{hud.racePos}/4</span>
                   <span className="font-mono text-slate-300">{hud.speedKmh} km/h</span>
                   {hud.offRoad && (
-                    <span className="rounded bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+                    <span className="rounded bg-amber-500/25 border border-amber-400/50 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
                       OFF-ROAD
                     </span>
                   )}
                 </>
               ) : selectedGameMode === 'shooting' ? (
                 <>
-                  <span className="font-semibold text-cyan-200">Wave {hud.wave}</span>
-                  <span className="font-semibold text-white">{hud.elims} Elims</span>
-                  <span className="font-semibold text-amber-300">{hud.combo}× Streak</span>
+                  <span className="font-bold text-cyan-200">W{hud.wave}</span>
+                  <span className="font-bold text-white">{hud.elims} KO</span>
+                  <span className="font-bold text-amber-300">{hud.combo}×</span>
                 </>
               ) : (
                 <>
-                  <span className="font-semibold text-cyan-200">{hud.wellDrops} Drops</span>
-                  <span className="font-semibold text-sky-200">{hud.frostGems} Gems</span>
-                  <span className="font-semibold text-slate-300">Wave {hud.wave}</span>
+                  <span className="inline-flex items-center gap-1 font-bold text-cyan-200">
+                    <Droplets className="h-3.5 w-3.5" /> {hud.wellDrops}
+                  </span>
+                  <span className="inline-flex items-center gap-1 font-bold text-sky-200">
+                    <Gem className="h-3.5 w-3.5" /> {hud.frostGems}
+                  </span>
+                  <span className="font-bold text-slate-300">W{hud.wave}</span>
                 </>
               )}
             </div>
 
-            {/* Top-Right: Landing Page, Fullscreen Game Menu, Pause, Fullscreen Toggle & Mute */}
+            {/* Top-Right: Arcade Quick Controls */}
             <div className="absolute right-3 top-3 z-20 flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={handleExitToLanding}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-[#061120]/82 px-2.5 py-1.5 text-xs font-semibold text-slate-200 shadow-lg backdrop-blur-md transition-colors hover:border-sky-400 hover:text-white whitespace-nowrap shrink-0"
+                className="arcade-hud inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-slate-100 hover:border-sky-400 hover:text-white whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <Home className="h-3.5 w-3.5 text-sky-400" />
-                Landing
+                Home
               </button>
 
               <button
@@ -4579,10 +4446,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   if (playMode === 'solo') setGameState('PAUSED');
                   else openGameMapLauncher('choose_game');
                 }}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/40 bg-[#061120]/82 px-2.5 py-1.5 text-xs font-semibold text-sky-200 shadow-lg backdrop-blur-md transition-colors hover:border-sky-300 hover:text-white whitespace-nowrap shrink-0"
+                className="arcade-hud inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-sky-200 hover:border-sky-300 hover:text-white whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <Menu className="h-3.5 w-3.5" />
-                Game Menu
+                <Menu className="h-3.5 w-3.5 text-sky-400" />
+                Menu
               </button>
 
               {playMode === 'solo' && (
@@ -4590,7 +4457,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   type="button"
                   onClick={() => setGameState('PAUSED')}
                   aria-label="Pause game"
-                  className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-[#061120]/82 p-1.5 text-slate-100 shadow-lg backdrop-blur-md transition-colors hover:border-sky-400 hover:text-white"
+                  className="arcade-hud inline-flex items-center justify-center p-1.5 text-slate-100 hover:border-sky-400 cursor-pointer"
                 >
                   <Pause className="h-4 w-4" />
                 </button>
@@ -4600,7 +4467,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 type="button"
                 onClick={toggleFullscreen}
                 aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-[#061120]/82 p-1.5 text-slate-100 shadow-lg backdrop-blur-md transition-colors hover:border-sky-400 hover:text-white"
+                className="arcade-hud inline-flex items-center justify-center p-1.5 text-slate-100 hover:border-sky-400 cursor-pointer"
               >
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </button>
@@ -4609,7 +4476,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 type="button"
                 onClick={toggleMute}
                 aria-label={muted ? 'Unmute audio' : 'Mute audio'}
-                className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-[#061120]/82 p-1.5 text-slate-100 shadow-lg backdrop-blur-md transition-colors hover:border-sky-400 hover:text-white"
+                className="arcade-hud inline-flex items-center justify-center p-1.5 text-slate-100 hover:border-sky-400 cursor-pointer"
               >
                 {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
               </button>
@@ -4630,7 +4497,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         )}
 
         {bannerMsg && gameState === 'PLAYING' && (
-          <div className="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 z-20 rounded-lg border border-sky-400/50 bg-[#081322]/90 px-4 py-1.5 text-xs font-semibold text-sky-200 backdrop-blur-md">
+          <div className="pointer-events-none absolute top-14 left-1/2 -translate-x-1/2 z-20 arcade-hud border-sky-400/60 px-4 py-1.5 text-xs font-bold text-sky-200">
             {bannerMsg}
           </div>
         )}
@@ -4647,151 +4514,161 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           selectedGameMode === 'survival' &&
           (hud.blessingLeft > 0 || (hud.nearWell && hud.ritualReady)) && (
             <div
-              className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 rounded-lg border px-3.5 py-1.5 text-xs font-semibold ${
+              className={`pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 z-10 arcade-hud px-3.5 py-1.5 text-xs font-bold ${
                 hud.blessingLeft > 0
-                  ? 'border-amber-400/60 bg-[#0c1a2e]/90 text-amber-200'
-                  : 'border-cyan-400/50 bg-[#081322]/90 text-cyan-200'
+                  ? 'border-amber-400/60 text-amber-200'
+                  : 'border-cyan-400/55 text-cyan-200'
               }`}
             >
               {hud.blessingLeft > 0
-                ? `Well Blessing Active · +${wellImpact.activeBonusDrops || 25} Global Drops Bonus & 2× Drops (${hud.blessingLeft}s)`
-                : 'Near Water Well — Press 1/E (Wave) or 2/F (Dance) for a Well Ritual'}
+                ? `2× Blessing (${hud.blessingLeft}s)`
+                : 'Near Well: [1] Wave · [2] Dance'}
             </div>
           )}
 
         {webglFallback && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#081322] p-6 text-center space-y-3">
-            <p className="title-3d-game-sm text-2xl">Yeti Flurry Rush</p>
+            <p className="title-3d-game-sm text-2xl">Lofi Yeti Arcade</p>
             <p className="text-xs text-slate-400 max-w-md">
-              Hardware or browser WebGL acceleration paused. Enable WebGL or refresh the page to resume the 3D arena.
+              Enable hardware WebGL or refresh to launch the 3D arena.
             </p>
           </div>
         )}
 
-        {/* TWO-STEP LAUNCHER OVERLAY: Step 1 Choose Game Type -> Step 2 Choose Map */}
+        {/* GAMISH TWO-STEP LAUNCHER OVERLAY (ZERO TEXT WALLS, ZERO BACKDROP-BLUR) */}
         {gameState === 'TITLE_MENU' && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#061120]/86 p-4 sm:p-6 overflow-y-auto">
-            <div className="w-full max-w-4xl rounded-2xl border border-slate-700/80 bg-[#0D1C30]/95 p-5 sm:p-6 space-y-5">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
-                <div>
-                  <p className="text-xs font-semibold text-sky-400">
-                    {launcherStep === 'choose_game'
-                      ? 'Step 1 of 2 · Choose Game Type'
-                      : `Step 2 of 2 · Choose 3D Map for ${activeGame.name}`}
-                  </p>
-                  <h2 className="title-3d-game text-3xl sm:text-4xl leading-none mt-1">
-                    Yeti Flurry Rush
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#040B16]/80 p-3 sm:p-5 overflow-y-auto">
+            <div className="w-full max-w-4xl arcade-panel p-4 sm:p-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sky-400/15 pb-3.5">
+                <div className="flex items-center gap-3">
+                  <h2 className="title-3d-game text-2xl sm:text-4xl leading-none">
+                    Lofi Arena
                   </h2>
+                  <span className="rounded bg-sky-500/15 border border-sky-400/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-300">
+                    {launcherStep === 'choose_game' ? '1 · Game' : `2 · ${activeGame.shortLabel}`}
+                  </span>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={handleExitToLanding}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-white transition-colors whitespace-nowrap shrink-0"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-200 hover:border-sky-400 hover:text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <Home className="h-3.5 w-3.5 text-sky-400" />
-                    Landing Page
+                    Home
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleFullscreen}
+                    aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                    className="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900 p-1.5 text-slate-200 hover:border-sky-400 cursor-pointer"
+                  >
+                    {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                   </button>
                   {launcherStep === 'choose_map' && (
                     <button
                       type="button"
                       onClick={() => setLauncherStep('choose_game')}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-white transition-colors whitespace-nowrap shrink-0"
+                      className="inline-flex items-center gap-1 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 py-1.5 text-xs font-bold text-sky-200 hover:bg-sky-500/20 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                     >
                       <ChevronLeft className="h-3.5 w-3.5" />
-                      Change Game Type
+                      All Games
                     </button>
                   )}
                 </div>
               </div>
 
               {launcherStep === 'choose_game' ? (
-                <div className="space-y-5">
-                  <div className="space-y-4">
-                    <div className="grid gap-3.5 md:grid-cols-3">
-                      {GAME_MODES.filter((g) => g.dimension === '3D').map((gm) => {
-                        const Icon =
-                          gm.id === 'car_racing' ? Car : gm.id === 'shooting' ? Crosshair : Snowflake;
-                        const isSel = selectedGameMode === gm.id;
-                        return (
-                          <button
-                            key={gm.id}
-                            type="button"
-                            onClick={() => {
-                              onChangeGameMode(gm.id);
-                              setLauncherStep('choose_map');
-                            }}
-                            className={`flex flex-col justify-between rounded-xl border p-4 text-left transition-colors space-y-3 ${
-                              isSel
-                                ? 'border-sky-400 bg-sky-500/15 text-white'
-                                : 'border-slate-700 bg-slate-900/75 text-slate-300 hover:border-sky-500/60 hover:text-white'
-                            }`}
-                          >
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between gap-2">
-                                <Icon className="h-5 w-5 text-sky-400" />
-                                <span className="text-[11px] font-semibold text-sky-300">
-                                  {gm.shortLabel}
-                                </span>
-                              </div>
-                              <h3 className="font-display text-xl text-white">{gm.name}</h3>
-                              <p className="text-xs leading-relaxed text-slate-400">
-                                {gm.description}
-                              </p>
-                            </div>
-                            <span className="text-xs font-semibold text-sky-300">
-                              Select &amp; Choose Map →
+                <div className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {GAME_MODES.filter((g) => g.dimension === '3D').map((gm) => {
+                      const Icon =
+                        gm.id === 'car_racing' ? Car : gm.id === 'shooting' ? Crosshair : Snowflake;
+                      const isSel = selectedGameMode === gm.id;
+                      const grad =
+                        gm.id === 'car_racing'
+                          ? 'from-cyan-500/25 via-sky-500/10 to-slate-900'
+                          : gm.id === 'shooting'
+                          ? 'from-indigo-500/25 via-sky-500/10 to-slate-900'
+                          : 'from-sky-400/25 via-cyan-500/10 to-slate-900';
+                      const quickTag =
+                        gm.id === 'car_racing'
+                          ? '3 Laps · 4 Checkpoints'
+                          : gm.id === 'shooting'
+                          ? 'Frost Blaster · Waves'
+                          : 'Snowballs · Well Shrine';
+                      return (
+                        <button
+                          key={gm.id}
+                          type="button"
+                          onClick={() => {
+                            onChangeGameMode(gm.id);
+                            setLauncherStep('choose_map');
+                          }}
+                          className={`group flex flex-col justify-between rounded-xl border-2 overflow-hidden text-left transition-all cursor-pointer ${
+                            isSel
+                              ? 'border-sky-400 bg-sky-500/15 shadow-[0_0_24px_rgba(56,189,248,0.22)]'
+                              : 'border-slate-700/80 bg-slate-900/90 hover:border-sky-400/60'
+                          }`}
+                        >
+                          <div className={`w-full bg-gradient-to-br ${grad} px-4 py-3.5 border-b border-white/10 flex items-center justify-between`}>
+                            <Icon className="h-7 w-7 text-sky-300" />
+                            <span className="rounded bg-slate-950/70 border border-sky-400/35 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-200">
+                              3D
                             </span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                          </div>
+                          <div className="p-3.5 space-y-2">
+                            <h3 className="font-display text-xl text-white leading-tight">{gm.name}</h3>
+                            <div className="flex items-center justify-between text-[11px] font-semibold text-sky-300">
+                              <span>{quickTag}</span>
+                              <span>Pick Map →</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5">
-                      <span className="text-xs font-semibold text-amber-200">
-                        2D Stickman Games (Lofi the Yeti Figure):
-                      </span>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {GAME_MODES.filter((g) => g.dimension === '2D').map((gm) => (
-                          <button
-                            key={gm.id}
-                            type="button"
-                            onClick={() => onChangeGameMode(gm.id)}
-                            className="rounded-lg border border-amber-400/40 bg-[#081322] px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-400 hover:text-slate-950 transition-colors whitespace-nowrap shrink-0"
-                          >
-                            {gm.name}
-                          </button>
-                        ))}
-                      </div>
+                  {/* Quick 2D Stickman Games Switcher */}
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3.5 py-2.5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-amber-300">
+                      2D Stickman Games
+                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {GAME_MODES.filter((g) => g.dimension === '2D').map((gm) => (
+                        <button
+                          key={gm.id}
+                          type="button"
+                          onClick={() => onChangeGameMode(gm.id)}
+                          className="rounded-lg border border-amber-400/45 bg-[#081322] px-3 py-1.5 text-xs font-bold text-amber-200 hover:bg-amber-400 hover:text-slate-950 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                        >
+                          {gm.shortLabel}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  {/* Colorway Picker */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                    <div className="space-y-1.5">
-                      <span className="text-xs font-semibold text-slate-300 block">
-                        Yeti Colorway ({getYetiColorway(selectedColorway).name})
+                  {/* Colorway Swatches + Mint Link */}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                        Yeti: {getYetiColorway(selectedColorway).name}
                       </span>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         {YETI_COLORWAYS.map((cw) => (
                           <button
                             key={cw.id}
                             type="button"
                             onClick={() => onChangeColorway(cw.id)}
-                            className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                            title={cw.name}
+                            className={`h-6 w-6 rounded-md border-2 transition-transform cursor-pointer ${
                               selectedColorway === cw.id
-                                ? 'border-sky-400 bg-sky-500/15 text-white'
-                                : 'border-slate-700 bg-slate-900/75 text-slate-400 hover:text-white'
+                                ? 'border-white scale-110'
+                                : 'border-slate-700 opacity-75 hover:opacity-100'
                             }`}
-                          >
-                            <span
-                              className="h-3.5 w-3.5 rounded-sm border border-white/30"
-                              style={{ backgroundColor: cw.skinHex }}
-                              aria-hidden="true"
-                            />
-                            {cw.name}
-                          </button>
+                            style={{ backgroundColor: cw.skinHex }}
+                          />
                         ))}
                       </div>
                     </div>
@@ -4800,19 +4677,17 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                       <button
                         type="button"
                         onClick={onMintPrompt}
-                        className="text-xs text-sky-400 underline underline-offset-2 hover:text-sky-300"
+                        className="text-xs font-bold text-sky-400 hover:text-sky-300 underline underline-offset-4 cursor-pointer"
                       >
-                        Mint Starter Sui Yeti
+                        Mint Starter Yeti
                       </button>
                     )}
                   </div>
                 </div>
               ) : (
-                <div className="space-y-5">
-                  <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/70 p-2">
-                    <span className="px-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Game
-                    </span>
+                <div className="space-y-4">
+                  {/* Quick 3D Mode Tabs */}
+                  <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950/80 p-1.5">
                     {GAME_MODES.filter((g) => g.dimension === '3D').map((gm) => {
                       const Icon =
                         gm.id === 'car_racing' ? Car : gm.id === 'shooting' ? Crosshair : Snowflake;
@@ -4821,10 +4696,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                           key={gm.id}
                           type="button"
                           onClick={() => onChangeGameMode(gm.id)}
-                          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                             selectedGameMode === gm.id
-                              ? 'bg-sky-500 text-slate-950'
-                              : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                              ? 'bg-sky-400 text-slate-950'
+                              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                           }`}
                         >
                           <Icon className="h-3.5 w-3.5" />
@@ -4834,69 +4709,90 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                     })}
                   </div>
 
-                  <div className="grid gap-5 md:grid-cols-[1.25fr_0.75fr] items-start">
-                  <div className="space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      {ARENA_MAPS.map((m) => {
-                        const modeInfo = getMapModeDetails(m.id, selectedGameMode);
-                        return (
-                          <button
-                            key={m.id}
-                            type="button"
-                            onClick={() => onChangeMapId(m.id)}
-                            className={`rounded-xl border p-3.5 text-left transition-colors space-y-1.5 ${
-                              selectedMapId === m.id
-                                ? 'border-sky-400 bg-sky-500/15 text-white'
-                                : 'border-slate-700 bg-slate-900/75 text-slate-400 hover:text-slate-200'
-                            }`}
-                          >
-                            <span className="text-[11px] font-semibold block" style={{ color: m.accentHex }}>
+                  {/* Visual Biome Map Selector Cards */}
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {ARENA_MAPS.map((m) => {
+                      const modeInfo = getMapModeDetails(m.id, selectedGameMode);
+                      const biomeGrad =
+                        m.id === 'volcanic_springs'
+                          ? 'from-orange-500/45 via-amber-500/20 to-slate-900'
+                          : m.id === 'aurora_summit'
+                          ? 'from-violet-500/45 via-fuchsia-500/20 to-slate-900'
+                          : 'from-cyan-500/45 via-sky-500/20 to-slate-900';
+                      const isMapSel = selectedMapId === m.id;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => onChangeMapId(m.id)}
+                          className={`overflow-hidden rounded-xl border-2 text-left transition-all cursor-pointer ${
+                            isMapSel
+                              ? 'border-sky-400 bg-sky-500/15 shadow-[0_0_20px_rgba(56,189,248,0.2)]'
+                              : 'border-slate-700/80 bg-slate-900/90 hover:border-slate-500'
+                          }`}
+                        >
+                          <div className={`h-11 w-full bg-gradient-to-r ${biomeGrad} px-3 flex items-center justify-between border-b border-white/10`}>
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-950/75" style={{ color: m.accentHex }}>
                               {modeInfo.tag}
                             </span>
-                            <span className="font-display text-lg text-white block">{m.name}</span>
-                            <span className="text-xs text-slate-400 leading-relaxed block">
-                              {modeInfo.summary}
+                            {isMapSel && (
+                              <span className="text-[10px] font-bold uppercase text-sky-300">Selected</span>
+                            )}
+                          </div>
+                          <div className="p-3 space-y-1">
+                            <span className="font-display text-lg text-white block leading-tight">{m.name}</span>
+                            <span className="text-[11px] font-medium text-slate-400 block truncate">
+                              {m.subtitle}
                             </span>
-                          </button>
-                        );
-                      })}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Action Bar + Visual Keycap Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-sky-400/15">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-300">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="arcade-kbd">WASD</span> Move
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <span className="arcade-kbd">SPACE</span>{' '}
+                        {selectedGameMode === 'car_racing'
+                          ? 'Nitro'
+                          : selectedGameMode === 'shooting'
+                          ? 'Nova'
+                          : 'Dash'}
+                      </span>
+                      {selectedGameMode !== 'car_racing' && (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="arcade-kbd">CLICK</span>{' '}
+                          {selectedGameMode === 'shooting' ? 'Fire' : 'Throw'}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => startGame('solo', selectedGameMode)}
-                        className="inline-flex items-center gap-2 rounded-lg bg-sky-500 px-5 py-2.5 text-sm font-bold text-slate-950 hover:bg-sky-400 transition-colors whitespace-nowrap shrink-0"
-                      >
-                        <User className="h-4 w-4" />
-                        Start {activeGame.shortLabel} on {activeMap.name}
-                      </button>
-
+                    <div className="flex flex-wrap items-center gap-2.5">
                       {activeGame.supportsTunnel && (
                         <button
                           type="button"
                           onClick={() => startGame('tunnel', selectedGameMode)}
-                          className="inline-flex items-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2.5 text-sm font-semibold text-sky-200 hover:bg-sky-500/25 transition-colors whitespace-nowrap shrink-0"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/45 bg-sky-500/15 px-3.5 py-2.5 text-xs font-bold text-sky-200 hover:bg-sky-500/25 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                         >
                           <Users className="h-4 w-4" />
-                          Join Live Tunnel
+                          Live Tunnel
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => startGame('solo', selectedGameMode)}
+                        className="arcade-btn-primary inline-flex items-center gap-2 px-6 py-2.5 text-sm uppercase tracking-wider whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        <Play className="h-4 w-4 fill-current" />
+                        Play Now
+                      </button>
                     </div>
                   </div>
-
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 text-xs text-slate-300 space-y-3">
-                    <span className="font-display text-lg text-white block">
-                      {activeGame.name} Controls
-                    </span>
-                    <p className="text-slate-300 leading-relaxed border-t border-slate-800 pt-2">
-                      {activeGame.controlsSummary}
-                    </p>
-                    <p className="text-slate-400 leading-relaxed border-t border-slate-800 pt-2">
-                      Expanded 3D Map ({activeMap.name}): {activeMap.subtitle}. Every run rewards Glacial Drops toward community Clean Water Wells.
-                    </p>
-                  </div>
-                </div>
                 </div>
               )}
             </div>
@@ -4905,30 +4801,30 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
         {/* PAUSED / IN-FULLSCREEN GAME MENU OVERLAY */}
         {gameState === 'PAUSED' && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#061120]/84 p-6 backdrop-blur-sm">
-            <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-[#0D1C30] p-6 text-center space-y-4 shadow-2xl">
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#040B16]/82 p-6">
+            <div className="w-full max-w-sm arcade-panel p-6 text-center space-y-4">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-sky-400">
-                  Game Menu · Paused
+                <p className="text-[11px] font-bold uppercase tracking-wider text-sky-400">
+                  Paused
                 </p>
                 <h3 className="title-3d-game-sm text-3xl mt-1">Lofi Arena</h3>
               </div>
-              <p className="text-xs text-slate-300">
-                {activeGame.name} · {activeMap.name}
+              <p className="text-xs font-semibold text-slate-300">
+                {activeGame.shortLabel} · {activeMap.name}
               </p>
               <div className="grid grid-cols-2 gap-2.5 pt-1">
                 <button
                   type="button"
                   onClick={() => setGameState('PLAYING')}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-sky-500 px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-sky-400 transition-colors"
+                  className="arcade-btn-primary inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs cursor-pointer"
                 >
-                  <Play className="h-3.5 w-3.5" />
+                  <Play className="h-3.5 w-3.5 fill-current" />
                   Resume
                 </button>
                 <button
                   type="button"
                   onClick={() => startGame(playMode, selectedGameMode)}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-700 transition-colors"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-bold text-white hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   Restart
@@ -4936,15 +4832,15 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 <button
                   type="button"
                   onClick={toggleFullscreen}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-                  {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  {isFullscreen ? 'Window' : 'Fullscreen'}
                 </button>
                 <button
                   type="button"
                   onClick={() => openGameMapLauncher('choose_game')}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/10 px-4 py-2.5 text-xs font-semibold text-sky-200 hover:bg-sky-500/20 transition-colors"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2.5 text-xs font-bold text-sky-200 hover:bg-sky-500/25 transition-colors cursor-pointer"
                 >
                   <Menu className="h-3.5 w-3.5" />
                   Switch Game
@@ -4952,10 +4848,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 <button
                   type="button"
                   onClick={handleExitToLanding}
-                  className="col-span-2 inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:border-sky-400 hover:text-white transition-colors"
+                  className="col-span-2 inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-4 py-2.5 text-xs font-bold text-slate-200 hover:border-sky-400 hover:text-white transition-colors cursor-pointer"
                 >
                   <Home className="h-3.5 w-3.5 text-sky-400" />
-                  Return to Landing Page
+                  Return Home
                 </button>
               </div>
             </div>
@@ -4977,17 +4873,17 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         )}
       </div>
 
-      {/* Bottom Dock: Touch D-Pad + Quick Color + Mode Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-800 bg-[#0D1C30] px-4 py-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1.5">
+      {/* Compact Single-Row Arcade Console Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 arcade-hud px-3.5 py-2">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-1">
             <button
               type="button"
               aria-label="Move Left"
               onPointerDown={() => (touchDirRef.current.dx = -1)}
               onPointerUp={() => (touchDirRef.current.dx = 0)}
               onPointerLeave={() => (touchDirRef.current.dx = 0)}
-              className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-200 active:bg-sky-500 active:text-slate-950"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-200 active:bg-sky-500 active:text-slate-950"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
@@ -4997,7 +4893,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               onPointerDown={() => (touchDirRef.current.dy = -1)}
               onPointerUp={() => (touchDirRef.current.dy = 0)}
               onPointerLeave={() => (touchDirRef.current.dy = 0)}
-              className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-200 active:bg-sky-500 active:text-slate-950"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-200 active:bg-sky-500 active:text-slate-950"
             >
               <ArrowUp className="h-4 w-4" />
             </button>
@@ -5007,7 +4903,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               onPointerDown={() => (touchDirRef.current.dy = 1)}
               onPointerUp={() => (touchDirRef.current.dy = 0)}
               onPointerLeave={() => (touchDirRef.current.dy = 0)}
-              className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-200 active:bg-sky-500 active:text-slate-950"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-200 active:bg-sky-500 active:text-slate-950"
             >
               <ArrowDown className="h-4 w-4" />
             </button>
@@ -5017,20 +4913,20 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               onPointerDown={() => (touchDirRef.current.dx = 1)}
               onPointerUp={() => (touchDirRef.current.dx = 0)}
               onPointerLeave={() => (touchDirRef.current.dx = 0)}
-              className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-200 active:bg-sky-500 active:text-slate-950"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-200 active:bg-sky-500 active:text-slate-950"
             >
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5">
+          <div className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950/90 px-2 py-1">
             {YETI_COLORWAYS.map((cw) => (
               <button
                 key={cw.id}
                 type="button"
-                title={`Color: ${cw.name}`}
+                title={cw.name}
                 onClick={() => onChangeColorway(cw.id)}
-                className={`h-6 w-6 rounded-md border transition-transform ${
+                className={`h-5 w-5 rounded border transition-transform cursor-pointer ${
                   selectedColorway === cw.id
                     ? 'border-white scale-110'
                     : 'border-slate-700 opacity-75 hover:opacity-100'
@@ -5048,19 +4944,19 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 type="button"
                 onClick={() => triggerEmote('wave')}
                 disabled={gameState !== 'PLAYING'}
-                className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 text-xs font-semibold text-slate-200 hover:bg-slate-700 disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-bold text-slate-200 hover:border-sky-400 disabled:opacity-45 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <Hand className="h-3.5 w-3.5 text-amber-300" />
-                Wave (1/E)
+                Wave <span className="arcade-kbd">E</span>
               </button>
               <button
                 type="button"
                 onClick={() => triggerEmote('dance')}
                 disabled={gameState !== 'PLAYING'}
-                className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 text-xs font-semibold text-slate-200 hover:bg-slate-700 disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-bold text-slate-200 hover:border-sky-400 disabled:opacity-45 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <Music className="h-3.5 w-3.5 text-cyan-300" />
-                Dance (2/F)
+                Dance <span className="arcade-kbd">F</span>
               </button>
             </>
           )}
@@ -5076,14 +4972,15 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 ? !hud.novaReady
                 : hud.nitroPct < 22)
             }
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 text-xs font-semibold text-sky-200 hover:bg-sky-500/25 disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-sky-500/45 bg-sky-500/15 px-3 text-xs font-bold text-sky-200 hover:bg-sky-500/25 disabled:opacity-45 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            <Wind className="h-4 w-4" />
+            <Wind className="h-3.5 w-3.5" />
             {selectedGameMode === 'car_racing'
-              ? 'Nitro Boost (Space)'
+              ? 'Nitro'
               : selectedGameMode === 'shooting'
-              ? 'Frost Nova (Space)'
-              : 'Frost Dash (Space)'}
+              ? 'Nova'
+              : 'Dash'}
+            <span className="arcade-kbd">SPACE</span>
           </button>
 
           {selectedGameMode !== 'car_racing' && (
@@ -5091,19 +4988,20 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               type="button"
               onClick={() => triggerThrowOrFire()}
               disabled={gameState !== 'PLAYING'}
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-sky-500 px-4 text-xs font-semibold text-slate-950 hover:bg-sky-400 disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+              className="arcade-btn-primary inline-flex h-9 items-center gap-1.5 px-3.5 text-xs disabled:opacity-45 whitespace-nowrap shrink-0 cursor-pointer"
             >
               {selectedGameMode === 'shooting' ? (
                 <>
-                  <Crosshair className="h-4 w-4" />
-                  Blast (Click / J)
+                  <Crosshair className="h-3.5 w-3.5" />
+                  Blast
                 </>
               ) : (
                 <>
-                  <Snowflake className="h-4 w-4" />
-                  Throw Snowball (Click / J)
+                  <Snowflake className="h-3.5 w-3.5" />
+                  Throw
                 </>
               )}
+              <span className="arcade-kbd bg-slate-950/80 text-sky-200 border-slate-800">J</span>
             </button>
           )}
         </div>
