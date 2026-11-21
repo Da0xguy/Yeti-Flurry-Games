@@ -54,20 +54,20 @@ const HERO_SHOTS: { id: HeroShotId; index: string; label: string; caption: strin
   {
     id: 'squad',
     index: '01',
-    label: 'Squad Assault',
-    caption: 'Lofi & squad charging the Waystone Relic under active Frost Shield.',
+    label: 'Squad & Bean Raid',
+    caption: '3D 5-Yeti squad charging the Waystone Relic + 2D Slow-Mo Bean Gun-Fu in the background.',
   },
   {
     id: 'boss',
     index: '02',
-    label: 'Dread Boss',
-    caption: 'Horned Frost Warden, Cryo Brute & Abyssal Wraith patrolling the ridge.',
+    label: 'Boss & Station Escape',
+    caption: '3D Dread Frost Boss on the ridge + 2D side-view Station Escape vs the Airlock Warden.',
   },
   {
     id: 'buggy',
     index: '03',
-    label: 'Buggy Drift',
-    caption: 'High-speed snow drifters tearing across the frozen perimeter loop.',
+    label: 'Buggy & Glacier Run',
+    caption: '3D snow drifters tearing down the circuit + 2D Stickman Frost Runner with Frost Shield.',
   },
 ];
 
@@ -657,148 +657,123 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
           />
         )}
 
+        {/* Integrated 2D Stickman Background Layer synced directly with 01 -> 02 -> 03 Director */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={heroShot}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.92 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.45, ease: 'easeOut' }}
+            className="pointer-events-none absolute inset-0 z-[2]"
+            aria-hidden="true"
+          >
+            <Hero2DActionStage
+              shotId={heroShot}
+              colorway={yeti?.colorway}
+              hatId={yeti?.equipped.hat}
+              scarfId={yeti?.equipped.scarf}
+            />
+          </motion.div>
+        </AnimatePresence>
+
         {/* Measured Gradient Scrims */}
         <div
-          className="absolute inset-0 bg-gradient-to-r from-[#06101f]/95 via-[#071324]/60 to-[#071324]/15 pointer-events-none"
+          className="absolute inset-0 z-[3] bg-gradient-to-r from-[#06101f]/95 via-[#071324]/58 to-transparent pointer-events-none"
           aria-hidden="true"
         />
         <div
-          className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-[#081322] via-[#081322]/65 to-transparent pointer-events-none"
+          className="absolute inset-x-0 bottom-0 z-[3] h-36 bg-gradient-to-t from-[#081322] via-[#081322]/65 to-transparent pointer-events-none"
           aria-hidden="true"
         />
 
-        {/* Hero Split Grid: Left Narrative/CTA + Right Synchronized Live 2D Arcade Stage */}
+        {/* Hero Foreground Narrative & CTAs */}
         <motion.div
           style={{ y: heroContentY, opacity: heroOpacity }}
           className="relative z-10 mx-auto w-full max-w-[1200px] flex-1 flex items-center px-4 sm:px-6 pt-28 pb-10"
         >
-          <div className="grid w-full lg:grid-cols-12 gap-8 items-center">
-            <div className="lg:col-span-7 max-w-xl space-y-6">
-              <motion.div
-                initial={{ opacity: 0, x: -24 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-                className="flex items-center gap-3"
-              >
-                <span className="h-[2px] w-10 bg-sky-400" aria-hidden="true" />
-                <p className="text-xs font-bold uppercase tracking-[0.28em] text-sky-300">
-                  Lofi&apos;s Frozen Arcade · 2D &amp; 3D
-                </p>
-              </motion.div>
-
-              <motion.h1
-                initial={{ opacity: 0, y: 28, filter: 'blur(8px)' }}
-                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                transition={{ duration: 0.65, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-                className="title-3d-game text-5xl sm:text-6xl lg:text-[66px] leading-[1.0] text-balance"
-              >
-                Yeti Flurry Rush
-              </motion.h1>
-
-              <motion.p
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.55, delay: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                className="max-w-md text-lg font-medium leading-snug text-slate-100 sm:text-xl"
-              >
-                Awaken Waystones with a 5-Yeti squad, race scenic snow circuits, raid Syndicate compounds in 2D slow-mo, and escape 12-room cryo stations.
-              </motion.p>
-
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.24, ease: [0.16, 1, 0.3, 1] }}
-                className="flex flex-wrap items-center gap-3.5 pt-1"
-              >
-                <button
-                  type="button"
-                  onClick={onLaunchGame}
-                  className="arcade-btn-primary inline-flex items-center gap-2.5 rounded-lg px-6 py-3.5 text-sm font-bold whitespace-nowrap shrink-0"
-                >
-                  <Play className="h-4 w-4 fill-current" />
-                  Launch 3D Arena
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onLaunchMode('stickman_wrestling')}
-                  className="inline-flex items-center gap-2 rounded-lg border border-amber-400/65 bg-[#09182c] px-5 py-3.5 text-sm font-semibold text-amber-200 hover:bg-amber-400 hover:text-slate-950 transition-colors whitespace-nowrap shrink-0"
-                >
-                  <Crosshair className="h-4 w-4" />
-                  Play 2D Stickman Suite
-                </button>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5, delay: 0.32 }}
-                className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1 text-xs text-slate-300 tabular-nums"
-              >
-                <span>3 3D Arenas</span>
-                <span aria-hidden="true">·</span>
-                <span>3 2D Stickman Games</span>
-                <span aria-hidden="true">·</span>
-                <button
-                  type="button"
-                  onClick={() => onLaunchTunnel('glacier_well')}
-                  className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200 underline underline-offset-4 whitespace-nowrap shrink-0"
-                >
-                  <Users className="h-3.5 w-3.5" />
-                  Join Live 3D Tunnel
-                </button>
-                <span aria-hidden="true">·</span>
-                <button
-                  type="button"
-                  onClick={onOpenMyYeti}
-                  className="text-sky-300 hover:text-sky-200 underline underline-offset-4 whitespace-nowrap shrink-0"
-                >
-                  {yeti ? `Customize ${yeti.name}` : 'Mint Starter Lofi Yeti'}
-                </button>
-              </motion.div>
-            </div>
-
-            {/* Right Column: Live Synchronized 2D Stickman Action Feed */}
+          <div className="max-w-xl space-y-6">
             <motion.div
-              initial={{ opacity: 0, x: 24 }}
+              initial={{ opacity: 0, x: -24 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="lg:col-span-5 relative min-h-[280px] overflow-visible"
+              transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+              className="flex items-center gap-3"
             >
-              <div className="absolute z-10 left-4 right-4 top-3 flex items-center justify-between text-xs pointer-events-none">
-                <span className="font-bold uppercase tracking-wider text-amber-300">
-                  Live 2D Feed ·{' '}
-                  {heroShot === 'squad'
-                    ? 'Bean Gun-Fu Raid'
-                    : heroShot === 'boss'
-                    ? '12-Room Station Escape'
-                    : 'Frost Run 2D'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onLaunchMode(
-                      heroShot === 'squad'
-                        ? 'stickman_wrestling'
-                        : heroShot === 'boss'
-                        ? 'stickman_brawl'
-                        : 'stickman_run'
-                    )
-                  }
-                  className="inline-flex items-center gap-1 font-bold text-sky-300 hover:text-white whitespace-nowrap shrink-0"
-                >
-                  Play 2D
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div className="absolute inset-0 aspect-auto w-full">
-                <Hero2DActionStage
-                  shotId={heroShot}
-                  colorway={yeti?.colorway}
-                  hatId={yeti?.equipped.hat}
-                  scarfId={yeti?.equipped.scarf}
-                />
-              </div>
+              <span className="h-[2px] w-10 bg-sky-400" aria-hidden="true" />
+              <p className="text-xs font-bold uppercase tracking-[0.28em] text-sky-300">
+                Lofi&apos;s Frozen Arcade · 2D &amp; 3D
+              </p>
+            </motion.div>
+
+            <motion.h1
+              initial={{ opacity: 0, y: 28, filter: 'blur(8px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              transition={{ duration: 0.65, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+              className="title-3d-game text-5xl sm:text-6xl lg:text-[66px] leading-[1.0] text-balance"
+            >
+              Yeti Flurry Rush
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.55, delay: 0.16, ease: [0.16, 1, 0.3, 1] }}
+              className="max-w-md text-lg font-medium leading-snug text-slate-100 sm:text-xl"
+            >
+              Awaken Waystones with a 5-Yeti squad, race scenic snow circuits, raid Syndicate compounds in 2D slow-mo, and escape 12-room side-view cryo stations.
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.24, ease: [0.16, 1, 0.3, 1] }}
+              className="flex flex-wrap items-center gap-3.5 pt-1"
+            >
+              <button
+                type="button"
+                onClick={onLaunchGame}
+                className="arcade-btn-primary inline-flex items-center gap-2.5 rounded-lg px-6 py-3.5 text-sm font-bold whitespace-nowrap shrink-0"
+              >
+                <Play className="h-4 w-4 fill-current" />
+                Launch 3D Arena
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onLaunchMode('stickman_wrestling')}
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-400/65 bg-[#09182c] px-5 py-3.5 text-sm font-semibold text-amber-200 hover:bg-amber-400 hover:text-slate-950 transition-colors whitespace-nowrap shrink-0"
+              >
+                <Crosshair className="h-4 w-4" />
+                Play 2D Stickman Suite
+              </button>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.32 }}
+              className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1 text-xs text-slate-300 tabular-nums"
+            >
+              <span>3 3D Arenas</span>
+              <span aria-hidden="true">·</span>
+              <span>3 2D Stickman Games</span>
+              <span aria-hidden="true">·</span>
+              <button
+                type="button"
+                onClick={() => onLaunchTunnel('glacier_well')}
+                className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200 underline underline-offset-4 whitespace-nowrap shrink-0"
+              >
+                <Users className="h-3.5 w-3.5" />
+                Join Live 3D Tunnel
+              </button>
+              <span aria-hidden="true">·</span>
+              <button
+                type="button"
+                onClick={onOpenMyYeti}
+                className="text-sky-300 hover:text-sky-200 underline underline-offset-4 whitespace-nowrap shrink-0"
+              >
+                {yeti ? `Customize ${yeti.name}` : 'Mint Starter Lofi Yeti'}
+              </button>
             </motion.div>
           </div>
         </motion.div>
@@ -942,6 +917,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
                       ? 'shooting'
                       : 'car_racing'
                   }
+                  mapId={activeWorld.id}
                   colorway={yeti?.colorway}
                   hatId={yeti?.equipped.hat}
                   scarfId={yeti?.equipped.scarf}

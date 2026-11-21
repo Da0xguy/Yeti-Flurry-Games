@@ -68,6 +68,8 @@ import {
   getMapSpec,
   getRaceTrackObstacles,
   getRaceTrackWaypoints,
+  getShooterGalleryLayout,
+  getSurvivalQuestLayout,
   getYetiColorway,
   resolveArenaObstacleCollision,
   resolveRaceObstacleCollision,
@@ -155,9 +157,10 @@ function nudgeOutsideObstacles(
   lx: number,
   ly: number,
   clearance: number,
-  mapId: MapId
+  mapId: MapId,
+  gameMode: GameModeId = 'survival'
 ): { x: number; y: number } {
-  const res = resolveArenaObstacleCollision(lx, ly, 0, 0, clearance, mapId);
+  const res = resolveArenaObstacleCollision(lx, ly, 0, 0, clearance, mapId, gameMode);
   return {
     x: Math.max(60, Math.min(W - 60, res.x)),
     y: Math.max(60, Math.min(H - 60, res.y)),
@@ -745,7 +748,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       ARENA_CENTER_X + Math.cos(angle) * dist,
       ARENA_CENTER_Y + Math.sin(angle) * dist,
       18,
-      mapId
+      mapId,
+      gameModeRef.current
     );
     return {
       id: `pk_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
@@ -765,7 +769,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       ARENA_CENTER_X + Math.cos(angle) * dist,
       ARENA_CENTER_Y + Math.sin(angle) * dist,
       28,
-      activeMapId
+      activeMapId,
+      gameModeRef.current
     );
     const roll = Math.random();
     const kind: DestructiblePropKind =
@@ -786,8 +791,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
   const spawnShooterWave = useCallback((waveNum: number, mapId: MapId) => {
     const s = simRef.current;
+    const gallery = getShooterGalleryLayout(mapId);
     const droneCount = 5 + Math.min(7, waveNum);
-    const bullseyeCount = mapId === 'aurora_summit' ? 5 : 4;
     const enemies: ShooterEnemy[] = [];
     const rivalColors: YetiColorId[] = ['glacier_mint', 'sunset_ember', 'aurora_violet'];
 
@@ -798,7 +803,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         ARENA_CENTER_X + Math.cos(a) * d,
         ARENA_CENTER_Y + Math.sin(a) * d,
         24,
-        mapId
+        mapId,
+        'shooting'
       );
       const droneHp = waveNum >= 4 ? 3 : waveNum >= 2 ? 2 : 1;
       enemies.push({
@@ -816,15 +822,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       });
     }
 
-    for (let i = 0; i < bullseyeCount; i++) {
-      const a = (i / bullseyeCount) * Math.PI * 2 + 0.5;
-      const d = 240 + Math.random() * 340;
-      const pos = nudgeOutsideObstacles(
-        ARENA_CENTER_X + Math.cos(a) * d,
-        ARENA_CENTER_Y + Math.sin(a) * d,
-        24,
-        mapId
-      );
+    gallery.bullseyePoints.forEach((bp, i) => {
+      const pos = nudgeOutsideObstacles(bp.x, bp.y, 24, mapId, 'shooting');
       enemies.push({
         id: `bull_${waveNum}_${i}_${Math.random().toString(36).slice(2, 5)}`,
         kind: 'bullseye',
@@ -835,21 +834,16 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         hp: 1,
         maxHp: 1,
         fireCd: 99,
-        orbitAngle: a,
+        orbitAngle: Math.atan2(pos.y - ARENA_CENTER_Y, pos.x - ARENA_CENTER_X),
         colorway: 'golden_frost',
       });
-    }
+    });
 
-    // Add 1-3 Rival Yeti Sharpshooters per wave
+    // Add 1-3 Rival Yeti Sharpshooters per wave positioned on map-distinct perches
     const rivalTotal = waveNum >= 2 ? Math.min(3, 1 + Math.floor(waveNum / 2)) : 1;
     for (let r = 0; r < rivalTotal; r++) {
-      const a = Math.PI * 0.25 + (r / rivalTotal) * Math.PI * 2;
-      const pos = nudgeOutsideObstacles(
-        ARENA_CENTER_X + Math.cos(a) * 440,
-        ARENA_CENTER_Y + Math.sin(a) * 340,
-        24,
-        mapId
-      );
+      const perch = gallery.rivalPoints[r % gallery.rivalPoints.length];
+      const pos = nudgeOutsideObstacles(perch.x, perch.y, 24, mapId, 'shooting');
       enemies.push({
         id: `rv_${waveNum}_${r}_${Math.random().toString(36).slice(2, 5)}`,
         kind: 'yeti_rival',
@@ -860,18 +854,18 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         hp: 4 + Math.floor(waveNum / 2),
         maxHp: 4 + Math.floor(waveNum / 2),
         fireCd: 1.05 + r * 0.45,
-        orbitAngle: a,
+        orbitAngle: Math.atan2(pos.y - ARENA_CENTER_Y, pos.x - ARENA_CENTER_X),
         colorway: rivalColors[(waveNum + r) % rivalColors.length],
       });
     }
 
     if (waveNum % 2 === 0) {
-      const bossAngle = Math.PI * 0.75;
       const bossPos = nudgeOutsideObstacles(
-        ARENA_CENTER_X + Math.cos(bossAngle) * 430,
-        ARENA_CENTER_Y + Math.sin(bossAngle) * 350,
+        gallery.bossPoint.x,
+        gallery.bossPoint.y,
         34,
-        mapId
+        mapId,
+        'shooting'
       );
       const bossHp = 22 + waveNum * 4;
       enemies.push({
@@ -884,7 +878,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         hp: bossHp,
         maxHp: bossHp,
         fireCd: 1.0,
-        orbitAngle: bossAngle,
+        orbitAngle: Math.atan2(bossPos.y - ARENA_CENTER_Y, bossPos.x - ARENA_CENTER_X),
         colorway: 'golden_frost',
       });
     }
@@ -1380,19 +1374,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
         s.entities = [playerYeti, ...allies];
 
-        // Place 3 Ancient Waystone Relics across outer quadrants
-        const relicConfigs = [
-          { angle: -Math.PI * 0.78, dist: 500 },
-          { angle: -Math.PI * 0.18, dist: 520 },
-          { angle: Math.PI * 0.42, dist: 490 },
-        ];
-        s.relics = relicConfigs.map((rc, idx) => {
-          const pos = nudgeOutsideObstacles(
-            ARENA_CENTER_X + Math.cos(rc.angle) * rc.dist,
-            ARENA_CENTER_Y + Math.sin(rc.angle) * (rc.dist * 0.85),
-            44,
-            mapId
-          );
+        // Place 3 Ancient Waystone Relics + Escape Portal uniquely per map layout
+        const questLayout = getSurvivalQuestLayout(mapId);
+        s.relics = questLayout.relicPoints.map((rp, idx) => {
+          const pos = nudgeOutsideObstacles(rp.x, rp.y, 44, mapId, 'survival');
           return {
             id: `relic_${idx + 1}`,
             index: idx + 1,
@@ -1404,12 +1389,12 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           };
         });
 
-        // Position locked Escape Portal Gate on the northern rim
         const portalPos = nudgeOutsideObstacles(
-          ARENA_CENTER_X,
-          ARENA_CENTER_Y - 545,
+          questLayout.portalPoint.x,
+          questLayout.portalPoint.y,
           48,
-          mapId
+          mapId,
+          'survival'
         );
         s.escapePortal = {
           open: false,

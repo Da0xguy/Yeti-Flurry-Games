@@ -130,6 +130,79 @@
   border-radius: 0.35rem;
 }
 
+@keyframes well-caustic-drift {
+  0%, 100% {
+    transform: translate3d(-4%, -2%, 0) scale(1);
+    opacity: 0.22;
+  }
+  50% {
+    transform: translate3d(4%, 3%, 0) scale(1.06);
+    opacity: 0.38;
+  }
+}
+
+@keyframes well-ripple-expand {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.15);
+    opacity: 0;
+  }
+}
+
+@keyframes well-drop-rise {
+  0% {
+    transform: translate3d(0, 18px, 0) scale(0.85);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.65;
+  }
+  80% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate3d(0, -110px, 0) scale(1.05);
+    opacity: 0;
+  }
+}
+
+@keyframes well-sheen-sweep {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translateX(220%);
+    opacity: 0;
+  }
+}
+
+.well-caustic-layer {
+  animation: well-caustic-drift 9s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.well-ripple-ring {
+  animation: well-ripple-expand 4.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  will-change: transform, opacity;
+}
+
+.well-drop-particle {
+  animation: well-drop-rise 4.8s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.well-progress-sheen {
+  animation: well-sheen-sweep 3.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  will-change: transform, opacity;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

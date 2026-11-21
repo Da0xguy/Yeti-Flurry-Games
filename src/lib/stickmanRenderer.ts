@@ -1407,318 +1407,362 @@ export function drawExtractionBunker(
 }
 
 /**
- * Built Interior Architecture for all 12 Frost Station Escape Rooms (2520x1540 world)
+ * Built Side-View Cutaway Interior Architecture for all 12 Frost Station Escape Rooms
+ * Deck 1 floor = y 460 | Deck 2 floor = y 940 | Deck 3 floor = y 1420
  */
 export function drawStationRoomArchitecture(
   ctx: CanvasRenderingContext2D,
   airlockOpen: boolean,
   timeSec: number
 ): void {
-  // 1. CRYO BAY (80..620, 80..500): Cryo Pods & Liquid Nitrogen Pipework
-  [125, 175, 225].forEach((px, idx) => {
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.18)';
+  const DECK1_Y = 460;
+  const DECK2_Y = 940;
+  const DECK3_Y = 1420;
+
+  // 1. CRYO BAY (80..620, floor 460): Upright Cryo Stasis Pods & Overhead Coolant Pipes
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(96, 128);
+  ctx.lineTo(604, 128);
+  ctx.stroke();
+
+  [125, 190, 480].forEach((px, idx) => {
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.16)';
     ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
-    ctx.roundRect(px, 110, 34, 72, 10);
+    ctx.roundRect(px, DECK1_Y - 122, 46, 122, [16, 16, 4, 4]);
     ctx.fill();
     ctx.stroke();
-    const frostY = 172 - ((timeSec * 24 + idx * 17) % 48);
+    // Base pedestal & silhouette
+    ctx.fillStyle = '#0f2744';
+    ctx.fillRect(px + 2, DECK1_Y - 16, 42, 16);
+    ctx.fillStyle = 'rgba(186, 230, 253, 0.28)';
+    ctx.beginPath();
+    ctx.arc(px + 23, DECK1_Y - 88, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(px + 17, DECK1_Y - 76, 12, 44);
+    // Rising cryo bubble
+    const frostY = DECK1_Y - 26 - ((timeSec * 24 + idx * 17) % 72);
     ctx.fillStyle = '#bae6fd';
     ctx.beginPath();
-    ctx.arc(px + 17, frostY, 3.2, 0, Math.PI * 2);
+    ctx.arc(px + 33, frostY, 3, 0, Math.PI * 2);
     ctx.fill();
   });
-  ctx.fillStyle = '#0f2744';
-  ctx.strokeStyle = '#7dd3fc';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.roundRect(410, 365, 165, 86, 12);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(56, 189, 248, 0.32)';
-  ctx.fillRect(426, 380, 133, 56);
 
-  // 2. MEDBAY (680..1220, 80..500): Bio-Stasis Tanks, Cryo-Scan Bed, Wall Med Cabinet
-  [720, 758].forEach((tx, idx) => {
-    ctx.fillStyle = 'rgba(45, 212, 191, 0.22)';
-    ctx.strokeStyle = '#2dd4bf';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(tx, 265, 28, 72, 10);
-    ctx.fill();
-    ctx.stroke();
-    const bubbleY = 322 - ((timeSec * 28 + idx * 19) % 44);
-    ctx.fillStyle = '#99f6e4';
-    ctx.beginPath();
-    ctx.arc(tx + 14, bubbleY, 3.2, 0, Math.PI * 2);
-    ctx.fill();
-  });
+  // 2. MEDBAY (680..1220, floor 460): Bio-Stasis Tank, Side-View Med Scanner Bed & Red-Cross Cabinet
   ctx.fillStyle = '#0f2744';
   ctx.strokeStyle = '#38bdf8';
   ctx.lineWidth = 2;
-  ctx.fillRect(980, 96, 125, 36);
-  ctx.strokeRect(980, 96, 125, 36);
+  ctx.fillRect(720, DECK1_Y - 165, 96, 48);
+  ctx.strokeRect(720, DECK1_Y - 165, 96, 48);
   ctx.fillStyle = '#ef4444';
-  ctx.fillRect(1038, 105, 8, 18);
-  ctx.fillRect(1033, 110, 18, 8);
+  ctx.fillRect(764, DECK1_Y - 151, 8, 22);
+  ctx.fillRect(757, DECK1_Y - 144, 22, 8);
+
+  // Side-view Medbay Gantry & Bed
   ctx.fillStyle = '#13314d';
   ctx.strokeStyle = '#2dd4bf';
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 2.4;
   ctx.beginPath();
-  ctx.roundRect(875, 372, 148, 58, 12);
+  ctx.roundRect(1025, DECK1_Y - 46, 148, 22, 6);
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = 'rgba(45, 212, 191, 0.35)';
-  ctx.fillRect(896, 384, 106, 34);
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(1042, DECK1_Y - 24, 14, 24);
+  ctx.fillRect(1144, DECK1_Y - 24, 14, 24);
+  ctx.strokeStyle = 'rgba(45, 212, 191, 0.45)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(1098, DECK1_Y - 46, 44, Math.PI, 0);
+  ctx.stroke();
 
-  // 3. RESEARCH LAB (1280..1820, 80..500): Server Racks & Specimen Bench
-  for (let sx = 1320; sx <= 1460; sx += 46) {
+  // Glass bio tank
+  ctx.fillStyle = 'rgba(45, 212, 191, 0.2)';
+  ctx.strokeStyle = '#2dd4bf';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(745, DECK1_Y - 104, 42, 104, [12, 12, 2, 2]);
+  ctx.fill();
+  ctx.stroke();
+  const bubbleY = DECK1_Y - 22 - ((timeSec * 28) % 68);
+  ctx.fillStyle = '#99f6e4';
+  ctx.beginPath();
+  ctx.arc(766, bubbleY, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 3. RESEARCH LAB (1280..1820, floor 460): Tall Server Mainframes & Lab Bench
+  [1318, 1372, 1426].forEach((sx) => {
     ctx.fillStyle = '#091628';
     ctx.strokeStyle = '#818cf8';
     ctx.lineWidth = 2;
-    ctx.fillRect(sx, 96, 34, 54);
-    ctx.strokeRect(sx, 96, 34, 54);
-    ctx.fillStyle = Math.sin(timeSec * 5 + sx) > 0 ? '#38bdf8' : '#22c55e';
-    ctx.fillRect(sx + 7, 106, 6, 4);
-    ctx.fillStyle = '#fbbf24';
-    ctx.fillRect(sx + 18, 106, 6, 4);
-  }
+    ctx.fillRect(sx, DECK1_Y - 150, 42, 150);
+    ctx.strokeRect(sx, DECK1_Y - 150, 42, 150);
+    for (let ly = DECK1_Y - 134; ly < DECK1_Y - 24; ly += 22) {
+      ctx.fillStyle = Math.sin(timeSec * 5 + sx + ly) > 0 ? '#38bdf8' : '#22c55e';
+      ctx.fillRect(sx + 8, ly, 8, 4);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(sx + 24, ly, 8, 4);
+    }
+  });
+  // Lab Bench
   ctx.fillStyle = '#142b47';
   ctx.strokeStyle = '#60a5fa';
   ctx.lineWidth = 2.2;
-  ctx.fillRect(1390, 380, 225, 48);
-  ctx.strokeRect(1390, 380, 225, 48);
-  ctx.fillStyle = '#38bdf8';
-  ctx.fillRect(1418, 392, 46, 24);
-  ctx.fillStyle = '#c084fc';
-  ctx.fillRect(1532, 392, 52, 24);
+  ctx.fillRect(1635, DECK1_Y - 52, 145, 16);
+  ctx.strokeRect(1635, DECK1_Y - 52, 145, 16);
+  ctx.fillRect(1646, DECK1_Y - 36, 12, 36);
+  ctx.fillRect(1756, DECK1_Y - 36, 12, 36);
+  ctx.fillStyle = 'rgba(56, 189, 248, 0.55)';
+  ctx.fillRect(1660, DECK1_Y - 92, 18, 40);
+  ctx.fillStyle = 'rgba(192, 132, 252, 0.55)';
+  ctx.fillRect(1725, DECK1_Y - 86, 20, 34);
 
-  // 4. ELECTRICAL (1880..2440, 80..500): Breaker Cabinets, Twin Coils & Floor Conduits
-  for (let bx = 1920; bx <= 2120; bx += 64) {
+  // 4. ELECTRICAL (1880..2440, floor 460): Breaker Switchboards & Twin Tesla Coils
+  [1935, 2005].forEach((bx) => {
     ctx.fillStyle = '#1e293b';
     ctx.strokeStyle = '#fbbf24';
     ctx.lineWidth = 2;
-    ctx.fillRect(bx, 96, 48, 44);
-    ctx.strokeRect(bx, 96, 48, 44);
+    ctx.fillRect(bx, DECK1_Y - 140, 52, 140);
+    ctx.strokeRect(bx, DECK1_Y - 140, 52, 140);
     ctx.fillStyle = '#facc15';
-    ctx.fillRect(bx + 10, 108, 28, 6);
-  }
-  ctx.strokeStyle = 'rgba(250, 204, 21, 0.35)';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(1990, 355);
-  ctx.lineTo(2320, 355);
-  ctx.stroke();
-  [1990, 2320].forEach((tx) => {
+    ctx.fillRect(bx + 10, DECK1_Y - 120, 32, 10);
+  });
+  [2265, 2365].forEach((tx) => {
     ctx.fillStyle = '#1e1b4b';
     ctx.strokeStyle = '#f59e0b';
     ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(tx, 355, 24, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    ctx.fillRect(tx - 16, DECK1_Y - 115, 32, 115);
+    ctx.strokeRect(tx - 16, DECK1_Y - 115, 32, 115);
     ctx.fillStyle = '#fde047';
     ctx.beginPath();
-    ctx.arc(tx, 355, 8 + Math.sin(timeSec * 8) * 2, 0, Math.PI * 2);
+    ctx.arc(tx, DECK1_Y - 125, 11 + Math.sin(timeSec * 8) * 2.5, 0, Math.PI * 2);
     ctx.fill();
   });
+  ctx.strokeStyle = 'rgba(250, 204, 21, 0.65)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(2265, DECK1_Y - 125);
+  ctx.lineTo(2315, DECK1_Y - 125 + Math.sin(timeSec * 24) * 10);
+  ctx.lineTo(2365, DECK1_Y - 125);
+  ctx.stroke();
 
-  // 5. CREW QUARTERS (80..620, 560..980): Bunks & Crew Footlockers
-  for (let by = 610; by <= 830; by += 110) {
-    ctx.fillStyle = '#162844';
-    ctx.strokeStyle = '#60a5fa';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(110, by, 118, 48, 8);
-    ctx.fill();
-    ctx.stroke();
+  // 5. CREW QUARTERS (80..620, floor 940): Side-View 2-Tier Bunk Beds & Crew Lockers
+  ctx.fillStyle = '#162844';
+  ctx.strokeStyle = '#60a5fa';
+  ctx.lineWidth = 2.5;
+  // Bunk Frame
+  ctx.fillRect(116, DECK2_Y - 140, 8, 140);
+  ctx.fillRect(248, DECK2_Y - 140, 8, 140);
+  [DECK2_Y - 46, DECK2_Y - 118].forEach((by) => {
+    ctx.fillStyle = '#1e3a5f';
+    ctx.fillRect(122, by, 128, 18);
+    ctx.strokeRect(122, by, 128, 18);
     ctx.fillStyle = '#e2e8f0';
-    ctx.fillRect(120, by + 10, 24, 28);
-  }
-  ctx.fillStyle = '#1e293b';
-  ctx.strokeStyle = '#38bdf8';
-  ctx.fillRect(465, 580, 115, 36);
-  ctx.strokeRect(465, 580, 115, 36);
+    ctx.fillRect(128, by - 12, 28, 12);
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(160, by - 8, 84, 8);
+  });
+  // Crew Lockers
+  [485, 528, 571].forEach((lx) => {
+    ctx.fillStyle = '#1e293b';
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.8;
+    ctx.fillRect(lx, DECK2_Y - 128, 38, 128);
+    ctx.strokeRect(lx, DECK2_Y - 128, 38, 128);
+  });
 
-  // 6. CAFETERIA HUB (680..1220, 560..980): Galley Counter, Vending, Tables & Emergency Button
+  // 6. CAFETERIA HUB (680..1220, floor 940): Emergency Button Pedestal, Galley Counter & Booth
   ctx.fillStyle = '#122844';
   ctx.strokeStyle = '#38bdf8';
-  ctx.lineWidth = 2;
-  ctx.fillRect(705, 580, 165, 42);
-  ctx.strokeRect(705, 580, 165, 42);
+  ctx.lineWidth = 2.2;
+  ctx.fillRect(712, DECK2_Y - 56, 138, 56);
+  ctx.strokeRect(712, DECK2_Y - 56, 138, 56);
+  // Vending machine
   ctx.fillStyle = '#0f304d';
   ctx.strokeStyle = '#22d3ee';
-  ctx.fillRect(1115, 580, 58, 48);
-  ctx.strokeRect(1115, 580, 58, 48);
+  ctx.fillRect(1135, DECK2_Y - 134, 62, 134);
+  ctx.strokeRect(1135, DECK2_Y - 134, 62, 134);
   ctx.fillStyle = '#67e8f9';
-  ctx.fillRect(1126, 588, 26, 28);
-  [
-    { x: 785, y: 865 },
-    { x: 1110, y: 865 },
-  ].forEach((tb) => {
-    ctx.fillStyle = '#1e3a5f';
-    ctx.strokeStyle = '#64748b';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(tb.x, tb.y, 24, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  });
-  // Central Emergency Meeting Table (next to player spawn 950, 770)
+  ctx.fillRect(1147, DECK2_Y - 118, 38, 54);
+  // Central Emergency Meeting Button Console (grounded at x=1048, y=940)
   ctx.fillStyle = '#1e3a5f';
   ctx.strokeStyle = '#38bdf8';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(1032, 770, 38, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  ctx.lineWidth = 2.5;
+  ctx.fillRect(1024, DECK2_Y - 56, 56, 56);
+  ctx.strokeRect(1024, DECK2_Y - 56, 56, 56);
   ctx.fillStyle = '#ef4444';
   ctx.beginPath();
-  ctx.arc(1032, 770, 12, 0, Math.PI * 2);
+  ctx.roundRect(1036, DECK2_Y - 68, 32, 12, [6, 6, 0, 0]);
   ctx.fill();
 
-  // 7. REACTOR CORE (1280..1820, 560..980): Conduits & Glowing Plasma Turbine
-  ctx.strokeStyle = 'rgba(192, 132, 252, 0.35)';
-  ctx.lineWidth = 10;
-  ctx.beginPath();
-  ctx.moveTo(1320, 770);
-  ctx.lineTo(1780, 770);
-  ctx.moveTo(1550, 595);
-  ctx.lineTo(1550, 945);
-  ctx.stroke();
-  ctx.fillStyle = '#2e1065';
+  // 7. REACTOR CORE (1280..1820, floor 940): Floor-to-Ceiling Vertical Reactor Column
+  ctx.fillStyle = 'rgba(139, 92, 246, 0.14)';
   ctx.strokeStyle = '#c084fc';
   ctx.lineWidth = 3.5;
-  ctx.beginPath();
-  ctx.arc(1550, 770, 50, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = '#e879f9';
-  ctx.beginPath();
-  ctx.arc(1550, 770, 17 + Math.sin(timeSec * 6) * 3, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillRect(1425, 546, 74, DECK2_Y - 546);
+  ctx.strokeRect(1425, 546, 74, DECK2_Y - 546);
+  // Vertical glowing plasma rod & containment rings
+  const coreGlow = 0.55 + Math.sin(timeSec * 6) * 0.3;
+  ctx.fillStyle = `rgba(232, 121, 249, ${coreGlow})`;
+  ctx.fillRect(1450, 554, 24, DECK2_Y - 562);
+  [630, 725, 825].forEach((ry) => {
+    ctx.fillStyle = '#2e1065';
+    ctx.fillRect(1414, ry, 96, 18);
+    ctx.strokeRect(1414, ry, 96, 18);
+  });
 
-  // 8. SECURITY HUB (1880..2440, 560..980): Surveillance Wall & Radar Dish Console
+  // 8. SECURITY HUB (1880..2440, floor 940): Wall Monitor Bank & Desk Console
   ctx.fillStyle = '#0b182c';
   ctx.strokeStyle = '#f43f5e';
-  ctx.lineWidth = 2;
-  ctx.fillRect(1940, 576, 220, 38);
-  ctx.strokeRect(1940, 576, 220, 38);
-  for (let mx = 1952; mx <= 2120; mx += 44) {
+  ctx.lineWidth = 2.2;
+  ctx.fillRect(1915, DECK2_Y - 165, 165, 88);
+  ctx.strokeRect(1915, DECK2_Y - 165, 165, 88);
+  for (let mx = 1928; mx <= 2036; mx += 50) {
     ctx.fillStyle = Math.sin(timeSec * 4 + mx) > 0 ? '#22d3ee' : '#1e293b';
-    ctx.fillRect(mx, 584, 34, 22);
+    ctx.fillRect(mx, DECK2_Y - 152, 40, 26);
+    ctx.fillStyle = Math.cos(timeSec * 3.2 + mx) > 0 ? '#fb7185' : '#0f172a';
+    ctx.fillRect(mx, DECK2_Y - 116, 40, 26);
   }
   ctx.fillStyle = '#1f1636';
   ctx.strokeStyle = '#fb7185';
+  ctx.fillRect(2255, DECK2_Y - 54, 140, 54);
+  ctx.strokeRect(2255, DECK2_Y - 54, 140, 54);
+
+  // 9. STORAGE BAY (80..620, floor 1420): Tall Steel Shelving & Stacked Crates
+  ctx.strokeStyle = '#fb923c';
   ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.arc(2310, 780, 42, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.strokeStyle = '#fda4af';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(2310, 780);
-  ctx.lineTo(2310 + Math.cos(timeSec * 2.4) * 34, 780 + Math.sin(timeSec * 2.4) * 34);
-  ctx.stroke();
-
-  // 9. STORAGE BAY (80..620, 1040..1460): Steel Cargo Racks & Crates
-  [120, 180].forEach((ry, idx) => {
-    ctx.fillStyle = idx === 0 ? '#1e293b' : '#292524';
-    ctx.strokeStyle = '#fb923c';
-    ctx.lineWidth = 2;
-    ctx.fillRect(112, 1080 + (ry - 120) * 1.4, 150, 42);
-    ctx.strokeRect(112, 1080 + (ry - 120) * 1.4, 150, 42);
-  });
   ctx.fillStyle = '#1e293b';
+  ctx.fillRect(115, DECK3_Y - 165, 140, 165);
+  ctx.strokeRect(115, DECK3_Y - 165, 140, 165);
+  [DECK3_Y - 56, DECK3_Y - 112].forEach((sy) => {
+    ctx.fillStyle = '#fb923c';
+    ctx.fillRect(115, sy, 140, 6);
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(132, sy - 40, 44, 40);
+    ctx.fillRect(188, sy - 34, 48, 34);
+  });
+  ctx.fillStyle = '#292524';
   ctx.strokeStyle = '#94a3b8';
-  ctx.fillRect(465, 1345, 118, 68);
-  ctx.strokeRect(465, 1345, 118, 68);
+  ctx.fillRect(480, DECK3_Y - 54, 62, 54);
+  ctx.strokeRect(480, DECK3_Y - 54, 62, 54);
+  ctx.fillRect(496, DECK3_Y - 102, 46, 48);
+  ctx.strokeRect(496, DECK3_Y - 102, 46, 48);
 
-  // 10. COMMS ARRAY (680..1220, 1040..1460): Dish Dish & Telemetry Console
+  // 10. COMMS ARRAY (680..1220, floor 1420): Tall Uplink Console & Roof-Mounted Parabolic Dish
   ctx.fillStyle = '#0f223b';
   ctx.strokeStyle = '#38bdf8';
   ctx.lineWidth = 2.5;
+  ctx.fillRect(740, DECK3_Y - 125, 118, 125);
+  ctx.strokeRect(740, DECK3_Y - 125, 118, 125);
+  // Parabolic Dish mounted on top
   ctx.beginPath();
-  ctx.arc(825, 1255, 44, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.arc(800, DECK3_Y - 148, 34, Math.PI * 0.15, Math.PI * 0.85);
   ctx.stroke();
-  ctx.strokeStyle = '#7dd3fc';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = `rgba(125, 211, 252, ${0.4 + Math.sin(timeSec * 6) * 0.35})`;
   ctx.beginPath();
-  ctx.arc(825, 1255, 22 + Math.sin(timeSec * 5) * 4, 0, Math.PI * 2);
+  ctx.arc(800, DECK3_Y - 165, 22, -Math.PI * 0.8, -Math.PI * 0.2);
   ctx.stroke();
+  // Comms Desk
   ctx.fillStyle = '#162c49';
   ctx.strokeStyle = '#60a5fa';
-  ctx.fillRect(1025, 1065, 155, 42);
-  ctx.strokeRect(1025, 1065, 155, 42);
+  ctx.fillRect(1045, DECK3_Y - 58, 130, 58);
+  ctx.strokeRect(1045, DECK3_Y - 58, 130, 58);
 
-  // 11. OXYGEN PLANT (1280..1820, 1040..1460): Twin O2 Scrubbers & Coolant Pipes
-  [1360, 1445].forEach((ox, idx) => {
-    ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
+  // 11. OXYGEN PLANT (1280..1820, floor 1420): Twin Vertical O2 Scrubber Cylinders
+  [1335, 1418].forEach((ox, idx) => {
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.2)';
     ctx.strokeStyle = '#34d399';
     ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.arc(ox, 1150, 32, 0, Math.PI * 2);
+    ctx.roundRect(ox, DECK3_Y - 155, 58, 155, [24, 24, 4, 4]);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#6ee7b7';
-    ctx.beginPath();
-    ctx.arc(ox, 1150, 10 + Math.sin(timeSec * 5 + idx) * 2.5, 0, Math.PI * 2);
-    ctx.fill();
+    const level = 42 + Math.sin(timeSec * 3.5 + idx) * 14;
+    ctx.fillRect(ox + 10, DECK3_Y - 18 - level, 38, level);
   });
-  ctx.strokeStyle = 'rgba(52, 211, 153, 0.32)';
-  ctx.lineWidth = 6;
+  ctx.strokeStyle = 'rgba(52, 211, 153, 0.35)';
+  ctx.lineWidth = 8;
   ctx.beginPath();
-  ctx.moveTo(1360, 1185);
-  ctx.lineTo(1360, 1380);
-  ctx.lineTo(1700, 1380);
+  ctx.moveTo(1364, DECK3_Y - 155);
+  ctx.lineTo(1364, 1085);
+  ctx.lineTo(1750, 1085);
   ctx.stroke();
 
-  // 12. AIRLOCK EXIT (1880..2440, 1040..1460): Crew Suit Lockers + Docked Escape Shuttle Craft
-  for (let lx = 1920; lx <= 2075; lx += 38) {
+  // 12. AIRLOCK EXIT (1880..2440, floor 1420): Side-View Suit Lockers & Escape Shuttle on Landing Struts
+  [1915, 1955].forEach((lx) => {
     ctx.fillStyle = '#142a44';
     ctx.strokeStyle = '#34d399';
     ctx.lineWidth = 1.8;
-    ctx.fillRect(lx, 1392, 30, 42);
-    ctx.strokeRect(lx, 1392, 30, 42);
+    ctx.fillRect(lx, DECK3_Y - 110, 32, 110);
+    ctx.strokeRect(lx, DECK3_Y - 110, 32, 110);
     ctx.fillStyle = '#38bdf8';
-    ctx.fillRect(lx + 7, 1402, 16, 10);
-  }
+    ctx.fillRect(lx + 7, DECK3_Y - 94, 18, 12);
+  });
 
-  // Docked Escape Shuttle Craft at (2230, 1250)
-  const podX = 2230;
-  const podY = 1250;
-  ctx.fillStyle = airlockOpen ? 'rgba(16, 185, 129, 0.22)' : 'rgba(51, 65, 85, 0.45)';
-  ctx.strokeStyle = airlockOpen ? '#34d399' : '#64748b';
+  // Side-View Docked Escape Shuttle Craft resting on Deck 3 at (2245, 1420)
+  const podX = 2245;
+  const podY = DECK3_Y;
+  // Launch beacon glow behind shuttle
+  ctx.fillStyle = airlockOpen ? 'rgba(16, 185, 129, 0.22)' : 'rgba(51, 65, 85, 0.35)';
+  ctx.beginPath();
+  ctx.arc(podX, podY - 62, 82, Math.PI, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  // Landing Struts grounded at podY
+  ctx.strokeStyle = '#94a3b8';
   ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.arc(podX, podY, 68, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(podX - 48, podY - 26);
+  ctx.lineTo(podX - 66, podY);
+  ctx.moveTo(podX + 42, podY - 26);
+  ctx.lineTo(podX + 58, podY);
   ctx.stroke();
 
+  // Side-View Shuttle Fuselage
   ctx.fillStyle = '#0f2744';
-  ctx.strokeStyle = airlockOpen ? '#6ee7b7' : '#94a3b8';
-  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = airlockOpen ? '#34d399' : '#94a3b8';
+  ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(podX + 48, podY);
-  ctx.lineTo(podX - 18, podY - 40);
-  ctx.lineTo(podX - 44, podY - 19);
-  ctx.lineTo(podX - 44, podY + 19);
-  ctx.lineTo(podX - 18, podY + 40);
+  ctx.moveTo(podX + 92, podY - 40); // Nose cone right
+  ctx.lineTo(podX + 35, podY - 84); // Cockpit top
+  ctx.lineTo(podX - 64, podY - 84); // Dorsal hull
+  ctx.lineTo(podX - 82, podY - 26); // Thruster aft
+  ctx.lineTo(podX + 64, podY - 26); // Belly
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
+
+  // Cockpit glass & boarding hatch
   ctx.fillStyle = airlockOpen ? '#34d399' : '#38bdf8';
   ctx.beginPath();
-  ctx.ellipse(podX + 12, podY, 16, 10, 0, 0, Math.PI * 2);
+  ctx.moveTo(podX + 76, podY - 44);
+  ctx.lineTo(podX + 32, podY - 74);
+  ctx.lineTo(podX + 18, podY - 44);
+  ctx.closePath();
   ctx.fill();
+
+  ctx.fillStyle = airlockOpen ? '#10b981' : '#334155';
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 2;
+  ctx.fillRect(podX - 24, podY - 68, 30, 42);
+  ctx.strokeRect(podX - 24, podY - 68, 30, 42);
+
+  // Engine nozzle glow when ready
+  if (airlockOpen) {
+    ctx.fillStyle = '#34d399';
+    ctx.beginPath();
+    ctx.ellipse(podX - 92, podY - 54, 14 + Math.sin(timeSec * 14) * 4, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.font = '700 14px "Pixel Forge", Oxanium, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = airlockOpen ? '#6ee7b7' : '#cbd5e1';
-  ctx.fillText(airlockOpen ? 'ESCAPE POD OPEN!' : 'SHUTTLE LOCKED', podX, podY - 78);
+  ctx.fillText(airlockOpen ? 'ESCAPE SHUTTLE OPEN!' : 'SHUTTLE LOCKED', podX, podY - 102);
 }
 
 /**
@@ -1955,62 +1999,64 @@ export function drawStationHazard2D(
 ): void {
   ctx.save();
   if (hz.kind === 'cryo_spill') {
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.28)';
-    ctx.strokeStyle = 'rgba(125, 211, 252, 0.72)';
+    // Grounded flat frost slick sitting directly on deck floor hz.y
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.34)';
+    ctx.strokeStyle = 'rgba(125, 211, 252, 0.8)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.ellipse(hz.x, hz.y, hz.radius, hz.radius * 0.65, 0.2, 0, Math.PI * 2);
+    ctx.roundRect(hz.x - hz.radius, hz.y - 10, hz.radius * 2, 10, 5);
     ctx.fill();
     ctx.stroke();
     ctx.font = '700 9px Oxanium, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#bae6fd';
-    ctx.fillText('FROST SLOW', hz.x, hz.y + 3);
+    ctx.fillText('FROST SLICK', hz.x, hz.y - 14);
   } else if (hz.kind === 'shock_wire') {
-    ctx.fillStyle = 'rgba(250, 204, 21, 0.16)';
-    ctx.beginPath();
-    ctx.arc(hz.x, hz.y, hz.radius, 0, Math.PI * 2);
-    ctx.fill();
+    // Grounded floor conduit + vertical arcing sparks at hz.y
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(hz.x - hz.radius * 0.75, hz.y - 8, hz.radius * 1.5, 8);
     ctx.strokeStyle = Math.sin(timeSec * 22 + hz.x) > 0 ? '#fde047' : '#fb923c';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(hz.x - 18, hz.y - 6);
-    ctx.lineTo(hz.x - 4, hz.y + 6);
-    ctx.lineTo(hz.x + 6, hz.y - 7);
-    ctx.lineTo(hz.x + 18, hz.y + 5);
+    ctx.moveTo(hz.x - 18, hz.y - 8);
+    ctx.lineTo(hz.x - 6, hz.y - 24);
+    ctx.lineTo(hz.x + 5, hz.y - 11);
+    ctx.lineTo(hz.x + 17, hz.y - 26);
     ctx.stroke();
   } else if (hz.kind === 'cargo_block') {
-    const s = hz.radius * 1.45;
+    // Grounded cargo crate resting bottom-up from hz.y - s to hz.y
+    const s = hz.radius * 1.65;
     ctx.fillStyle = '#1e293b';
     ctx.strokeStyle = '#fb923c';
     ctx.lineWidth = 2.5;
-    ctx.fillRect(hz.x - s / 2, hz.y - s / 2, s, s);
-    ctx.strokeRect(hz.x - s / 2, hz.y - s / 2, s, s);
+    ctx.fillRect(hz.x - s / 2, hz.y - s, s, s);
+    ctx.strokeRect(hz.x - s / 2, hz.y - s, s, s);
     ctx.strokeStyle = '#64748b';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(hz.x - s / 2 + 4, hz.y - s / 2 + 4);
-    ctx.lineTo(hz.x + s / 2 - 4, hz.y + s / 2 - 4);
+    ctx.moveTo(hz.x - s / 2 + 4, hz.y - s + 4);
+    ctx.lineTo(hz.x + s / 2 - 4, hz.y - 4);
     ctx.stroke();
     if (hz.hp < hz.maxHp) {
       ctx.fillStyle = '#040c18';
-      ctx.fillRect(hz.x - 18, hz.y - s / 2 - 9, 36, 4);
+      ctx.fillRect(hz.x - 18, hz.y - s - 9, 36, 4);
       ctx.fillStyle = '#fbbf24';
-      ctx.fillRect(hz.x - 18, hz.y - s / 2 - 9, 36 * Math.max(0, hz.hp / hz.maxHp), 4);
+      ctx.fillRect(hz.x - 18, hz.y - s - 9, 36 * Math.max(0, hz.hp / hz.maxHp), 4);
     }
   } else {
-    // Sabotage mine
-    const pulse = 1 + Math.sin(timeSec * 12 + hz.x) * 0.15;
+    // Grounded dome sabotage mine sitting on floor hz.y
+    const pulse = 1 + Math.sin(timeSec * 12 + hz.x) * 0.14;
     ctx.fillStyle = '#334155';
     ctx.strokeStyle = '#fb7185';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(hz.x, hz.y, 14 * pulse, 0, Math.PI * 2);
+    ctx.arc(hz.x, hz.y - 2, 16 * pulse, Math.PI, 0);
+    ctx.closePath();
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = Math.sin(timeSec * 16 + hz.x) > 0 ? '#ef4444' : '#fda4af';
     ctx.beginPath();
-    ctx.arc(hz.x, hz.y, 5, 0, Math.PI * 2);
+    ctx.arc(hz.x, hz.y - 10, 5, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();

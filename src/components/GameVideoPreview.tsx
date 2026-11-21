@@ -802,188 +802,272 @@ function render2DGameplayVideoFrame(
       ctx.fillText('STAGE CLEAR · EXIT REACHED!', 600, 150);
     }
   } else if (mode === 'stickman_brawl') {
-    // Side-view station cutaway: rooms remain separate, but characters and floors read horizontally.
+    // True 2-deck side-view station cutaway: grounded rooms, connecting ladders, blast door & side-view escape shuttle.
     const cycle = t % 7.2;
+    const doorUnlocked = cycle >= 3.4;
 
-    // Station Deck Background & Horizontal Room Cutaway
-    ctx.fillStyle = '#071324';
+    const upperCeilingY = 104;
+    const deck1FloorY = 286;
+    const deck2CeilingY = 318;
+    const deck2FloorY = 538;
+
+    // Deep station cutaway backdrop
+    ctx.fillStyle = '#061120';
     ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
 
-    const rooms = [
-      { name: 'CAFETERIA', x: 55, y: 105, w: 285, h: 390, floor: '#11253e', accent: '#38bdf8' },
-      { name: 'MEDBAY', x: 340, y: 105, w: 270, h: 390, floor: '#112c3c', accent: '#2dd4bf' },
-      { name: 'REACTOR', x: 610, y: 105, w: 255, h: 390, floor: '#1b1d36', accent: '#c084fc' },
-      { name: 'AIRLOCK EXIT', x: 865, y: 105, w: 260, h: 390, floor: '#0f2b33', accent: '#34d399' },
+    // Outer station hull frame
+    ctx.fillStyle = '#0a192c';
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(54, upperCeilingY, 1092, deck2FloorY - upperCeilingY, 14);
+    ctx.fill();
+    ctx.stroke();
+
+    // Deck 1 (Upper) & Deck 2 (Lower) Room Backdrops
+    const upperRooms = [
+      { name: 'CAFETERIA', x: 58, w: 344, bg: '#0f2238', accent: '#38bdf8' },
+      { name: 'MEDBAY', x: 402, w: 382, bg: '#0f2936', accent: '#2dd4bf' },
+      { name: 'REACTOR BAY', x: 784, w: 358, bg: '#1a1b34', accent: '#c084fc' },
+    ];
+    const lowerRooms = [
+      { name: 'SECURITY', x: 58, w: 344, bg: '#102033', accent: '#60a5fa' },
+      { name: 'STORAGE', x: 402, w: 382, bg: '#162436', accent: '#f59e0b' },
+      { name: 'AIRLOCK EXIT', x: 784, w: 358, bg: '#0d2930', accent: '#34d399' },
     ];
 
-    // Corridors connecting rooms
-    ctx.fillStyle = '#162d47';
-    ctx.fillRect(330, 425, 20, 70);
-    ctx.fillRect(600, 425, 20, 70);
-    ctx.fillRect(855, 425, 20, 70);
-
-    for (const r of rooms) {
-      ctx.fillStyle = r.floor;
-      ctx.strokeStyle = r.accent;
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.roundRect(r.x, r.y, r.w, r.h, 14);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = 'rgba(255,255,255,0.16)';
-      ctx.font = '700 18px Oxanium, sans-serif';
+    for (const r of upperRooms) {
+      ctx.fillStyle = r.bg;
+      ctx.fillRect(r.x, upperCeilingY + 4, r.w, deck1FloorY - upperCeilingY - 4);
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.22)';
+      ctx.font = '700 15px Oxanium, sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText(r.name, r.x + 18, r.y + 32);
+      ctx.fillText(r.name, r.x + 16, upperCeilingY + 28);
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.28)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(r.x + r.w, upperCeilingY + 4);
+      ctx.lineTo(r.x + r.w, deck1FloorY - 96);
+      ctx.stroke();
     }
 
-    ctx.fillStyle = '#020617';
-    ctx.fillRect(55, 495, 1070, 100);
-    ctx.strokeStyle = '#64748b';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(55, 495);
-    ctx.lineTo(1125, 495);
-    ctx.stroke();
+    for (const r of lowerRooms) {
+      ctx.fillStyle = r.bg;
+      ctx.fillRect(r.x, deck2CeilingY, r.w, deck2FloorY - deck2CeilingY);
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.22)';
+      ctx.font = '700 15px Oxanium, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(r.name, r.x + 16, deck2CeilingY + 24);
+      if (r.name !== 'AIRLOCK EXIT') {
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.28)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(r.x + r.w, deck2CeilingY);
+        ctx.lineTo(r.x + r.w, deck2FloorY - 98);
+        ctx.stroke();
+      }
+    }
 
-    // Security Blast Door between Medbay & Airlock (unlocks after Clue collected!)
-    const doorUnlocked = cycle >= 3.6;
-    ctx.fillStyle = doorUnlocked ? 'rgba(52, 211, 153, 0.25)' : 'rgba(244, 63, 94, 0.65)';
-    ctx.strokeStyle = doorUnlocked ? '#34d399' : '#fb7185';
-    ctx.lineWidth = 3;
-    ctx.fillRect(790, 248, 16, 92);
-    ctx.strokeRect(790, 248, 16, 92);
+    // Inter-deck girder slab between Deck 1 & Deck 2 (with openings for ladder shafts)
+    const ladderXs = [362, 824];
+    ctx.fillStyle = '#08121f';
+    ctx.fillRect(54, deck1FloorY, 1092, deck2CeilingY - deck1FloorY);
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(54, deck1FloorY, 1092, 6);
+    ctx.fillStyle = '#2dd4bf';
+    ctx.fillRect(54, deck1FloorY, 1092, 2.5);
 
-    // Cafeteria Emergency Table, Medbay Bio-Tanks, Reactor Turbine & Airlock Escape Shuttle
+    // Lower deck structural subfloor
+    ctx.fillStyle = '#030812';
+    ctx.fillRect(54, deck2FloorY, 1092, 56);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(54, deck2FloorY, 1092, 3);
+
+    // Side-view vertical ladder shafts connecting Deck 1 and Deck 2
+    for (const lx of ladderXs) {
+      ctx.fillStyle = '#071320';
+      ctx.fillRect(lx - 20, deck1FloorY - 2, 40, deck2CeilingY - deck1FloorY + 6);
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(lx - 13, deck1FloorY - 12);
+      ctx.lineTo(lx - 13, deck2FloorY);
+      ctx.moveTo(lx + 13, deck1FloorY - 12);
+      ctx.lineTo(lx + 13, deck2FloorY);
+      ctx.stroke();
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 2.5;
+      for (let ry = deck1FloorY + 8; ry < deck2FloorY - 8; ry += 22) {
+        ctx.beginPath();
+        ctx.moveTo(lx - 13, ry);
+        ctx.lineTo(lx + 13, ry);
+        ctx.stroke();
+      }
+    }
+
+    // Grounded Deck 1 Props (Cafeteria button pedestal, Medbay cryo tanks + Clue pedestal, Reactor column)
     ctx.fillStyle = '#1e3a5f';
-    ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(245, 225, 30, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    ctx.fillRect(156, deck1FloorY - 40, 88, 10);
+    ctx.fillRect(194, deck1FloorY - 30, 12, 30);
     ctx.fillStyle = '#ef4444';
-    ctx.beginPath();
-    ctx.arc(245, 225, 9, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(190, deck1FloorY - 50, 20, 10);
 
-    // Medbay Cryo Tanks
-    [482, 512].forEach((tx) => {
-      ctx.fillStyle = 'rgba(45, 212, 191, 0.24)';
+    // Upright Medbay Cryo Tanks
+    [452, 494].forEach((tx) => {
+      ctx.fillStyle = 'rgba(45, 212, 191, 0.22)';
       ctx.strokeStyle = '#2dd4bf';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.roundRect(tx, 162, 22, 54, 8);
+      ctx.roundRect(tx, deck1FloorY - 102, 28, 92, 8);
       ctx.fill();
       ctx.stroke();
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(tx - 3, deck1FloorY - 10, 34, 10);
     });
 
-    // Reactor Turbine + Conduits
-    ctx.strokeStyle = 'rgba(192, 132, 252, 0.35)';
-    ctx.lineWidth = 8;
-    ctx.beginPath();
-    ctx.moveTo(115, 502);
-    ctx.lineTo(375, 502);
-    ctx.stroke();
-    ctx.fillStyle = '#2e1065';
-    ctx.strokeStyle = '#c084fc';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(245, 502, 36, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // Floor Vent in Medbay
-    ctx.fillStyle = '#334155';
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 2;
-    ctx.fillRect(605, 152, 48, 28);
-    ctx.strokeRect(605, 152, 48, 28);
-
-    // Glowing Clue Data Pad in Medbay
-    if (cycle < 3.6) {
+    // Clue Terminal Pedestal in Medbay
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(588, deck1FloorY - 48, 30, 48);
+    ctx.fillStyle = doorUnlocked ? '#34d399' : '#fde047';
+    ctx.fillRect(592, deck1FloorY - 62, 22, 16);
+    if (!doorUnlocked) {
       const pulse = 18 + Math.sin(t * 7) * 4;
-      ctx.fillStyle = 'rgba(250, 204, 21, 0.25)';
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.22)';
       ctx.beginPath();
-      ctx.arc(620, 285, pulse, 0, Math.PI * 2);
+      ctx.arc(603, deck1FloorY - 68, pulse, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#fde047';
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 2;
-      ctx.fillRect(608, 274, 24, 20);
-      ctx.strokeRect(608, 274, 24, 20);
       ctx.font = '700 11px Oxanium, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = '#fef08a';
-      ctx.fillText('CLUE 3/3', 620, 260);
+      ctx.fillText('CLUE 3/3', 603, deck1FloorY - 88);
     }
 
-    // Docked Escape Shuttle Craft inside Airlock Room
-    ctx.fillStyle = doorUnlocked ? 'rgba(16, 185, 129, 0.26)' : 'rgba(51, 65, 85, 0.5)';
+    // Upright Reactor Core Column
+    ctx.fillStyle = '#2e1065';
+    ctx.strokeStyle = '#c084fc';
+    ctx.lineWidth = 2.5;
+    ctx.fillRect(942, upperCeilingY + 22, 44, deck1FloorY - upperCeilingY - 22);
+    ctx.strokeRect(942, upperCeilingY + 22, 44, deck1FloorY - upperCeilingY - 22);
+    ctx.fillStyle = '#e879f9';
+    ctx.fillRect(956, upperCeilingY + 34, 16, deck1FloorY - upperCeilingY - 46);
+
+    // Grounded Deck 2 Props (Security monitors, Cargo crates, Security Blast Door & Side-View Escape Shuttle)
+    ctx.fillStyle = '#0f172a';
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+    ctx.fillRect(118, deck2FloorY - 118, 92, 54);
+    ctx.strokeRect(118, deck2FloorY - 118, 92, 54);
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(112, deck2FloorY - 40, 104, 40);
+
+    // Cargo Crates in Storage
+    ctx.fillStyle = '#78350f';
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 2;
+    ctx.fillRect(465, deck2FloorY - 44, 48, 44);
+    ctx.strokeRect(465, deck2FloorY - 44, 48, 44);
+    ctx.fillRect(518, deck2FloorY - 36, 40, 36);
+    ctx.strokeRect(518, deck2FloorY - 36, 40, 36);
+
+    // Sliding Security Blast Door before Airlock Exit
+    const doorLift = doorUnlocked ? 82 : 0;
+    ctx.fillStyle = doorUnlocked ? 'rgba(52, 211, 153, 0.24)' : 'rgba(244, 63, 94, 0.72)';
+    ctx.strokeStyle = doorUnlocked ? '#34d399' : '#fb7185';
+    ctx.lineWidth = 3;
+    ctx.fillRect(778, deck2FloorY - 122 - doorLift, 16, 122);
+    ctx.strokeRect(778, deck2FloorY - 122 - doorLift, 16, 122);
+
+    // Side-View Escape Shuttle on landing struts in Airlock Exit
+    const shuttleX = 985;
+    const shuttleFloor = deck2FloorY;
     ctx.strokeStyle = doorUnlocked ? '#34d399' : '#94a3b8';
     ctx.lineWidth = 3;
+    // Landing struts
     ctx.beginPath();
-    ctx.arc(985, 355, 48, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(shuttleX - 46, shuttleFloor);
+    ctx.lineTo(shuttleX - 32, shuttleFloor - 26);
+    ctx.moveTo(shuttleX + 46, shuttleFloor);
+    ctx.lineTo(shuttleX + 32, shuttleFloor - 26);
     ctx.stroke();
+    // Side profile fuselage
     ctx.fillStyle = '#0f2744';
     ctx.beginPath();
-    ctx.moveTo(1022, 355);
-    ctx.lineTo(968, 326);
-    ctx.lineTo(950, 342);
-    ctx.lineTo(950, 368);
-    ctx.lineTo(968, 384);
+    ctx.moveTo(shuttleX - 72, shuttleFloor - 26);
+    ctx.lineTo(shuttleX + 46, shuttleFloor - 26);
+    ctx.lineTo(shuttleX + 86, shuttleFloor - 52);
+    ctx.lineTo(shuttleX + 44, shuttleFloor - 82);
+    ctx.lineTo(shuttleX - 52, shuttleFloor - 82);
+    ctx.lineTo(shuttleX - 78, shuttleFloor - 50);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    ctx.font = '700 13px Oxanium, sans-serif';
+    // Cockpit canopy
+    ctx.fillStyle = doorUnlocked ? '#34d399' : '#38bdf8';
+    ctx.beginPath();
+    ctx.moveTo(shuttleX + 26, shuttleFloor - 56);
+    ctx.lineTo(shuttleX + 64, shuttleFloor - 56);
+    ctx.lineTo(shuttleX + 42, shuttleFloor - 74);
+    ctx.lineTo(shuttleX + 20, shuttleFloor - 74);
+    ctx.closePath();
+    ctx.fill();
+    ctx.font = '700 12px Oxanium, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(doorUnlocked ? 'ESCAPE!' : 'LOCKED', 985, 420);
+    ctx.fillText(doorUnlocked ? 'SHUTTLE READY!' : 'AIRLOCK LOCKED', shuttleX, shuttleFloor - 96);
 
-    // Animated Player & Red-Visor Imposter Stickman
-    let pX = 240;
-    let pY = 492;
+    // Animated Player (Deck 1 -> Clue -> Ladder -> Deck 2 -> Blast Door -> Shuttle)
+    let pX = 210;
+    let pY = deck1FloorY;
     let pPose: StickmanPose = 'run';
-    let iX = 630;
-    let iY = 492;
-    let iPose: StickmanPose = 'idle';
+    let pFacing: 1 | -1 = 1;
 
-    if (cycle < 2.2) {
-      const u = cycle / 2.2;
-      pX = 210 + u * 375;
-      pY = 492;
-      pPose = 'run';
-      iX = 628;
-      iY = 492;
-      iPose = 'idle';
-    } else if (cycle < 3.8) {
-      const u = (cycle - 2.2) / 1.6;
-      pX = 585;
-      pY = 492;
-      pPose = u < 0.5 ? 'jab' : 'victory';
-      iX = 628 - u * 40;
-      iY = 492;
-      iPose = 'run';
+    if (cycle < 1.9) {
+      const u = cycle / 1.9;
+      pX = 240 + u * 355;
+      pY = deck1FloorY;
+      pPose = u > 0.85 ? 'jab' : 'run';
+      pFacing = 1;
+    } else if (cycle < 3.4) {
+      const u = (cycle - 1.9) / 1.5;
+      if (u < 0.45) {
+        pX = 595 + (u / 0.45) * 229;
+        pY = deck1FloorY;
+        pPose = 'run';
+      } else {
+        const climbU = (u - 0.45) / 0.55;
+        pX = 824;
+        pY = deck1FloorY + climbU * (deck2FloorY - deck1FloorY);
+        pPose = 'run';
+      }
+      pFacing = 1;
     } else {
-      const u = (cycle - 3.8) / 3.4;
-      pX = 585 + Math.min(1, u * 1.15) * 380;
-      pY = 492;
-      pPose = u > 0.85 ? 'victory' : 'run';
-      iX = 590 + u * 165;
-      iY = 492;
-      iPose = 'run';
+      const u = (cycle - 3.4) / 3.8;
+      pX = Math.min(930, 824 - Math.sin(u * Math.PI * 0.4) * 55 + u * 130);
+      if (u < 0.25) {
+        pX = 824 - (u / 0.25) * 84;
+        pPose = 'jab';
+        pFacing = -1;
+      } else {
+        const escU = (u - 0.25) / 0.75;
+        pX = 740 + escU * 205;
+        pPose = escU > 0.86 ? 'victory' : 'run';
+        pFacing = 1;
+      }
+      pY = deck2FloorY;
     }
 
-    drawPowerUpIcon(ctx, 'shield', 235, 515, t);
+    const iX = 635 + Math.sin(t * 2.1) * 58;
+    const iY = deck2FloorY;
+
+    drawPowerUpIcon(ctx, 'shield', 285, deck2FloorY - 40, t);
 
     drawStickmanCharacter(ctx, {
       x: iX,
       y: iY,
       facing: pX >= iX ? 1 : -1,
-      pose: iPose,
+      pose: Math.abs(pX - iX) < 110 && pY > 450 ? 'heavy' : 'run',
       animTime: t + 0.8,
-      scale: 1.05,
+      scale: 0.96,
       isLofiYeti: false,
       imposterVisor: true,
       customStroke: '#ef4444',
@@ -997,10 +1081,10 @@ function render2DGameplayVideoFrame(
     drawStickmanCharacter(ctx, {
       x: pX,
       y: pY,
-      facing: 1,
+      facing: pFacing,
       pose: pPose,
       animTime: t,
-      scale: 1.1,
+      scale: 1.0,
       isLofiYeti: true,
       colorwayId: colorway,
       hatId,
@@ -1015,7 +1099,7 @@ function render2DGameplayVideoFrame(
     ctx.textAlign = 'center';
     ctx.fillStyle = doorUnlocked ? '#34d399' : '#fde047';
     ctx.fillText(
-      doorUnlocked ? 'AIRLOCK UNLOCKED · ESCAPE!' : 'FIND CLUES TO UNLOCK NEXT ROOM',
+      doorUnlocked ? 'AIRLOCK UNLOCKED · ESCAPE!' : 'FIND CLUES & CLIMB DECKS TO ESCAPE',
       600,
       68
     );

@@ -304,32 +304,108 @@ export const FeatureShowcaseStage: React.FC<FeatureShowcaseStageProps> = ({
             weapon: 'sword',
           });
         } else if (featureId === 'room_escape') {
-          // 12-Room Blueprint + Blast Door + Upgraded Imposters
-          ctx.fillStyle = '#0a1c30';
+          // 2-Deck Side-View Station Cutaway + Ladder + Blast Door + Escape Shuttle
+          const upperDeckY = 204;
+          const lowerCeilingY = 224;
+          const cycle = t % 5.4;
+          const doorOpen = cycle > 2.6;
+
+          ctx.fillStyle = '#08182a';
           ctx.strokeStyle = '#2dd4bf';
           ctx.lineWidth = 3;
-          ctx.strokeRect(70, 88, 660, floorY - 88);
+          ctx.fillRect(62, 62, 676, floorY - 62);
+          ctx.strokeRect(62, 62, 676, floorY - 62);
 
-          // Sealed -> Open Blast Door
-          const doorOpen = (t % 4.5) > 2.4;
-          ctx.fillStyle = doorOpen ? 'rgba(52, 211, 153, 0.22)' : 'rgba(244, 63, 94, 0.55)';
+          // Upper/Lower Room Labels
+          ctx.fillStyle = 'rgba(226,232,240,0.22)';
+          ctx.font = '700 12px Oxanium, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText('MEDBAY · UPPER DECK', 80, 84);
+          ctx.fillText('REACTOR CORRIDOR · LOWER DECK', 80, 244);
+          ctx.fillText('AIRLOCK EXIT', 562, 244);
+
+          // Inter-deck Floor Slab + Ladder Opening at x = 392
+          ctx.fillStyle = '#050d18';
+          ctx.fillRect(62, upperDeckY, 676, lowerCeilingY - upperDeckY);
+          ctx.fillStyle = '#2dd4bf';
+          ctx.fillRect(62, upperDeckY, 310, 3);
+          ctx.fillRect(412, upperDeckY, 326, 3);
+
+          // Vertical Ladder Shaft
+          ctx.strokeStyle = '#94a3b8';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(380, upperDeckY - 6);
+          ctx.lineTo(380, floorY);
+          ctx.moveTo(404, upperDeckY - 6);
+          ctx.lineTo(404, floorY);
+          ctx.stroke();
+          for (let ry = upperDeckY + 12; ry < floorY - 8; ry += 18) {
+            ctx.beginPath();
+            ctx.moveTo(380, ry);
+            ctx.lineTo(404, ry);
+            ctx.stroke();
+          }
+
+          // Medbay Cryo Tank + Clue Pad on Upper Deck
+          ctx.fillStyle = 'rgba(45, 212, 191, 0.2)';
+          ctx.strokeStyle = '#2dd4bf';
+          ctx.lineWidth = 2;
+          ctx.fillRect(130, upperDeckY - 78, 26, 78);
+          ctx.strokeRect(130, upperDeckY - 78, 26, 78);
+          ctx.fillStyle = '#1e293b';
+          ctx.fillRect(268, upperDeckY - 34, 24, 34);
+          ctx.fillStyle = doorOpen ? '#34d399' : '#fde047';
+          ctx.fillRect(271, upperDeckY - 46, 18, 12);
+
+          // Sliding Security Blast Door on Lower Deck
+          const lift = doorOpen ? 68 : 0;
+          ctx.fillStyle = doorOpen ? 'rgba(52, 211, 153, 0.22)' : 'rgba(244, 63, 94, 0.65)';
           ctx.strokeStyle = doorOpen ? '#34d399' : '#fb7185';
-          ctx.fillRect(468, 128, 18, floorY - 128);
-          ctx.strokeRect(468, 128, 18, floorY - 128);
+          ctx.lineWidth = 3;
+          ctx.fillRect(528, floorY - 102 - lift, 14, 102);
+          ctx.strokeRect(528, floorY - 102 - lift, 14, 102);
 
-          // Glowing Clue Pad
-          if (!doorOpen) {
-            ctx.fillStyle = '#fde047';
-            ctx.fillRect(305, floorY - 34, 28, 22);
+          // Side-view Escape Shuttle nose at right edge
+          ctx.fillStyle = '#0f2744';
+          ctx.strokeStyle = doorOpen ? '#34d399' : '#64748b';
+          ctx.beginPath();
+          ctx.moveTo(648, floorY - 18);
+          ctx.lineTo(724, floorY - 18);
+          ctx.lineTo(724, floorY - 66);
+          ctx.lineTo(664, floorY - 66);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Player moves across upper deck -> climbs down ladder -> runs past opened door
+          let pX = 210;
+          let pY = upperDeckY;
+          if (cycle < 1.8) {
+            pX = 180 + (cycle / 1.8) * 125;
+            pY = upperDeckY;
+          } else if (cycle < 3.0) {
+            const u = (cycle - 1.8) / 1.2;
+            if (u < 0.45) {
+              pX = 305 + (u / 0.45) * 87;
+              pY = upperDeckY;
+            } else {
+              pX = 392;
+              pY = upperDeckY + ((u - 0.45) / 0.55) * (floorY - upperDeckY);
+            }
+          } else {
+            const u = (cycle - 3.0) / 2.4;
+            pX = 392 + u * 215;
+            pY = floorY;
           }
 
           drawStickmanCharacter(ctx, {
-            x: doorOpen ? 560 : 250 + Math.sin(t * 2) * 35,
-            y: floorY,
+            x: pX,
+            y: pY,
             facing: 1,
             pose: 'run',
             animTime: t,
-            scale: 1.2,
+            scale: 1.05,
             isLofiYeti: true,
             colorwayId: colorway,
             hatId,
@@ -340,13 +416,13 @@ export const FeatureShowcaseStage: React.FC<FeatureShowcaseStageProps> = ({
           });
 
           drawStickmanCharacter(ctx, {
-            x: 635 + Math.cos(t * 2.1) * 28,
+            x: 615 + Math.cos(t * 2.1) * 34,
             y: floorY,
             facing: -1,
             pose: 'jab',
             actionProgress: (t * 2) % 1,
             animTime: t + 0.6,
-            scale: 1.26,
+            scale: 1.15,
             isLofiYeti: false,
             imposterVisor: true,
             bossAura: true,
@@ -884,8 +960,8 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = Math.max(380, Math.round((rect.width || 460) * dpr));
-      const h = Math.max(220, Math.round((rect.height || 260) * dpr));
+      const w = Math.max(640, Math.round((rect.width || 1280) * dpr));
+      const h = Math.max(360, Math.round((rect.height || 720) * dpr));
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
@@ -899,38 +975,52 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
       const ctx = canvas.getContext('2d');
       if (ctx) {
         const t = (now - startMs) / 1000;
-        const W = 560;
-        const H = 315;
+        const W = 1280;
+        const H = 720;
         ctx.save();
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const s = Math.max(canvas.width / W, canvas.height / H);
         ctx.translate((canvas.width - W * s) * 0.5, (canvas.height - H * s) * 0.5);
         ctx.scale(s, s);
 
-        const bg = ctx.createLinearGradient(0, 0, 0, H);
-        bg.addColorStop(0, '#071122');
-        bg.addColorStop(1, shotId === 'boss' ? '#0e2836' : shotId === 'buggy' ? '#0d223f' : '#1b1428');
-        ctx.fillStyle = bg;
-        ctx.fillRect(0, 0, W, H);
+        // Transparent sky: only draw a feathered translucent icy catwalk rail on the right-side horizon
+        // so the 2D fighters blend seamlessly into the 3D background across shots 01 -> 02 -> 03.
+        const floorY = 582;
+        const railStart = 590;
+        const railEnd = 1248;
 
-        // Floor
-        const floorY = 258;
-        ctx.fillStyle = '#09182c';
-        ctx.fillRect(0, floorY, W, H - floorY);
-        ctx.fillStyle = shotId === 'boss' ? '#2dd4bf' : shotId === 'buggy' ? '#38bdf8' : '#f59e0b';
-        ctx.fillRect(0, floorY, W, 3);
+        const accentColor =
+          shotId === 'boss' ? '#2dd4bf' : shotId === 'buggy' ? '#38bdf8' : '#f59e0b';
+
+        const floorFade = ctx.createLinearGradient(railStart, 0, railEnd, 0);
+        floorFade.addColorStop(0, 'rgba(8, 21, 39, 0)');
+        floorFade.addColorStop(0.18, 'rgba(8, 21, 39, 0.52)');
+        floorFade.addColorStop(0.85, 'rgba(8, 21, 39, 0.58)');
+        floorFade.addColorStop(1, 'rgba(8, 21, 39, 0)');
+        ctx.fillStyle = floorFade;
+        ctx.fillRect(railStart, floorY, railEnd - railStart, 42);
+
+        const railGrad = ctx.createLinearGradient(railStart, 0, railEnd, 0);
+        railGrad.addColorStop(0, 'rgba(56, 189, 248, 0)');
+        railGrad.addColorStop(0.16, accentColor);
+        railGrad.addColorStop(0.88, accentColor);
+        railGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+        ctx.globalAlpha = 0.72;
+        ctx.fillStyle = railGrad;
+        ctx.fillRect(railStart, floorY, railEnd - railStart, 3);
+        ctx.globalAlpha = 1;
 
         if (shotId === 'squad') {
-          // 2D Bean Gun-Fu Raid: Lofi slow-mo dive firing twin pistols at Syndicate Guard & Gate Boss
-          const c = t % 3.0;
-          const jump = c > 0.6 && c < 2.0;
-          const jy = jump ? floorY - Math.sin(((c - 0.6) / 1.4) * Math.PI) * 84 : floorY;
-          const hx = 125 + Math.sin(t * 1.4) * 35;
+          // 01: 2D Shadow Bean Gun-Fu Raid along lower-right horizon
+          const c = t % 3.2;
+          const jump = c > 0.65 && c < 2.15;
+          const jy = jump ? floorY - Math.sin(((c - 0.65) / 1.5) * Math.PI) * 92 : floorY;
+          const hx = 745 + Math.sin(t * 1.45) * 42;
 
           ctx.fillStyle = '#fde047';
-          const bx = hx + 46 + ((t * 520) % 240);
-          ctx.fillRect(bx, jy - 44, 24, 3.5);
-          ctx.fillRect(bx - 48, jy - 30, 18, 3.5);
+          const bx = hx + 52 + ((t * 580) % 270);
+          ctx.fillRect(bx, jy - 48, 26, 3.5);
+          ctx.fillRect(bx - 56, jy - 34, 20, 3.5);
 
           drawStickmanCharacter(ctx, {
             x: hx,
@@ -939,7 +1029,7 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
             pose: jump ? 'slide' : 'jab',
             actionProgress: (t * 4) % 1,
             animTime: t,
-            scale: 1.05,
+            scale: 1.12,
             isLofiYeti: true,
             colorwayId: colorway,
             hatId,
@@ -952,12 +1042,12 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
           });
 
           drawStickmanCharacter(ctx, {
-            x: 365,
+            x: 1010,
             y: floorY,
             facing: -1,
             pose: jump ? 'hurt' : 'jab',
             animTime: t + 0.5,
-            scale: 1.02,
+            scale: 1.08,
             isLofiYeti: false,
             customStroke: '#fb7185',
             customAccent: '#fbbf24',
@@ -968,12 +1058,12 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
           });
 
           drawStickmanCharacter(ctx, {
-            x: 472,
+            x: 1138,
             y: floorY,
             facing: -1,
             pose: 'guard',
             animTime: t + 1.0,
-            scale: 1.15,
+            scale: 1.2,
             isLofiYeti: false,
             bossAura: true,
             customStroke: '#f97316',
@@ -984,27 +1074,44 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
             weapon: 'pistols',
           });
         } else if (shotId === 'boss') {
-          // 2D 12-Room Frost Station Escape: Blast Door + Airlock Warden Boss
-          ctx.strokeStyle = '#2dd4bf';
-          ctx.lineWidth = 2.5;
-          ctx.strokeRect(42, 48, 476, floorY - 48);
-
+          // 02: 2D Side-View Station Cutaway Escape + Airlock Warden Boss
           const open = t % 4.0 > 2.2;
-          ctx.fillStyle = open ? 'rgba(52,211,153,0.22)' : 'rgba(244,63,94,0.52)';
+          ctx.fillStyle = 'rgba(13, 34, 56, 0.36)';
+          ctx.strokeStyle = 'rgba(45, 212, 191, 0.52)';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(675, floorY - 220, 520, 220);
+
+          // Ladder shaft connecting upper deck to lower deck
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.65)';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(735, floorY - 220);
+          ctx.lineTo(735, floorY);
+          ctx.moveTo(761, floorY - 220);
+          ctx.lineTo(761, floorY);
+          for (let ry = floorY - 205; ry < floorY; ry += 22) {
+            ctx.moveTo(735, ry);
+            ctx.lineTo(761, ry);
+          }
+          ctx.stroke();
+
+          // Blast Door
+          ctx.fillStyle = open ? 'rgba(52,211,153,0.18)' : 'rgba(244,63,94,0.48)';
           ctx.strokeStyle = open ? '#34d399' : '#fb7185';
-          ctx.fillRect(320, 78, 14, floorY - 78);
-          ctx.strokeRect(320, 78, 14, floorY - 78);
+          ctx.fillRect(975, floorY - 148, 16, 148);
+          ctx.strokeRect(975, floorY - 148, 16, 148);
 
           drawStickmanCharacter(ctx, {
-            x: open ? 395 : 165 + Math.sin(t * 2.2) * 32,
+            x: open ? 1045 : 830 + Math.sin(t * 2.2) * 38,
             y: floorY,
             facing: 1,
             pose: 'run',
             animTime: t,
-            scale: 1.02,
+            scale: 1.08,
             isLofiYeti: true,
             colorwayId: colorway,
             hatId,
+            scarfId,
             hp: 100,
             maxHp: 100,
             label: open ? 'AIRLOCK OPEN!' : 'Scanning Clue',
@@ -1012,13 +1119,13 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
           });
 
           drawStickmanCharacter(ctx, {
-            x: 465 + Math.cos(t * 2.1) * 20,
+            x: 1135 + Math.cos(t * 2.1) * 20,
             y: floorY,
             facing: -1,
             pose: 'heavy',
             actionProgress: (t * 2.1) % 1,
             animTime: t + 0.6,
-            scale: 1.12,
+            scale: 1.18,
             isLofiYeti: false,
             imposterVisor: true,
             bossAura: true,
@@ -1030,27 +1137,32 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
             weapon: 'blaster',
           });
         } else {
-          // 2D Frost Run Endless Dash with Shield & Spikes
-          const spikeX = 560 - ((t * 260) % 620);
-          ctx.fillStyle = '#f43f5e';
-          ctx.beginPath();
-          ctx.moveTo(spikeX, floorY);
-          ctx.lineTo(spikeX + 16, floorY - 34);
-          ctx.lineTo(spikeX + 32, floorY);
-          ctx.closePath();
-          ctx.fill();
+          // 03: 2D Stickman Frost Run leaping over ice spikes with Frost Shield
+          const spikeX = 1230 - ((t * 280) % 620);
+          if (spikeX > railStart + 30) {
+            ctx.fillStyle = '#f43f5e';
+            ctx.strokeStyle = '#fecdd3';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(spikeX, floorY);
+            ctx.lineTo(spikeX + 16, floorY - 36);
+            ctx.lineTo(spikeX + 32, floorY);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
 
-          const nearSpike = Math.abs(spikeX - 180) < 64;
-          const runnerY = nearSpike ? floorY - Math.cos(((spikeX - 180) / 64) * 1.4) * 72 : floorY;
-          drawPowerUpIcon(ctx, 'shield', 390, floorY - 62, t);
+          const nearSpike = Math.abs(spikeX - 860) < 68;
+          const runnerY = nearSpike ? floorY - Math.cos(((spikeX - 860) / 68) * 1.4) * 78 : floorY;
+          drawPowerUpIcon(ctx, 'shield', 1085, floorY - 66, t);
 
           drawStickmanCharacter(ctx, {
-            x: 180,
+            x: 860,
             y: runnerY,
             facing: 1,
             pose: nearSpike ? 'jump' : 'run',
             animTime: t * 1.5,
-            scale: 1.08,
+            scale: 1.14,
             isLofiYeti: true,
             colorwayId: colorway,
             hatId,
@@ -1078,8 +1190,8 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
   return (
     <canvas
       ref={canvasRef}
-      className="h-full w-full block"
-      aria-label="Live 2D Stickman Arcade preview"
+      className="h-full w-full block pointer-events-none"
+      aria-hidden="true"
     />
   );
 };

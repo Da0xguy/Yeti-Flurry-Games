@@ -7,6 +7,7 @@ import {
   getRaceTrackObstacles,
   getRaceTrackWaypoints,
   getRunnerRouteWaypoints,
+  getShooterGalleryLayout,
 } from '../data/gameCatalog';
 
 function createMapFloorTexture(mapId: MapId, maxAnisotropy: number): THREE.CanvasTexture {
@@ -1702,6 +1703,38 @@ export function buildArcticEnvironment(
       marker.position.y = 1.3;
       gate.add(marker);
       group.add(gate);
+    });
+  } else if (gameMode === 'shooting') {
+    const gallery = getShooterGalleryLayout(mapId);
+    const padColor =
+      mapId === 'volcanic_springs'
+        ? '#fb923c'
+        : mapId === 'aurora_summit'
+        ? '#c084fc'
+        : '#38bdf8';
+    const padRingMat = new THREE.MeshBasicMaterial({
+      color: padColor,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.62,
+      depthWrite: false,
+    });
+    const pylonMat = new THREE.MeshStandardMaterial({
+      color: '#0f172a',
+      emissive: padColor,
+      emissiveIntensity: 0.45,
+      roughness: 0.3,
+    });
+    gallery.bullseyePoints.forEach((bp) => {
+      const markerGroup = new THREE.Group();
+      markerGroup.position.set((bp.x - ARENA_CENTER_X) / 25, 0, (bp.y - ARENA_CENTER_Y) / 25);
+      const padRing = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.18, 24), padRingMat);
+      padRing.rotation.x = -Math.PI / 2;
+      padRing.position.y = 0.032;
+      const basePylon = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.34, 0.35, 8), pylonMat);
+      basePylon.position.y = 0.175;
+      markerGroup.add(padRing, basePylon);
+      group.add(markerGroup);
     });
   }
 

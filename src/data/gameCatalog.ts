@@ -196,55 +196,55 @@ export function getMapModeDetails(mapId: MapId, gameMode: GameModeId): {
   if (gameMode === 'car_racing') {
     if (mapId === 'volcanic_springs') {
       return {
-        tag: 'Canyon Buggy Run',
-        summary: 'Long off-road hairpins, basalt canyon jumps, and superheated turbo strips.',
+        tag: 'Canyon Switchback Circuit',
+        summary: 'Technical lava switchbacks packed with dual barrel gauntlets, canyon launch ramps, and cryo spinners.',
       };
     }
     if (mapId === 'aurora_summit') {
       return {
-        tag: 'Summit Coast Rally',
-        summary: 'Long downhill straightaways, floating obelisk gates, and rapid nitro charge.',
+        tag: 'Aurora Figure-Ridge Rally',
+        summary: 'High-speed figure-ridge sweepers featuring split-lane boost ramps, twin spinner chicanes, and cryo barriers.',
       };
     }
     return {
-      tag: 'Glacier Beach Buggy',
-      summary: 'Wide frozen-shore sweepers, snow dunes, and long drift-friendly nitro chicanes.',
+      tag: 'Glacier Coastal Speedway',
+      summary: 'Wide frozen-shore sweepers with staggered apex barriers, coastal jump ramps, and snow chicanes.',
     };
   }
   if (gameMode === 'survival') {
     if (mapId === 'volcanic_springs') {
       return {
-        tag: 'Caldera Escape Quest',
-        summary: '5-Yeti squad quest through basalt cover, magma monsters, and 3 Ember Waystones to the Escape Gate.',
+        tag: 'Caldera Diagonal Gauntlet',
+        summary: 'Staggered basalt bridge columns lead to NW/NE/SW Ember Waystones and the East Rim Escape Gate.',
       };
     }
     if (mapId === 'aurora_summit') {
       return {
-        tag: 'Aurora Escape Quest',
-        summary: 'Sprint with 4 Yeti allies across glowing crystal ridges, awaken 3 Sky Relics, and extract alive.',
+        tag: 'Hexagonal Crystal Sanctuary',
+        summary: 'Eight-spire sky ring guarding outer Sky Relics with a West Rim Escape Portal.',
       };
     }
     return {
-      tag: 'Glacier Escape Quest',
-      summary: 'Lead your 5-Yeti party through monster ambushes, charge 3 Waystone Relics, and escape through the Portal.',
+      tag: 'Twin Bastion Ring',
+      summary: 'Perimeter glacier bastions shield 3 quadrant Waystones and the North Rim Escape Portal.',
     };
   }
   if (gameMode === 'shooting') {
     if (mapId === 'volcanic_springs') {
       return {
-        tag: 'Basalt Cover Arena',
-        summary: 'Tall basalt columns provide tight peek-and-fire cover against Cryo Drones.',
+        tag: 'Zigzag Trench Alley',
+        summary: 'Staggered diagonal basalt trenches force peek-and-fire angles across canyon crossfire lanes.',
       };
     }
     if (mapId === 'aurora_summit') {
       return {
-        tag: 'Prism Bonus Waves',
-        summary: 'Fast strafing speed (+15%) and extra high-value Frost Bullseye targets.',
+        tag: 'Prism Star-Ring Range',
+        summary: 'Wide outer crystal ring opens fast strafe lanes (+15% speed) with 6 diamond Frost Bullseyes.',
       };
     }
     return {
-      tag: 'Open Glacial Range',
-      summary: 'Balanced iceberg cover and clear long-range sightlines around the Central Well.',
+      tag: 'Curved Bunker Arc',
+      summary: 'Semicircular iceberg firing bunkers with long-range gallery bullseyes across the northern range.',
     };
   }
   if (gameMode === 'stickman_wrestling') {
@@ -320,40 +320,173 @@ export function getMapObstacles(mapId: MapId, gameMode: GameModeId = 'survival')
   const cx = ARENA_CENTER_X;
   const cy = ARENA_CENTER_Y;
 
-  // Each 3D game gets its own route through the same biome. Racing keeps its
-  // track clear; combat modes use offset formations to create different lanes.
-  const modeOffset = gameMode === 'shooting' ? 145 : 0;
-
-  if (mapId === 'volcanic_springs') {
+  if (gameMode === 'shooting') {
+    if (mapId === 'volcanic_springs') {
+      // Zigzag Trench Alley: staggered diagonal basalt pylons creating peek-and-fire corridors
+      return [
+        { id: 'vs1', x: cx - 310, y: cy - 355, radius: 44, kind: 'basalt_pillar', height: 3.3 },
+        { id: 'vs2', x: cx + 255, y: cy - 215, radius: 42, kind: 'basalt_pillar', height: 3.0 },
+        { id: 'vs3', x: cx - 260, y: cy - 45, radius: 44, kind: 'basalt_pillar', height: 3.2 },
+        { id: 'vs4', x: cx + 315, y: cy + 125, radius: 42, kind: 'basalt_pillar', height: 2.9 },
+        { id: 'vs5', x: cx - 335, y: cy + 285, radius: 44, kind: 'basalt_pillar', height: 3.1 },
+        { id: 'vs6', x: cx + 225, y: cy + 390, radius: 38, kind: 'basalt_pillar', height: 2.8 },
+        { id: 'vs7', x: cx + 10, y: cy - 455, radius: 38, kind: 'basalt_pillar', height: 2.7 },
+      ];
+    }
+    if (mapId === 'aurora_summit') {
+      // Prism Star-Ring Range: wide outer ring leaving an open high-speed strafing courtyard
+      return [
+        { id: 'as1', x: cx, y: cy - 470, radius: 38, kind: 'aurora_obelisk', height: 3.3 },
+        { id: 'as2', x: cx + 485, y: cy - 235, radius: 40, kind: 'aurora_obelisk', height: 3.1 },
+        { id: 'as3', x: cx - 485, y: cy - 235, radius: 40, kind: 'aurora_obelisk', height: 3.1 },
+        { id: 'as4', x: cx + 485, y: cy + 235, radius: 40, kind: 'aurora_obelisk', height: 3.0 },
+        { id: 'as5', x: cx - 485, y: cy + 235, radius: 40, kind: 'aurora_obelisk', height: 3.0 },
+        { id: 'as6', x: cx, y: cy + 455, radius: 38, kind: 'aurora_obelisk', height: 2.8 },
+      ];
+    }
+    // Glacier Well Shooting: Curved Bunker Arc facing northern target gallery
     return [
-      { id: 'v1', x: cx - 375 + modeOffset, y: cy - 255, radius: 42, kind: 'basalt_pillar', height: 3.1 },
-      { id: 'v2', x: cx + 375 - modeOffset, y: cy - 255, radius: 42, kind: 'basalt_pillar', height: 3.3 },
-      { id: 'v3', x: cx - 390 - modeOffset, y: cy + 255, radius: 44, kind: 'basalt_pillar', height: 2.8 },
-      { id: 'v4', x: cx + 390 + modeOffset, y: cy + 255, radius: 44, kind: 'basalt_pillar', height: 3.0 },
-      { id: 'v5', x: cx, y: cy - 420, radius: 38, kind: 'basalt_pillar', height: 2.7 },
-      { id: 'v6', x: cx - 540, y: cy + 15, radius: 38, kind: 'basalt_pillar', height: 2.9 },
-      { id: 'v7', x: cx + 540, y: cy + 15, radius: 38, kind: 'basalt_pillar', height: 2.9 },
+      { id: 'gs1', x: cx - 355, y: cy - 205, radius: 42, kind: 'iceberg', height: 2.9 },
+      { id: 'gs2', x: cx - 155, y: cy - 355, radius: 40, kind: 'iceberg', height: 2.7 },
+      { id: 'gs3', x: cx + 155, y: cy - 355, radius: 40, kind: 'iceberg', height: 2.7 },
+      { id: 'gs4', x: cx + 355, y: cy - 205, radius: 42, kind: 'iceberg', height: 2.9 },
+      { id: 'gs5', x: cx - 445, y: cy + 225, radius: 42, kind: 'iceberg', height: 3.0 },
+      { id: 'gs6', x: cx + 445, y: cy + 225, radius: 42, kind: 'iceberg', height: 3.0 },
+    ];
+  }
+
+  // Survival & Multiplayer Arena formations (distinct per map)
+  if (mapId === 'volcanic_springs') {
+    // Caldera Diagonal Gauntlet
+    return [
+      { id: 'v1', x: cx - 430, y: cy - 320, radius: 44, kind: 'basalt_pillar', height: 3.2 },
+      { id: 'v2', x: cx - 175, y: cy - 160, radius: 40, kind: 'basalt_pillar', height: 2.9 },
+      { id: 'v3', x: cx + 185, y: cy + 165, radius: 40, kind: 'basalt_pillar', height: 2.9 },
+      { id: 'v4', x: cx + 435, y: cy + 325, radius: 44, kind: 'basalt_pillar', height: 3.2 },
+      { id: 'v5', x: cx - 495, y: cy + 235, radius: 42, kind: 'basalt_pillar', height: 3.0 },
+      { id: 'v6', x: cx + 490, y: cy - 235, radius: 42, kind: 'basalt_pillar', height: 3.0 },
+      { id: 'v7', x: cx, y: cy - 455, radius: 38, kind: 'basalt_pillar', height: 2.8 },
     ];
   }
   if (mapId === 'aurora_summit') {
+    // Hexagonal Crystal Sanctuary (8-spire inner diamond + outer cardinal ring)
     return [
-      { id: 'a1', x: cx, y: cy - 395, radius: 40, kind: 'aurora_obelisk', height: 3.2 },
-      { id: 'a2', x: cx + 415 - modeOffset, y: cy - 60, radius: 42, kind: 'aurora_obelisk', height: 2.9 },
-      { id: 'a3', x: cx - 415 + modeOffset, y: cy - 60, radius: 42, kind: 'aurora_obelisk', height: 2.9 },
-      { id: 'a4', x: cx + 285, y: cy + 345, radius: 38, kind: 'aurora_obelisk', height: 2.7 },
-      { id: 'a5', x: cx - 285, y: cy + 345, radius: 38, kind: 'aurora_obelisk', height: 2.7 },
-      { id: 'a6', x: cx + 295, y: cy - 310, radius: 36, kind: 'aurora_obelisk', height: 2.8 },
-      { id: 'a7', x: cx - 295, y: cy - 310, radius: 36, kind: 'aurora_obelisk', height: 2.8 },
+      { id: 'a1', x: cx - 305, y: cy - 285, radius: 38, kind: 'aurora_obelisk', height: 3.1 },
+      { id: 'a2', x: cx + 305, y: cy - 285, radius: 38, kind: 'aurora_obelisk', height: 3.1 },
+      { id: 'a3', x: cx - 305, y: cy + 285, radius: 38, kind: 'aurora_obelisk', height: 3.0 },
+      { id: 'a4', x: cx + 305, y: cy + 285, radius: 38, kind: 'aurora_obelisk', height: 3.0 },
+      { id: 'a5', x: cx, y: cy - 455, radius: 40, kind: 'aurora_obelisk', height: 3.4 },
+      { id: 'a6', x: cx, y: cy + 445, radius: 40, kind: 'aurora_obelisk', height: 3.2 },
+      { id: 'a7', x: cx + 525, y: cy, radius: 40, kind: 'aurora_obelisk', height: 3.2 },
+      { id: 'a8', x: cx - 525, y: cy, radius: 40, kind: 'aurora_obelisk', height: 3.2 },
     ];
   }
+  // Glacier Well Survival: Twin Perimeter Bastion Ring
   return [
-    { id: 'g1', x: cx - 390 + modeOffset, y: cy - 235, radius: 42, kind: 'iceberg', height: 3.0 },
-    { id: 'g2', x: cx + 390 - modeOffset, y: cy - 235, radius: 42, kind: 'iceberg', height: 2.8 },
-    { id: 'g3', x: cx - 340, y: cy + 285, radius: 40, kind: 'iceberg', height: 2.7 },
-    { id: 'g4', x: cx + 340, y: cy + 285, radius: 40, kind: 'iceberg', height: 3.1 },
-    { id: 'g5', x: cx - 545, y: cy + 20, radius: 38, kind: 'iceberg', height: 2.9 },
-    { id: 'g6', x: cx + 545, y: cy + 20, radius: 38, kind: 'iceberg', height: 2.9 },
+    { id: 'g1', x: cx - 460, y: cy - 190, radius: 44, kind: 'iceberg', height: 3.1 },
+    { id: 'g2', x: cx - 460, y: cy + 190, radius: 44, kind: 'iceberg', height: 2.9 },
+    { id: 'g3', x: cx + 460, y: cy - 190, radius: 44, kind: 'iceberg', height: 2.9 },
+    { id: 'g4', x: cx + 460, y: cy + 190, radius: 44, kind: 'iceberg', height: 3.1 },
+    { id: 'g5', x: cx - 190, y: cy - 430, radius: 40, kind: 'iceberg', height: 2.8 },
+    { id: 'g6', x: cx + 190, y: cy + 415, radius: 40, kind: 'iceberg', height: 3.0 },
   ];
+}
+
+export interface SurvivalQuestLayout {
+  relicPoints: { x: number; y: number }[];
+  portalPoint: { x: number; y: number };
+}
+
+export function getSurvivalQuestLayout(mapId: MapId): SurvivalQuestLayout {
+  const cx = ARENA_CENTER_X;
+  const cy = ARENA_CENTER_Y;
+  if (mapId === 'volcanic_springs') {
+    return {
+      relicPoints: [
+        { x: cx - 505, y: cy - 385 },
+        { x: cx + 465, y: cy - 115 },
+        { x: cx - 375, y: cy + 405 },
+      ],
+      portalPoint: { x: cx + 565, y: cy + 40 },
+    };
+  }
+  if (mapId === 'aurora_summit') {
+    return {
+      relicPoints: [
+        { x: cx - 470, y: cy + 325 },
+        { x: cx + 15, y: cy - 505 },
+        { x: cx + 495, y: cy + 280 },
+      ],
+      portalPoint: { x: cx - 565, y: cy - 15 },
+    };
+  }
+  return {
+    relicPoints: [
+      { x: cx - 495, y: cy + 135 },
+      { x: cx + 505, y: cy - 145 },
+      { x: cx + 95, y: cy + 485 },
+    ],
+    portalPoint: { x: cx, y: cy - 555 },
+  };
+}
+
+export interface ShooterGalleryLayout {
+  bullseyePoints: { x: number; y: number }[];
+  rivalPoints: { x: number; y: number }[];
+  bossPoint: { x: number; y: number };
+}
+
+export function getShooterGalleryLayout(mapId: MapId): ShooterGalleryLayout {
+  const cx = ARENA_CENTER_X;
+  const cy = ARENA_CENTER_Y;
+  if (mapId === 'volcanic_springs') {
+    return {
+      bullseyePoints: [
+        { x: cx - 460, y: cy - 310 },
+        { x: cx + 455, y: cy - 320 },
+        { x: cx - 475, y: cy + 260 },
+        { x: cx + 465, y: cy + 250 },
+      ],
+      rivalPoints: [
+        { x: cx - 395, y: cy - 135 },
+        { x: cx + 385, y: cy + 15 },
+        { x: cx + 40, y: cy - 410 },
+      ],
+      bossPoint: { x: cx + 425, y: cy - 340 },
+    };
+  }
+  if (mapId === 'aurora_summit') {
+    return {
+      bullseyePoints: [
+        { x: cx, y: cy - 415 },
+        { x: cx + 385, y: cy - 235 },
+        { x: cx + 385, y: cy + 225 },
+        { x: cx, y: cy + 405 },
+        { x: cx - 385, y: cy + 225 },
+        { x: cx - 385, y: cy - 235 },
+      ],
+      rivalPoints: [
+        { x: cx - 320, y: cy - 340 },
+        { x: cx + 320, y: cy - 340 },
+        { x: cx, y: cy + 360 },
+      ],
+      bossPoint: { x: cx, y: cy - 420 },
+    };
+  }
+  return {
+    bullseyePoints: [
+      { x: cx - 430, y: cy - 365 },
+      { x: cx - 150, y: cy - 455 },
+      { x: cx + 150, y: cy - 455 },
+      { x: cx + 430, y: cy - 365 },
+    ],
+    rivalPoints: [
+      { x: cx - 450, y: cy - 80 },
+      { x: cx + 450, y: cy - 80 },
+      { x: cx, y: cy - 430 },
+    ],
+    bossPoint: { x: cx - 380, y: cy - 350 },
+  };
 }
 
 export interface RaceWaypoint {
@@ -569,22 +702,63 @@ export interface RaceTrackObstacle {
  */
 export function getRaceTrackObstacles(mapId: MapId): RaceTrackObstacle[] {
   const wps = getRaceTrackWaypoints(mapId);
-  const lateralOffsets = [72, -68, 0, -76, 74, 64, -72, 0, 78, -68, 66, -74, 58];
-  const pattern: RaceObstacleKind[] = [
-    'jump_ramp',
-    'cryo_spinner',
-    'fuel_barrel',
-    'jersey_barrier',
-    'jump_ramp',
-    'cryo_spinner',
-    'fuel_barrel',
-    'jersey_barrier',
-    'jump_ramp',
-    'cryo_spinner',
-    'fuel_barrel',
-    'jersey_barrier',
-    'jump_ramp',
-  ];
+
+  const lateralOffsets =
+    mapId === 'volcanic_springs'
+      ? [-74, 72, -32, 76, -68, 0, 74, -76, 62, -64, 34, -72, 70]
+      : mapId === 'aurora_summit'
+      ? [0, -76, 76, -42, 42, -74, 74, 0, -68, 68, -40, 72, -70]
+      : [72, -68, 0, -76, 74, 64, -72, 0, 78, -68, 66, -74, 58];
+
+  const pattern: RaceObstacleKind[] =
+    mapId === 'volcanic_springs'
+      ? [
+          'fuel_barrel',
+          'cryo_spinner',
+          'jump_ramp',
+          'fuel_barrel',
+          'jersey_barrier',
+          'jump_ramp',
+          'cryo_spinner',
+          'fuel_barrel',
+          'cryo_spinner',
+          'jump_ramp',
+          'fuel_barrel',
+          'jersey_barrier',
+          'jump_ramp',
+        ]
+      : mapId === 'aurora_summit'
+      ? [
+          'jump_ramp',
+          'cryo_spinner',
+          'cryo_spinner',
+          'jump_ramp',
+          'jersey_barrier',
+          'fuel_barrel',
+          'jump_ramp',
+          'cryo_spinner',
+          'jersey_barrier',
+          'jump_ramp',
+          'fuel_barrel',
+          'cryo_spinner',
+          'jump_ramp',
+        ]
+      : [
+          'jump_ramp',
+          'jersey_barrier',
+          'fuel_barrel',
+          'cryo_spinner',
+          'jump_ramp',
+          'jersey_barrier',
+          'fuel_barrel',
+          'cryo_spinner',
+          'jump_ramp',
+          'fuel_barrel',
+          'jersey_barrier',
+          'cryo_spinner',
+          'jump_ramp',
+        ];
+
   const obs: RaceTrackObstacle[] = [];
 
   for (let idx = 1; idx < wps.length; idx++) {
@@ -602,9 +776,13 @@ export function getRaceTrackObstacles(mapId: MapId): RaceTrackObstacle[] {
     const kind = pattern[(idx - 1) % pattern.length];
     const lateral =
       kind === 'jump_ramp'
-        ? idx % 2 === 0
-          ? -38
-          : 38
+        ? mapId === 'aurora_summit'
+          ? idx % 2 === 0
+            ? -44
+            : 44
+          : idx % 2 === 0
+          ? -34
+          : 34
         : lateralOffsets[(idx - 1) % lateralOffsets.length];
 
     obs.push({
