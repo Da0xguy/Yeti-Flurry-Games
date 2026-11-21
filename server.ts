@@ -248,7 +248,8 @@ function spawnPickup(idPrefix: string, mapId: MapId): TunnelPickupSnapshot {
   const angle = Math.random() * Math.PI * 2;
   const dist = 110 + Math.random() * 540;
   const roll = Math.random();
-  const gemThreshold = mapId === 'aurora_summit' ? 0.72 : 0.68;
+  const gemThreshold =
+    mapId === 'orbital_rift' ? 0.74 : mapId === 'aurora_summit' ? 0.72 : 0.68;
   let kind: TunnelPickupSnapshot['kind'] = 'drop';
   if (roll < 0.42) kind = 'drop';
   else if (roll < gemThreshold) kind = 'gem';
@@ -361,7 +362,7 @@ function createTunnelRoom(roomId: string, mapId: MapId, mode: GameModeId = 'surv
 }
 
 const tunnelRooms = new Map<string, TunnelRoom>();
-(['glacier_well', 'volcanic_springs', 'aurora_summit'] as MapId[]).forEach((mapId) => {
+(['glacier_well', 'volcanic_springs', 'aurora_summit', 'orbital_rift'] as MapId[]).forEach((mapId) => {
   const roomId = `tunnel-${mapId}`;
   tunnelRooms.set(roomId, createTunnelRoom(roomId, mapId));
   const raceRoomId = `tunnel-race-${mapId}`;
@@ -868,7 +869,7 @@ async function startServer() {
   wss.on('connection', (ws, req) => {
     const url = new URL(req.url || '/ws/tunnel', `http://localhost:${PORT}`);
     const mapParam = (url.searchParams.get('map') || 'glacier_well') as MapId;
-    const mapId: MapId = ['glacier_well', 'volcanic_springs', 'aurora_summit'].includes(mapParam)
+    const mapId: MapId = ['glacier_well', 'volcanic_springs', 'aurora_summit', 'orbital_rift'].includes(mapParam)
       ? mapParam
       : 'glacier_well';
     const requestedMode = url.searchParams.get('mode') === 'car_racing' ? 'car_racing' : 'survival';
@@ -1264,7 +1265,7 @@ async function startServer() {
     const cleanCrates = Math.max(0, Math.round(Number(cratesSmashed) || 0));
     const cleanTasks = Math.max(0, Math.round(Number(tasksDone) || 0));
     const validMapId: MapId =
-      mapId && ['glacier_well', 'volcanic_springs', 'aurora_summit'].includes(mapId)
+      mapId && ['glacier_well', 'volcanic_springs', 'aurora_summit', 'orbital_rift'].includes(mapId)
         ? mapId
         : 'glacier_well';
     const validGameMode: GameModeId =

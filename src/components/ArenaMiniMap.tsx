@@ -38,6 +38,7 @@ export interface MiniMapDot {
 interface ArenaMiniMapProps {
   gameMode: GameModeId;
   mapId: MapId;
+  layoutSeed?: number;
   dots: MiniMapDot[];
   ringRadius: number;
   playerAngle: number;
@@ -53,6 +54,7 @@ const SVG_H = 124;
 export const ArenaMiniMap: React.FC<ArenaMiniMapProps> = ({
   gameMode,
   mapId,
+  layoutSeed,
   dots,
   ringRadius,
   playerAngle,
@@ -61,9 +63,9 @@ export const ArenaMiniMap: React.FC<ArenaMiniMapProps> = ({
   totalCheckpoints = 4,
 }) => {
   const mapSpec = getMapSpec(mapId);
-  const obstacles = useMemo(() => getMapObstacles(mapId, gameMode), [mapId, gameMode]);
-  const raceObstacles = useMemo(() => getRaceTrackObstacles(mapId), [mapId]);
-  const waypoints = useMemo(() => getRaceTrackWaypoints(mapId), [mapId]);
+  const obstacles = useMemo(() => getMapObstacles(mapId, gameMode, layoutSeed), [mapId, gameMode, layoutSeed]);
+  const raceObstacles = useMemo(() => getRaceTrackObstacles(mapId, layoutSeed), [mapId, layoutSeed]);
+  const waypoints = useMemo(() => getRaceTrackWaypoints(mapId, layoutSeed), [mapId, layoutSeed]);
 
   const raceBounds = useMemo(() => {
     let minX = Infinity;

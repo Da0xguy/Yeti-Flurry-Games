@@ -4,7 +4,7 @@ export type YetiStage = 'Frost Cub' | 'Glacier Runner' | 'Blizzard Guardian' | '
 
 export type CosmeticSlot = 'hat' | 'scarf' | 'trail';
 
-export type MapId = 'glacier_well' | 'volcanic_springs' | 'aurora_summit';
+export type MapId = 'glacier_well' | 'volcanic_springs' | 'aurora_summit' | 'orbital_rift';
 
 export type GameModeId =
   | 'survival'
@@ -47,7 +47,7 @@ export interface ArenaObstacle {
   x: number;
   y: number;
   radius: number;
-  kind: 'iceberg' | 'basalt_pillar' | 'aurora_obelisk';
+  kind: 'iceberg' | 'basalt_pillar' | 'aurora_obelisk' | 'asteroid_monolith';
   height: number;
 }
 

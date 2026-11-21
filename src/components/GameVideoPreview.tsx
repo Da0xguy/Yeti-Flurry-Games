@@ -161,30 +161,46 @@ class Shared3DPreviewManager {
     const maxAniso = this.renderer.capabilities.getMaxAnisotropy();
     const scene = new THREE.Scene();
     const bgHex =
-      mapId === 'volcanic_springs' ? '#160b10' : mapId === 'aurora_summit' ? '#091128' : '#071324';
+      mapId === 'volcanic_springs'
+        ? '#160b10'
+        : mapId === 'aurora_summit'
+        ? '#091128'
+        : mapId === 'orbital_rift'
+        ? '#030510'
+        : '#071324';
     scene.background = new THREE.Color(bgHex);
     scene.fog = new THREE.FogExp2(bgHex, mode === 'car_racing' ? 0.011 : 0.016);
     if (this.envTex) scene.environment = this.envTex;
 
     const camera = new THREE.PerspectiveCamera(48, 16 / 9, 0.25, 190);
-    scene.add(new THREE.HemisphereLight('#bae6fd', '#0f2942', 0.88));
+    scene.add(
+      new THREE.HemisphereLight(
+        mapId === 'orbital_rift' ? '#c7d2fe' : '#bae6fd',
+        mapId === 'orbital_rift' ? '#090d1f' : '#0f2942',
+        0.88
+      )
+    );
     const key = new THREE.DirectionalLight('#fff7ed', 1.6);
     key.position.set(14, 22, 16);
     scene.add(key);
     const rim = new THREE.DirectionalLight(
-      mapId === 'volcanic_springs' ? '#fb923c' : '#38bdf8',
+      mapId === 'volcanic_springs'
+        ? '#fb923c'
+        : mapId === 'orbital_rift'
+        ? '#818cf8'
+        : '#38bdf8',
       1.0
     );
     rim.position.set(-14, 9, -12);
     scene.add(rim);
 
-    const env = buildArcticEnvironment(maxAniso, this.isSoftwareGl, mapId, mode);
+    const env = buildArcticEnvironment(maxAniso, this.isSoftwareGl, mapId, mode, 0);
     scene.add(env.group);
 
     let updateFn: (t: number, dt: number) => void;
 
     if (mode === 'car_racing') {
-      const waypoints = getRaceTrackWaypoints(mapId);
+      const waypoints = getRaceTrackWaypoints(mapId, 0);
       const curvePts = waypoints.map(
         (wp) => new THREE.Vector3((wp.x - ARENA_CENTER_X) / 25, 0.05, (wp.y - ARENA_CENTER_Y) / 25)
       );

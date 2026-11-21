@@ -524,7 +524,19 @@ function getMapBackdropColors(mapId: MapId) {
       floorFill: '#0e283e',
       floorTrim: '#2dd4bf',
       accent: '#2dd4bf',
-      particle: '#a7f3d0',
+      particle: '#a5f3fc',
+    };
+  }
+  if (mapId === 'orbital_rift') {
+    return {
+      skyTop: '#030510',
+      skyBot: '#131636',
+      ridgeFar: '#0c0f29',
+      ridgeNear: '#1b1f47',
+      floorFill: '#111633',
+      floorTrim: '#818cf8',
+      accent: '#818cf8',
+      particle: '#c7d2fe',
     };
   }
   return {
@@ -4850,7 +4862,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     {ARENA_MAPS.map((m) => {
                       const active = m.id === selectedMapId;
                       const detail = getMapModeDetails(m.id, selectedGameMode);
@@ -4859,6 +4871,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
                           ? 'from-orange-500/45 via-amber-500/20 to-slate-900'
                           : m.id === 'aurora_summit'
                           ? 'from-violet-500/45 via-fuchsia-500/20 to-slate-900'
+                          : m.id === 'orbital_rift'
+                          ? 'from-indigo-500/45 via-purple-500/20 to-slate-900'
                           : 'from-cyan-500/45 via-sky-500/20 to-slate-900';
                       return (
                         <button

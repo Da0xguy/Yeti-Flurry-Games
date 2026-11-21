@@ -61,6 +61,7 @@ import {
   RACE_BOUNDS,
   WELL_RITUAL_RADIUS,
   YETI_COLORWAYS,
+  getActiveMapLayoutSeed,
   getDistanceToRaceTrack,
   getGameModeSpec,
   getMapModeDetails,
@@ -73,6 +74,8 @@ import {
   getYetiColorway,
   resolveArenaObstacleCollision,
   resolveRaceObstacleCollision,
+  rotateMapLayoutSeed,
+  setActiveMapLayoutSeed,
 } from '../data/gameCatalog';
 import { animateYetiWalk, buildYetiRig, type YetiRigParts } from '../three/yetiBuilder';
 import {
@@ -589,6 +592,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   const gameStateRef = useRef<GameState>('TITLE_MENU');
   const gameModeRef = useRef<GameModeId>(selectedGameMode);
   const playModeRef = useRef<PlayMode>('solo');
+  const [layoutSeed, setLayoutSeed] = useState<number>(() => getActiveMapLayoutSeed(selectedMapId));
+  const layoutSeedRef = useRef<number>(layoutSeed);
   const mapIdRef = useRef<MapId>(selectedMapId);
   const mapDirtyRef = useRef(true);
   const colorwayRef = useRef<YetiColorId>(selectedColorway);
@@ -692,6 +697,9 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   useEffect(() => {
     if (mapIdRef.current !== selectedMapId) {
       mapIdRef.current = selectedMapId;
+      const activeSeed = getActiveMapLayoutSeed(selectedMapId);
+      layoutSeedRef.current = activeSeed;
+      setLayoutSeed(activeSeed);
       mapDirtyRef.current = true;
     }
   }, [selectedMapId]);
@@ -1280,6 +1288,15 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         s.shooterComboTimer = 0;
         s.shooterNovaCd = 0;
         s.karts = [];
+        const pShootSpawn = nudgeOutsideObstacles(
+          ARENA_CENTER_X,
+          ARENA_CENTER_Y + 185,
+          22,
+          mapId,
+          'shooting'
+        );
+        playerYeti.x = pShootSpawn.x;
+        playerYeti.y = pShootSpawn.y;
         s.entities = [playerYeti];
         s.pickups = Array.from({ length: 16 }, (_, i) => spawnPickup(i, mapId));
         s.crates = Array.from({ length: 8 }, (_, i) => spawnCrate(i, mapId));
@@ -1311,8 +1328,15 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         };
 
         // Player + 4 Allied Explorers start together as a 5-Yeti quest party
-        playerYeti.x = ARENA_CENTER_X;
-        playerYeti.y = ARENA_CENTER_Y + 95;
+        const pQuestSpawn = nudgeOutsideObstacles(
+          ARENA_CENTER_X,
+          ARENA_CENTER_Y + 95,
+          22,
+          mapId,
+          'survival'
+        );
+        playerYeti.x = pQuestSpawn.x;
+        playerYeti.y = pQuestSpawn.y;
 
         const allySpecs: {
           id: string;
@@ -2451,8 +2475,16 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       setClaimStatus('idle');
       if (effectiveMode === 'solo') {
         disconnectTunnel();
+        const nextSeed = rotateMapLayoutSeed(mapIdRef.current);
+        layoutSeedRef.current = nextSeed;
+        setLayoutSeed(nextSeed);
+        mapDirtyRef.current = true;
         initSoloMatch(gm);
       } else {
+        setActiveMapLayoutSeed(mapIdRef.current, 0);
+        layoutSeedRef.current = 0;
+        setLayoutSeed(0);
+        mapDirtyRef.current = true;
         connectTunnel(gm);
       }
       setGameState('PLAYING');
@@ -2676,7 +2708,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         });
         envContainer.remove(envHandles.group);
       }
-      envHandles = buildArcticEnvironment(maxAniso, isSoftwareGl, mId, gm);
+      envHandles = buildArcticEnvironment(
+        maxAniso,
+        isSoftwareGl,
+        mId,
+        gm,
+        layoutSeedRef.current
+      );
       envContainer.add(envHandles.group);
       scene.background = new THREE.Color(envHandles.skyColorHex);
       scene.fog = new THREE.FogExp2(envHandles.skyColorHex, 0.0095);
@@ -2689,6 +2727,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         hemiLight.color.set('#99f6e4');
         hemiLight.groundColor.set('#1e1b4b');
         rimLight.color.set('#a855f7');
+      } else if (mId === 'orbital_rift') {
+        hemiLight.color.set('#c7d2fe');
+        hemiLight.groundColor.set('#090d1f');
+        rimLight.color.set('#818cf8');
       } else {
         hemiLight.color.set('#bae6fd');
         hemiLight.groundColor.set('#0f2942');
@@ -3971,6 +4013,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
               ? '#fb923c'
               : mapIdRef.current === 'aurora_summit'
               ? '#2dd4bf'
+              : mapIdRef.current === 'orbital_rift'
+              ? '#a855f7'
               : '#7dd3fc';
 
           for (let i = s.hazards.length - 1; i >= 0; i--) {
@@ -5558,8 +5602,13 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             const spike = new THREE.Mesh(
               new THREE.ConeGeometry(0.42, 2.2, 6),
               new THREE.MeshPhysicalMaterial({
-                color: mapIdRef.current === 'volcanic_springs' ? '#fb923c' : '#7dd3fc',
-                emissive: '#ef4444',
+                color:
+                  mapIdRef.current === 'volcanic_springs'
+                    ? '#fb923c'
+                    : mapIdRef.current === 'orbital_rift'
+                    ? '#a855f7'
+                    : '#7dd3fc',
+                emissive: mapIdRef.current === 'orbital_rift' ? '#6366f1' : '#ef4444',
                 emissiveIntensity: 0.45,
                 roughness: 0.14,
                 transparent: true,
@@ -6090,6 +6139,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             <ArenaMiniMap
               gameMode={selectedGameMode}
               mapId={selectedMapId}
+              layoutSeed={layoutSeed}
               dots={minimapData.dots}
               ringRadius={minimapData.ringRadius}
               playerAngle={minimapData.playerAngle}
@@ -6325,7 +6375,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                   </div>
 
                   {/* Visual Biome Map Selector Cards */}
-                  <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     {ARENA_MAPS.map((m) => {
                       const modeInfo = getMapModeDetails(m.id, selectedGameMode);
                       const biomeGrad =
@@ -6333,6 +6383,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                           ? 'from-orange-500/45 via-amber-500/20 to-slate-900'
                           : m.id === 'aurora_summit'
                           ? 'from-violet-500/45 via-fuchsia-500/20 to-slate-900'
+                          : m.id === 'orbital_rift'
+                          ? 'from-indigo-500/45 via-purple-500/20 to-slate-900'
                           : 'from-cyan-500/45 via-sky-500/20 to-slate-900';
                       const isMapSel = selectedMapId === m.id;
                       return (
