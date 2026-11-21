@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import type { YetiColorId } from '../types';
+import type { CharacterId, CustomCharacterColors, YetiColorId } from '../types';
 import { drawPowerUpIcon, drawStickmanCharacter } from '../lib/stickmanRenderer';
 import { animateYetiWalk, buildYetiRig } from '../three/yetiBuilder';
 import {
@@ -20,16 +20,22 @@ export type FeatureSpotlightId =
 
 interface FeatureShowcaseStageProps {
   featureId: FeatureSpotlightId;
+  characterId?: CharacterId;
   colorway?: YetiColorId;
+  customColors?: CustomCharacterColors;
   hatId?: string;
   scarfId?: string;
+  outfitId?: string;
 }
 
 export const FeatureShowcaseStage: React.FC<FeatureShowcaseStageProps> = ({
   featureId,
+  characterId = 'lofi_yeti',
   colorway = 'classic_lofi',
+  customColors,
   hatId = 'hat_goggles',
   scarfId = 'scarf_lofi',
+  outfitId = 'outfit_hoodie',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -150,9 +156,12 @@ export const FeatureShowcaseStage: React.FC<FeatureShowcaseStageProps> = ({
             animTime: t,
             scale: 1.32,
             isLofiYeti: true,
+            characterId,
             colorwayId: colorway,
+            customColors,
             hatId,
             scarfId,
+            outfitId,
             shielded,
             hp: 100,
             maxHp: 100,
@@ -222,9 +231,12 @@ export const FeatureShowcaseStage: React.FC<FeatureShowcaseStageProps> = ({
             animTime: t,
             scale: 1.28,
             isLofiYeti: true,
+            characterId,
             colorwayId: colorway,
+            customColors,
             hatId,
             scarfId,
+            outfitId,
             raged: true,
             hp: 100,
             maxHp: 100,
@@ -260,11 +272,13 @@ export const FeatureShowcaseStage: React.FC<FeatureShowcaseStageProps> = ({
             animTime: t + 0.5,
             scale: 1.05,
             isLofiYeti: true,
+            characterId: 'frost_fox',
             colorwayId: 'glacier_mint',
             hatId: 'hat_beanie',
+            outfitId: 'outfit_parka',
             hp: 95,
             maxHp: 100,
-            label: 'Squad Ally',
+            label: 'Fox Ally',
             weapon: 'blaster',
           });
           drawStickmanCharacter(ctx, {
@@ -276,9 +290,12 @@ export const FeatureShowcaseStage: React.FC<FeatureShowcaseStageProps> = ({
             animTime: t,
             scale: 1.24,
             isLofiYeti: true,
+            characterId,
             colorwayId: colorway,
+            customColors,
             hatId,
             scarfId,
+            outfitId,
             hp: 100,
             maxHp: 100,
             label: 'Squad Leader',
@@ -407,8 +424,12 @@ export const FeatureShowcaseStage: React.FC<FeatureShowcaseStageProps> = ({
             animTime: t,
             scale: 1.05,
             isLofiYeti: true,
+            characterId,
             colorwayId: colorway,
+            customColors,
             hatId,
+            scarfId,
+            outfitId,
             hp: 100,
             maxHp: 100,
             label: doorOpen ? 'AIRLOCK OPEN!' : 'Scanning Clue...',
@@ -455,12 +476,16 @@ export const FeatureShowcaseStage: React.FC<FeatureShowcaseStageProps> = ({
             animTime: t,
             scale: 1.25,
             isLofiYeti: true,
+            characterId,
             colorwayId: colorway,
+            customColors,
             hatId,
+            scarfId,
+            outfitId,
             raged: jumping,
             hp: 100,
             maxHp: 100,
-            label: jumping ? 'SLOW-MO DIVE!' : 'Lofi Bean',
+            label: jumping ? 'SLOW-MO DIVE!' : 'Hero',
             weapon: 'pistols',
           });
 
@@ -509,7 +534,7 @@ export const FeatureShowcaseStage: React.FC<FeatureShowcaseStageProps> = ({
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', resize);
     };
-  }, [featureId, colorway, hatId, scarfId]);
+  }, [featureId, characterId, colorway, customColors, hatId, scarfId, outfitId]);
 
   return (
     <canvas
@@ -526,21 +551,30 @@ export type NpcRosterId =
   | 'abyssal_wraith'
   | 'frost_stalker'
   | 'lofi_hero'
+  | 'frost_fox_hero'
+  | 'cryo_penguin_hero'
+  | 'mecha_bot_hero'
+  | 'glacier_ronin_hero'
   | 'syndicate_2d'
   | 'warden_2d';
 
 interface NpcShowcaseStageProps {
   npcId: NpcRosterId;
+  characterId?: CharacterId;
   colorway?: YetiColorId;
+  customColors?: CustomCharacterColors;
   hatId?: string;
   scarfId?: string;
+  outfitId?: string;
 }
 
 export const NpcShowcaseStage: React.FC<NpcShowcaseStageProps> = ({
   npcId,
   colorway = 'classic_lofi',
+  customColors,
   hatId = 'hat_goggles',
   scarfId = 'scarf_lofi',
+  outfitId = 'outfit_hoodie',
 }) => {
   const mount3DRef = useRef<HTMLDivElement | null>(null);
   const canvas2DRef = useRef<HTMLCanvasElement | null>(null);
@@ -792,14 +826,31 @@ export const NpcShowcaseStage: React.FC<NpcShowcaseStageProps> = ({
     let yetiRig: ReturnType<typeof buildYetiRig> | null = null;
     let podRig: ReturnType<typeof buildWeaponPodMesh> | null = null;
 
-    if (npcId === 'lofi_hero') {
+    if (
+      npcId === 'lofi_hero' ||
+      npcId === 'frost_fox_hero' ||
+      npcId === 'cryo_penguin_hero' ||
+      npcId === 'mecha_bot_hero' ||
+      npcId === 'glacier_ronin_hero'
+    ) {
+      const heroMap: Record<string, { char: CharacterId; cw: YetiColorId; hat: string; scarf: string; outfit: string; wep: 'sword' | 'blaster' }> = {
+        lofi_hero: { char: 'lofi_yeti', cw: colorway, hat: hatId, scarf: scarfId, outfit: outfitId, wep: 'sword' },
+        frost_fox_hero: { char: 'frost_fox', cw: 'sunset_ember', hat: 'hat_beanie', scarf: 'scarf_aurora', outfit: 'outfit_parka', wep: 'blaster' },
+        cryo_penguin_hero: { char: 'cryo_penguin', cw: 'midnight_cyan', hat: 'hat_crown', scarf: 'scarf_lofi', outfit: 'outfit_jersey', wep: 'sword' },
+        mecha_bot_hero: { char: 'mecha_bot', cw: 'toxic_neon', hat: 'hat_visor', scarf: 'scarf_obsidian', outfit: 'outfit_cyber', wep: 'blaster' },
+        glacier_ronin_hero: { char: 'glacier_ronin', cw: 'crimson_blaze', hat: 'hat_halo', scarf: 'scarf_crimson', outfit: 'outfit_astronaut', wep: 'sword' },
+      };
+      const spec = heroMap[npcId];
       yetiRig = buildYetiRig({
-        colorwayId: colorway,
-        hatId,
-        scarfId,
+        characterId: spec.char,
+        colorwayId: spec.cw,
+        customColors: npcId === 'lofi_hero' ? customColors : undefined,
+        hatId: spec.hat,
+        scarfId: spec.scarf,
+        outfitId: spec.outfit,
         isPlayer: true,
         scale: 1.28,
-        weapon: 'sword',
+        weapon: spec.wep,
       });
       yetiRig.shieldMesh.visible = true;
       heroStage.add(yetiRig.root);
@@ -909,7 +960,7 @@ export const NpcShowcaseStage: React.FC<NpcShowcaseStageProps> = ({
       envTex.dispose();
       renderer.dispose();
     };
-  }, [is2D, npcId, colorway, hatId, scarfId]);
+  }, [is2D, npcId, colorway, customColors, hatId, scarfId, outfitId]);
 
   if (is2D) {
     return (
@@ -937,16 +988,22 @@ export const NpcShowcaseStage: React.FC<NpcShowcaseStageProps> = ({
 
 interface Hero2DActionStageProps {
   shotId: 'squad' | 'boss' | 'buggy';
+  characterId?: CharacterId;
   colorway?: YetiColorId;
+  customColors?: CustomCharacterColors;
   hatId?: string;
   scarfId?: string;
+  outfitId?: string;
 }
 
 export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
   shotId,
+  characterId = 'lofi_yeti',
   colorway = 'classic_lofi',
+  customColors,
   hatId = 'hat_goggles',
   scarfId = 'scarf_lofi',
+  outfitId = 'outfit_hoodie',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -1031,13 +1088,16 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
             animTime: t,
             scale: 1.12,
             isLofiYeti: true,
+            characterId,
             colorwayId: colorway,
+            customColors,
             hatId,
             scarfId,
+            outfitId,
             raged: jump,
             hp: 100,
             maxHp: 100,
-            label: jump ? 'SLOW-MO RAID' : 'Lofi Bean',
+            label: jump ? 'SLOW-MO RAID' : 'Hero Bean',
             weapon: 'pistols',
           });
 
@@ -1109,9 +1169,12 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
             animTime: t,
             scale: 1.08,
             isLofiYeti: true,
+            characterId,
             colorwayId: colorway,
+            customColors,
             hatId,
             scarfId,
+            outfitId,
             hp: 100,
             maxHp: 100,
             label: open ? 'AIRLOCK OPEN!' : 'Scanning Clue',
@@ -1164,9 +1227,12 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
             animTime: t * 1.5,
             scale: 1.14,
             isLofiYeti: true,
+            characterId,
             colorwayId: colorway,
+            customColors,
             hatId,
             scarfId,
+            outfitId,
             shielded: true,
             hp: 100,
             maxHp: 100,
@@ -1185,7 +1251,7 @@ export const Hero2DActionStage: React.FC<Hero2DActionStageProps> = ({
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', resize);
     };
-  }, [shotId, colorway, hatId, scarfId]);
+  }, [shotId, characterId, colorway, customColors, hatId, scarfId, outfitId]);
 
   return (
     <canvas

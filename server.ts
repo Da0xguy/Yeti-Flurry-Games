@@ -6,9 +6,14 @@ import crypto from 'crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import type {
+  BlockchainSyncState,
+  CharacterId,
+  CosmeticSlot,
+  CustomCharacterColors,
   GameModeId,
   LeaderboardEntry,
   MapId,
+  OnChainRunRecord,
   PtbReceipt,
   TunnelBeaconSnapshot,
   TunnelCrateSnapshot,
@@ -112,16 +117,65 @@ function defaultState(): PersistedState {
   };
 }
 
+function computeServerStateRoot(y: YetiObject): string {
+  const canonical = JSON.stringify({
+    objectId: y.objectId,
+    ownerAddress: y.ownerAddress,
+    characterId: y.characterId || 'lofi_yeti',
+    colorway: y.colorway,
+    customColors: y.customColors || null,
+    equipped: y.equipped,
+    unlockedCosmetics: y.unlockedCosmetics,
+    stage: y.stage,
+    level: y.level,
+    xp: y.xp,
+    frostGems: y.frostGems,
+    wellDropsContributed: y.wellDropsContributed,
+    highScore: y.highScore,
+    runsCompleted: y.runsCompleted,
+    mapsPlayed: y.mapsPlayed,
+    claimedQuests: y.claimedQuests,
+    recentRuns: (y.recentRuns || []).slice(0, 15),
+  });
+  return '0x' + crypto.createHash('sha256').update(canonical).digest('hex');
+}
+
 function normalizeYeti(y: YetiObject): YetiObject {
-  return {
+  const unlocked = Array.isArray(y.unlockedCosmetics) ? [...y.unlockedCosmetics] : [];
+  if (!unlocked.includes('outfit_none')) unlocked.push('outfit_none');
+  if (!unlocked.includes('outfit_hoodie')) unlocked.push('outfit_hoodie');
+
+  const normalized: YetiObject = {
     ...y,
+    characterId: y.characterId || 'lofi_yeti',
     colorway: y.colorway || 'classic_lofi',
+    equipped: {
+      hat: y.equipped?.hat || 'hat_goggles',
+      scarf: y.equipped?.scarf || 'scarf_lofi',
+      outfit: y.equipped?.outfit || 'outfit_hoodie',
+      trail: y.equipped?.trail || 'trail_powder',
+    },
+    unlockedCosmetics: unlocked,
     mapsPlayed: Array.isArray(y.mapsPlayed) ? y.mapsPlayed : [],
     totalHits: Number(y.totalHits) || 0,
     cratesSmashed: Number(y.cratesSmashed) || 0,
     tasksCompleted: Number(y.tasksCompleted) || 0,
     claimedQuests: Array.isArray(y.claimedQuests) ? y.claimedQuests : [],
+    recentRuns: Array.isArray(y.recentRuns) ? y.recentRuns : [],
   };
+  const rootHash = computeServerStateRoot(normalized);
+  normalized.blockchain = {
+    network: 'sui:testnet',
+    stateRootHash: normalized.blockchain?.stateRootHash || rootHash,
+    walrusBlobId: normalized.blockchain?.walrusBlobId,
+    walrusUrl: normalized.blockchain?.walrusUrl,
+    lastTxDigest: normalized.blockchain?.lastTxDigest,
+    profileObjectId: normalized.blockchain?.profileObjectId,
+    walletSignature: normalized.blockchain?.walletSignature,
+    lastSyncedAt: normalized.blockchain?.lastSyncedAt,
+    onChainVerified: Boolean(normalized.blockchain?.onChainVerified),
+  };
+  return normalized;
 }
 
 function loadState(): PersistedState {
@@ -238,10 +292,17 @@ interface TunnelRoom {
   clients: Map<string, WebSocket>;
 }
 
-const BOT_CONFIGS: { name: string; colorway: YetiColorId; hat: string; scarf: string }[] = [
-  { name: 'Mint Bot Mira', colorway: 'glacier_mint', hat: 'hat_beanie', scarf: 'scarf_aurora' },
-  { name: 'Ember Bot Taro', colorway: 'sunset_ember', hat: 'hat_crown', scarf: 'scarf_crimson' },
-  { name: 'Aurora Bot Pip', colorway: 'aurora_violet', hat: 'hat_goggles', scarf: 'scarf_lofi' },
+const BOT_CONFIGS: {
+  name: string;
+  characterId: CharacterId;
+  colorway: YetiColorId;
+  hat: string;
+  scarf: string;
+  outfit: string;
+}[] = [
+  { name: 'Kitsune Mira', characterId: 'frost_fox', colorway: 'glacier_mint', hat: 'hat_beanie', scarf: 'scarf_aurora', outfit: 'outfit_parka' },
+  { name: 'Mech Taro', characterId: 'mecha_bot', colorway: 'sunset_ember', hat: 'hat_visor', scarf: 'scarf_crimson', outfit: 'outfit_cyber' },
+  { name: 'Emperor Pip', characterId: 'cryo_penguin', colorway: 'aurora_violet', hat: 'hat_crown', scarf: 'scarf_lofi', outfit: 'outfit_jersey' },
 ];
 
 function spawnPickup(idPrefix: string, mapId: MapId): TunnelPickupSnapshot {
@@ -322,8 +383,10 @@ function createTunnelRoom(roomId: string, mapId: MapId, mode: GameModeId = 'surv
       wellDrops: 0,
       carriedDrops: 0,
       isBot: true,
+      characterId: bot.characterId,
       hat: bot.hat,
       scarf: bot.scarf,
+      outfit: bot.outfit,
       colorway: bot.colorway,
       shieldUntil: 0,
       boostUntil: 0,
@@ -794,8 +857,10 @@ function broadcastRoom(room: TunnelRoom): void {
       wellDrops: p.wellDrops,
       carriedDrops: p.carriedDrops,
       isBot: p.isBot,
+      characterId: p.characterId || 'lofi_yeti',
       hat: p.hat,
       scarf: p.scarf,
+      outfit: p.outfit || 'outfit_hoodie',
       colorway: p.colorway,
       shieldUntil: p.shieldUntil,
       boostUntil: p.boostUntil,
@@ -878,6 +943,8 @@ async function startServer() {
     const playerName = (url.searchParams.get('name') || 'Lofi Explorer').slice(0, 20);
     const hat = url.searchParams.get('hat') || 'hat_goggles';
     const scarf = url.searchParams.get('scarf') || 'scarf_lofi';
+    const outfit = url.searchParams.get('outfit') || 'outfit_hoodie';
+    const characterId = (url.searchParams.get('characterId') || 'lofi_yeti') as CharacterId;
     const colorway = (url.searchParams.get('colorway') || 'classic_lofi') as YetiColorId;
 
     let room = tunnelRooms.get(roomId);
@@ -905,8 +972,10 @@ async function startServer() {
         wellDrops: 0,
         carriedDrops: 0,
         isBot: false,
+        characterId,
         hat,
         scarf,
+        outfit,
         colorway,
         shieldUntil: 0,
         boostUntil: 0,
@@ -1070,32 +1139,39 @@ async function startServer() {
   });
 
   app.post('/api/yeti/mint', (req, res) => {
-    const { ownerAddress, yetiName, authMethod, colorway } = req.body as {
-      ownerAddress?: string;
-      yetiName?: string;
-      authMethod?: YetiObject['authMethod'];
-      colorway?: YetiColorId;
-    };
+    const { ownerAddress, yetiName, authMethod, colorway, characterId, customColors, outfit } =
+      req.body as {
+        ownerAddress?: string;
+        yetiName?: string;
+        authMethod?: YetiObject['authMethod'];
+        colorway?: YetiColorId;
+        characterId?: CharacterId;
+        customColors?: CustomCharacterColors;
+        outfit?: string;
+      };
 
     const address = (ownerAddress || randomHex(32)).trim();
     const cleanName = (yetiName || 'Lofi Cub').trim().slice(0, 24) || 'Lofi Cub';
     const digest = randomHex(32);
     const objectId = randomHex(32);
+    const chosenChar: CharacterId = characterId || 'lofi_yeti';
+    const chosenOutfit = outfit || 'outfit_hoodie';
 
     const receipt: PtbReceipt = {
       digest,
-      action: 'yeti_core::mint_and_keep',
+      action: `player_profile::mint_and_keep (${chosenChar})`,
       gasSponsored: true,
       gasMist: 0,
       timestamp: new Date().toISOString(),
       objectId,
     };
 
-    const yeti: YetiObject = {
+    const yetiBase: YetiObject = {
       objectId,
       ownerAddress: address,
       authMethod: authMethod || 'zkLogin (Google)',
       name: cleanName,
+      characterId: chosenChar,
       stage: 'Frost Cub',
       level: 1,
       xp: 0,
@@ -1105,6 +1181,7 @@ async function startServer() {
       runsCompleted: 0,
       version: 1,
       colorway: colorway || 'classic_lofi',
+      customColors: customColors || undefined,
       mapsPlayed: [],
       totalHits: 0,
       cratesSmashed: 0,
@@ -1113,10 +1190,22 @@ async function startServer() {
       equipped: {
         hat: 'hat_goggles',
         scarf: 'scarf_lofi',
+        outfit: chosenOutfit,
         trail: 'trail_powder',
       },
-      unlockedCosmetics: ['hat_goggles', 'scarf_lofi', 'trail_powder'],
+      unlockedCosmetics: ['hat_goggles', 'scarf_lofi', 'outfit_none', 'outfit_hoodie', 'trail_powder'],
       recentPtbs: [receipt],
+      recentRuns: [],
+    };
+
+    const yeti = normalizeYeti(yetiBase);
+    yeti.blockchain = {
+      network: 'sui:testnet',
+      stateRootHash: computeServerStateRoot(yeti),
+      lastTxDigest: digest,
+      profileObjectId: objectId,
+      lastSyncedAt: new Date().toISOString(),
+      onChainVerified: true,
     };
 
     state.yetis[address] = yeti;
@@ -1127,19 +1216,41 @@ async function startServer() {
   });
 
   app.post('/api/yeti/evolve', (req, res) => {
-    const { ownerAddress, action, cosmeticId, slot, gemCost, colorway, questId } = req.body as {
+    const {
+      ownerAddress,
+      action,
+      cosmeticId,
+      slot,
+      gemCost,
+      colorway,
+      characterId,
+      customColors,
+      blockchain,
+      questId,
+    } = req.body as {
       ownerAddress: string;
-      action: 'evolve' | 'unlock_cosmetic' | 'equip_cosmetic' | 'set_colorway' | 'claim_quest';
+      action:
+        | 'evolve'
+        | 'unlock_cosmetic'
+        | 'equip_cosmetic'
+        | 'set_colorway'
+        | 'set_character'
+        | 'set_custom_colors'
+        | 'sync_blockchain'
+        | 'claim_quest';
       cosmeticId?: string;
-      slot?: 'hat' | 'scarf' | 'trail';
+      slot?: CosmeticSlot;
       gemCost?: number;
       colorway?: YetiColorId;
+      characterId?: CharacterId;
+      customColors?: CustomCharacterColors | null;
+      blockchain?: Partial<BlockchainSyncState>;
       questId?: string;
     };
 
     const rawYeti = state.yetis[ownerAddress];
     if (!rawYeti) {
-      return res.status(404).json({ error: 'Yeti object not found' });
+      return res.status(404).json({ error: 'Character profile not found' });
     }
     const yeti = normalizeYeti(rawYeti);
     state.yetis[ownerAddress] = yeti;
@@ -1150,7 +1261,7 @@ async function startServer() {
     if (action === 'evolve') {
       const idx = stages.indexOf(yeti.stage);
       if (idx >= stages.length - 1) {
-        return res.status(400).json({ error: 'Yeti has already reached Apex Lofi stage' });
+        return res.status(400).json({ error: 'Hero has already reached Apex Lofi stage' });
       }
       const reqXp = (idx + 1) * 300;
       if (yeti.xp < reqXp) {
@@ -1158,7 +1269,7 @@ async function startServer() {
       }
       yeti.stage = stages[idx + 1];
       yeti.version += 1;
-      ptbAction = `yeti_core::evolve_yeti -> ${yeti.stage}`;
+      ptbAction = `player_profile::evolve -> ${yeti.stage}`;
     } else if (action === 'unlock_cosmetic' && cosmeticId && slot) {
       const cost = Math.max(0, Number(gemCost) || 0);
       if (!yeti.unlockedCosmetics.includes(cosmeticId)) {
@@ -1170,18 +1281,45 @@ async function startServer() {
       }
       yeti.equipped[slot] = cosmeticId;
       yeti.version += 1;
-      ptbAction = `cosmetics::unlock_and_equip (${cosmeticId})`;
+      ptbAction = `cosmetics::unlock_and_equip (${slot}: ${cosmeticId})`;
     } else if (action === 'equip_cosmetic' && cosmeticId && slot) {
       if (!yeti.unlockedCosmetics.includes(cosmeticId)) {
         return res.status(400).json({ error: 'Cosmetic not unlocked yet' });
       }
       yeti.equipped[slot] = cosmeticId;
       yeti.version += 1;
-      ptbAction = `yeti_core::equip_cosmetic (${cosmeticId})`;
+      ptbAction = `player_profile::equip_${slot} (${cosmeticId})`;
     } else if (action === 'set_colorway' && colorway) {
       yeti.colorway = colorway;
       yeti.version += 1;
-      ptbAction = `yeti_core::set_fur_palette (${colorway})`;
+      ptbAction = `player_profile::set_colorway (${colorway})`;
+    } else if (action === 'set_character' && characterId) {
+      yeti.characterId = characterId;
+      yeti.version += 1;
+      ptbAction = `player_profile::select_character (${characterId})`;
+    } else if (action === 'set_custom_colors') {
+      yeti.customColors = customColors ? { ...customColors } : undefined;
+      yeti.version += 1;
+      ptbAction = customColors
+        ? `player_profile::set_custom_palette (${customColors.furHex || 'preset'})`
+        : 'player_profile::reset_custom_palette';
+    } else if (action === 'sync_blockchain' && blockchain) {
+      const rootHash = blockchain.stateRootHash || computeServerStateRoot(yeti);
+      yeti.blockchain = {
+        network: 'sui:testnet',
+        walrusBlobId: blockchain.walrusBlobId || yeti.blockchain?.walrusBlobId,
+        walrusUrl: blockchain.walrusUrl || yeti.blockchain?.walrusUrl,
+        lastTxDigest: blockchain.lastTxDigest || yeti.blockchain?.lastTxDigest,
+        profileObjectId: blockchain.profileObjectId || yeti.blockchain?.profileObjectId || yeti.objectId,
+        walletSignature: blockchain.walletSignature || yeti.blockchain?.walletSignature,
+        stateRootHash: rootHash,
+        lastSyncedAt: blockchain.lastSyncedAt || new Date().toISOString(),
+        onChainVerified: Boolean(blockchain.onChainVerified ?? true),
+      };
+      yeti.version += 1;
+      ptbAction = blockchain.walrusBlobId
+        ? `walrus_sui::anchor_state (${blockchain.walrusBlobId.slice(0, 12)}...)`
+        : 'sui::anchor_state_root';
     } else if (action === 'claim_quest' && questId) {
       const quest = CAREER_QUESTS.find((q) => q.id === questId);
       if (!quest) {
@@ -1214,15 +1352,19 @@ async function startServer() {
       return res.status(400).json({ error: 'Invalid evolution action' });
     }
 
+    const receiptDigest = blockchain?.lastTxDigest || randomHex(32);
     const receipt: PtbReceipt = {
-      digest: randomHex(32),
+      digest: receiptDigest,
       action: ptbAction,
       gasSponsored: true,
       gasMist: 0,
       timestamp: new Date().toISOString(),
       objectId: yeti.objectId,
     };
-    yeti.recentPtbs = [receipt, ...yeti.recentPtbs].slice(0, 10);
+    yeti.recentPtbs = [receipt, ...yeti.recentPtbs].slice(0, 12);
+    if (yeti.blockchain && action !== 'sync_blockchain') {
+      yeti.blockchain.stateRootHash = computeServerStateRoot(yeti);
+    }
     saveState(state);
 
     res.json({ yeti, receipt });
@@ -1242,6 +1384,9 @@ async function startServer() {
       hitsLanded,
       cratesSmashed,
       tasksDone,
+      characterId,
+      walrusBlobId,
+      txDigest,
     } = req.body as {
       ownerAddress?: string;
       playerName?: string;
@@ -1255,6 +1400,9 @@ async function startServer() {
       hitsLanded?: number;
       cratesSmashed?: number;
       tasksDone?: number;
+      characterId?: CharacterId;
+      walrusBlobId?: string;
+      txDigest?: string;
     };
 
     const cleanScore = Math.max(0, Math.round(Number(score) || 0));
@@ -1282,7 +1430,8 @@ async function startServer() {
         : 'survival';
 
     const xpEarned = Math.round(cleanScore / 5) + 25 + cleanTasks * 20;
-    const digest = randomHex(32);
+    const digest = txDigest || randomHex(32);
+    const nowIso = new Date().toISOString();
 
     let updatedYeti: YetiObject | null = null;
     if (ownerAddress && state.yetis[ownerAddress]) {
@@ -1301,15 +1450,38 @@ async function startServer() {
       y.version += 1;
       if (cleanScore > y.highScore) y.highScore = cleanScore;
 
+      const runRecord: OnChainRunRecord = {
+        id: `run_${crypto.randomBytes(4).toString('hex')}`,
+        characterId: characterId || y.characterId || 'lofi_yeti',
+        gameMode: validGameMode,
+        mapId: validMapId,
+        score: cleanScore,
+        xpEarned,
+        wellDrops: cleanDrops,
+        frostGems: cleanGems,
+        survivalSeconds: cleanTime,
+        walrusBlobId,
+        txDigest: digest,
+        timestamp: nowIso,
+      };
+      y.recentRuns = [runRecord, ...(y.recentRuns || [])].slice(0, 15);
+
       const receipt: PtbReceipt = {
         digest,
-        action: `arena_session::settle_match_ptb (${validGameMode}/${validMapId} · +${xpEarned} XP, +${cleanDrops} Drops)`,
+        action: `arena_session::settle_match (${validGameMode}/${validMapId} · +${xpEarned} XP, +${cleanDrops} Drops)`,
         gasSponsored: true,
         gasMist: 0,
-        timestamp: new Date().toISOString(),
+        timestamp: nowIso,
         objectId: y.objectId,
       };
-      y.recentPtbs = [receipt, ...y.recentPtbs].slice(0, 10);
+      y.recentPtbs = [receipt, ...y.recentPtbs].slice(0, 12);
+      if (y.blockchain) {
+        y.blockchain.stateRootHash = computeServerStateRoot(y);
+        y.blockchain.lastTxDigest = digest;
+        if (walrusBlobId) y.blockchain.walrusBlobId = walrusBlobId;
+        y.blockchain.lastSyncedAt = nowIso;
+      }
+
       state.yetis[ownerAddress] = y;
       updatedYeti = y;
     }
@@ -1322,7 +1494,7 @@ async function startServer() {
     const entry: LeaderboardEntry = {
       id: `run_${crypto.randomBytes(4).toString('hex')}`,
       playerName: (playerName || 'Arctic Player').slice(0, 20),
-      yetiName: updatedYeti ? updatedYeti.name : 'Guest Cub',
+      yetiName: updatedYeti ? updatedYeti.name : 'Guest Hero',
       yetiStage: updatedYeti ? updatedYeti.stage : 'Frost Cub',
       score: cleanScore,
       wellDrops: cleanDrops,
@@ -1332,7 +1504,7 @@ async function startServer() {
       gameMode: validGameMode,
       mapId: validMapId,
       txDigest: digest,
-      timestamp: new Date().toISOString(),
+      timestamp: nowIso,
     };
 
     state.leaderboard = [entry, ...state.leaderboard]

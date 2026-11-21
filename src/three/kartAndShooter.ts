@@ -17,14 +17,20 @@ export interface YetiKartRigParts {
 }
 
 export function buildYetiKartRig({
+  characterId,
   colorwayId,
+  customColors,
   hatId,
   scarfId,
+  outfitId,
   isPlayer,
 }: {
+  characterId?: import('../types').CharacterId;
   colorwayId: YetiColorId;
+  customColors?: import('../types').CustomCharacterColors;
   hatId: string;
   scarfId: string;
+  outfitId?: string;
   isPlayer: boolean;
 }): YetiKartRigParts {
   const cw = getYetiColorway(colorwayId);
@@ -34,7 +40,7 @@ export function buildYetiKartRig({
   root.add(chassisPivot);
 
   const bodyMat = new THREE.MeshPhysicalMaterial({
-    color: cw.accentHex,
+    color: customColors?.accentHex || cw.accentHex,
     roughness: 0.22,
     metalness: 0.35,
     clearcoat: 0.9,
@@ -145,11 +151,14 @@ export function buildYetiKartRig({
   steeringWheel.rotation.x = -0.55;
   chassisPivot.add(steeringWheel);
 
-  // Seated 3D Lofi Yeti Driver inside the cockpit!
+  // Seated 3D Driver inside the cockpit!
   const driverRig = buildYetiRig({
+    characterId,
     colorwayId,
+    customColors,
     hatId,
     scarfId,
+    outfitId,
     isPlayer: false,
   });
   // Tuck legs inside cockpit and raise arms forward onto steering wheel

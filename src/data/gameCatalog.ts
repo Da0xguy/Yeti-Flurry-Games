@@ -2,9 +2,12 @@ import type {
   ArenaMapSpec,
   ArenaObstacle,
   CareerQuest,
+  CharacterId,
+  CustomCharacterColors,
   GameModeId,
   GameModeSpec,
   MapId,
+  PlayableCharacterSpec,
   YetiColorId,
   YetiColorway,
 } from '../types';
@@ -96,6 +99,78 @@ export function getGameModeSpec(id?: GameModeId): GameModeSpec {
   return GAME_MODES.find((g) => g.id === id) || GAME_MODES[0];
 }
 
+export const PLAYABLE_CHARACTERS: PlayableCharacterSpec[] = [
+  {
+    id: 'lofi_yeti',
+    name: 'Lofi Yeti',
+    title: 'Himalayan Guardian',
+    species: 'Arctic Yeti',
+    description:
+      'Iconic shaggy snow guardian with layered frosted fur, big snow-ready strides, and full outfit & colorway customization.',
+    defaultHat: 'hat_goggles',
+    defaultScarf: 'scarf_lofi',
+    defaultOutfit: 'outfit_hoodie',
+    defaultColorway: 'classic_lofi',
+    accentHex: '#38bdf8',
+  },
+  {
+    id: 'frost_fox',
+    name: 'Kitsune Frost',
+    title: 'Alpine Striker',
+    species: 'Arctic Fox',
+    description:
+      'Swift twin-eared polar fox with a sweeping snow-tipped tail, razor reflexes, and sleek tailored winter streetwear.',
+    defaultHat: 'hat_beanie',
+    defaultScarf: 'scarf_aurora',
+    defaultOutfit: 'outfit_parka',
+    defaultColorway: 'aurora_violet',
+    accentHex: '#c084fc',
+  },
+  {
+    id: 'cryo_penguin',
+    name: 'Emperor Pip',
+    title: 'Glacier Racer',
+    species: 'Cryo Penguin',
+    description:
+      'Dapper alpine penguin with a gilded crest, sculpted orange beak, paddle flippers, and Grand Prix track energy.',
+    defaultHat: 'hat_goggles',
+    defaultScarf: 'scarf_crimson',
+    defaultOutfit: 'outfit_jersey',
+    defaultColorway: 'midnight_cyan',
+    accentHex: '#22d3ee',
+  },
+  {
+    id: 'mecha_bot',
+    name: 'Cryo-Mech BMO',
+    title: 'Orbital Sentinel',
+    species: 'Arctic Droid',
+    description:
+      'Armored zero-g robotics unit built with an expressive LED visor screen, dorsal thrusters, and modular exo-plating.',
+    defaultHat: 'hat_visor',
+    defaultScarf: 'scarf_obsidian',
+    defaultOutfit: 'outfit_cyber',
+    defaultColorway: 'toxic_neon',
+    accentHex: '#34d399',
+  },
+  {
+    id: 'glacier_ronin',
+    name: 'Shadow Ronin',
+    title: 'Frost Blade',
+    species: 'Arctic Shinobi',
+    description:
+      'Masked blizzard blade-runner sporting a windswept headband ribbon, glowing stealth optics, and tactical coats.',
+    defaultHat: 'hat_ushanka',
+    defaultScarf: 'scarf_crimson',
+    defaultOutfit: 'outfit_astronaut',
+    defaultColorway: 'crimson_blaze',
+    accentHex: '#fb7185',
+  },
+];
+
+export function getCharacterSpec(id?: CharacterId): PlayableCharacterSpec {
+  return PLAYABLE_CHARACTERS.find((c) => c.id === id) || PLAYABLE_CHARACTERS[0];
+}
+
 export const YETI_COLORWAYS: YetiColorway[] = [
   {
     id: 'classic_lofi',
@@ -144,6 +219,38 @@ export const YETI_COLORWAYS: YetiColorway[] = [
     skinHex: '#f59e0b',
     chinHex: '#fde68a',
     accentHex: '#fbbf24',
+  },
+  {
+    id: 'crimson_blaze',
+    name: 'Crimson Blaze',
+    furHex: '#fff1f2',
+    skinHex: '#f43f5e',
+    chinHex: '#fecdd3',
+    accentHex: '#fb7185',
+  },
+  {
+    id: 'obsidian_stealth',
+    name: 'Obsidian Stealth',
+    furHex: '#334155',
+    skinHex: '#94a3b8',
+    chinHex: '#cbd5e1',
+    accentHex: '#38bdf8',
+  },
+  {
+    id: 'sakura_frost',
+    name: 'Sakura Frost',
+    furHex: '#fdf2f8',
+    skinHex: '#f472b6',
+    chinHex: '#fbcfe8',
+    accentHex: '#ec4899',
+  },
+  {
+    id: 'toxic_neon',
+    name: 'Cyber Lime',
+    furHex: '#1e293b',
+    skinHex: '#84cc16',
+    chinHex: '#bef264',
+    accentHex: '#a3e635',
   },
 ];
 
@@ -359,6 +466,21 @@ export function getMapModeDetails(mapId: MapId, gameMode: GameModeId): {
 
 export function getYetiColorway(id?: YetiColorId): YetiColorway {
   return YETI_COLORWAYS.find((c) => c.id === id) || YETI_COLORWAYS[0];
+}
+
+export function resolveCharacterPalette(
+  colorwayId?: YetiColorId,
+  customColors?: CustomCharacterColors
+): YetiColorway & { outfitHex?: string } {
+  const base = getYetiColorway(colorwayId);
+  if (!customColors) return base;
+  return {
+    ...base,
+    furHex: customColors.furHex || base.furHex,
+    skinHex: customColors.skinHex || base.skinHex,
+    accentHex: customColors.accentHex || base.accentHex,
+    outfitHex: customColors.outfitHex,
+  };
 }
 
 export function getMapSpec(id?: MapId): ArenaMapSpec {

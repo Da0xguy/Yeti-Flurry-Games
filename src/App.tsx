@@ -4,7 +4,9 @@ import { Transaction } from '@mysten/sui/transactions';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Home } from 'lucide-react';
 import type {
+  CharacterId,
   CosmeticSlot,
+  CustomCharacterColors,
   GameModeId,
   LeaderboardEntry,
   MapId,
@@ -21,13 +23,17 @@ import { MyYetiView } from './components/MyYetiView';
 import { LeaderboardWellView } from './components/LeaderboardWellView';
 import { DocsAndMoveView } from './components/DocsAndMoveView';
 import { GAME_MODES, getGameModeSpec } from './data/gameCatalog';
-import { uploadPlayerProfile } from './lib/walrus';
+import {
+  anchorGameDataOnChain,
+  fetchSuiTestnetWalletInfo,
+  PLAYER_PROFILE_PACKAGE_ID,
+  type SuiTestnetWalletInfo,
+} from './lib/blockchain';
 
 const STORAGE_ADDR_KEY = 'yeti_flurry_owner_address';
 const STORAGE_COLOR_KEY = 'yeti_flurry_colorway';
-const PLAYER_PROFILE_PACKAGE_ID = import.meta.env.VITE_PLAYER_PROFILE_PACKAGE_ID as
-  | string
-  | undefined;
+const STORAGE_CHAR_KEY = 'yeti_flurry_character';
+const STORAGE_CUSTOM_COLORS_KEY = 'yeti_flurry_custom_colors';
 
 export default function App() {
   const dAppKit = useDAppKit();
@@ -36,11 +42,24 @@ export default function App() {
   const [autoLaunchMode, setAutoLaunchMode] = useState<'launcher' | 'choose_map' | 'tunnel' | null>(null);
   const [selectedGameMode, setSelectedGameMode] = useState<GameModeId>('survival');
   const [selectedMapId, setSelectedMapId] = useState<MapId>('glacier_well');
+  const [selectedCharacterId, setSelectedCharacterId] = useState<CharacterId>(() => {
+    const saved = localStorage.getItem(STORAGE_CHAR_KEY) as CharacterId | null;
+    return saved || 'lofi_yeti';
+  });
   const [selectedColorway, setSelectedColorway] = useState<YetiColorId>(() => {
     const saved = localStorage.getItem(STORAGE_COLOR_KEY) as YetiColorId | null;
     return saved || 'classic_lofi';
   });
+  const [customColors, setCustomColors] = useState<CustomCharacterColors | undefined>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_CUSTOM_COLORS_KEY);
+      return raw ? (JSON.parse(raw) as CustomCharacterColors) : undefined;
+    } catch {
+      return undefined;
+    }
+  });
   const [yeti, setYeti] = useState<YetiObject | null>(null);
+  const [walletInfo, setWalletInfo] = useState<SuiTestnetWalletInfo | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [wellImpact, setWellImpact] = useState<WellImpactState>({
     totalDropsCollected: 2740,
@@ -60,33 +79,70 @@ export default function App() {
 
   useEffect(() => {
     const walletAddress = walletConnection.account?.address;
-    if (!walletAddress || bootstrappedWalletRef.current === walletAddress) return;
-    bootstrappedWalletRef.current = walletAddress;
-
-    if (!PLAYER_PROFILE_PACKAGE_ID) {
-      showToast('Wallet connected. Set VITE_PLAYER_PROFILE_PACKAGE_ID to create your profile.');
+    if (!walletAddress) {
+      setWalletInfo(null);
       return;
     }
+    if (bootstrappedWalletRef.current === walletAddress) return;
+    bootstrappedWalletRef.current = walletAddress;
 
-    const createPlayerProfile = async () => {
+    const bootstrapWallet = async () => {
+      const info = await fetchSuiTestnetWalletInfo(walletAddress);
+      setWalletInfo(info);
+
+      if (!PLAYER_PROFILE_PACKAGE_ID || info.profileObjects.length > 0) {
+        return;
+      }
+
       try {
-        const walrus = await uploadPlayerProfile({
-          walletAddress,
-          displayName: `Yeti Player ${walletAddress.slice(0, 6)}`,
-          yetiName: yeti?.name || 'Lofi Frosty',
-          colorway: selectedColorway,
-          createdAt: new Date().toISOString(),
-          schemaVersion: 1,
+        const walrus = await anchorGameDataOnChain({
+          yeti: yeti || {
+            objectId: '0xpending',
+            ownerAddress: walletAddress,
+            name: `Hero ${walletAddress.slice(0, 6)}`,
+            authMethod: 'Sui Wallet',
+            characterId: selectedCharacterId,
+            colorway: selectedColorway,
+            customColors,
+            stage: 'Frost Cub',
+            level: 1,
+            xp: 0,
+            frostGems: 40,
+            wellDropsContributed: 0,
+            highScore: 0,
+            runsCompleted: 0,
+            version: 1,
+            mapsPlayed: ['glacier_well'],
+            totalHits: 0,
+            cratesSmashed: 0,
+            tasksCompleted: 0,
+            unlockedCosmetics: ['hat_goggles', 'scarf_lofi', 'outfit_hoodie', 'trail_powder'],
+            equipped: {
+              hat: 'hat_goggles',
+              scarf: 'scarf_lofi',
+              outfit: 'outfit_hoodie',
+              trail: 'trail_powder',
+            },
+            claimedQuests: [],
+            recentPtbs: [],
+          },
+          interactiveWalletSign: false,
         });
+
         const transaction = new Transaction();
         transaction.moveCall({
           target: `${PLAYER_PROFILE_PACKAGE_ID}::player_profile::create_profile`,
           arguments: [
-            transaction.pure.string(`Yeti Player ${walletAddress.slice(0, 6)}`),
-            transaction.pure.string(yeti?.name || 'Lofi Frosty'),
+            transaction.pure.string(yeti?.name || `Hero ${walletAddress.slice(0, 6)}`),
+            transaction.pure.string(selectedCharacterId),
             transaction.pure.string(selectedColorway),
-            transaction.pure.string(walrus.blobId),
-            transaction.pure.string(walrus.aggregatorUrl),
+            transaction.pure.string(JSON.stringify(customColors || {})),
+            transaction.pure.string(yeti?.equipped.hat || 'hat_goggles'),
+            transaction.pure.string(yeti?.equipped.scarf || 'scarf_lofi'),
+            transaction.pure.string(yeti?.equipped.outfit || 'outfit_hoodie'),
+            transaction.pure.string(yeti?.equipped.trail || 'trail_powder'),
+            transaction.pure.string(walrus.walrusBlobId),
+            transaction.pure.string(walrus.walrusUrl),
             transaction.object('0x6'),
           ],
         });
@@ -96,20 +152,24 @@ export default function App() {
             result.FailedTransaction.status.error?.message || 'Profile transaction failed'
           );
         }
-        showToast('Player profile created on Sui and stored on Walrus');
+        const refreshed = await fetchSuiTestnetWalletInfo(walletAddress);
+        setWalletInfo(refreshed);
+        showToast('On-chain PlayerProfile created on Sui & Walrus');
       } catch (error) {
         bootstrappedWalletRef.current = null;
-        showToast(error instanceof Error ? error.message : 'Could not create player profile');
+        showToast(error instanceof Error ? error.message : 'Could not initialize on-chain profile');
       }
     };
 
-    void createPlayerProfile();
+    void bootstrapWallet();
   }, [
+    customColors,
     dAppKit,
+    selectedCharacterId,
     selectedColorway,
     showToast,
     walletConnection.account?.address,
-    yeti?.name,
+    yeti,
   ]);
 
   const loadGlobalState = useCallback(async () => {
@@ -135,6 +195,8 @@ export default function App() {
           if (data?.yeti) {
             setYeti(data.yeti);
             if (data.yeti.colorway) setSelectedColorway(data.yeti.colorway);
+            if (data.yeti.characterId) setSelectedCharacterId(data.yeti.characterId);
+            if (data.yeti.customColors) setCustomColors(data.yeti.customColors);
           }
         })
         .catch(() => {});
@@ -158,6 +220,67 @@ export default function App() {
       setActiveTab('arena');
     },
     []
+  );
+
+  const persistBlockchainSnapshot = useCallback(
+    async (targetYeti: YetiObject, interactiveWalletSign: boolean) => {
+      const result = await anchorGameDataOnChain({
+        yeti: targetYeti,
+        walletAddress: walletConnection.account?.address,
+        dAppKit: {
+          signAndExecuteTransaction: (args) =>
+            dAppKit.signAndExecuteTransaction(args) as Promise<Record<string, unknown>>,
+          signPersonalMessage: (args) =>
+            dAppKit.signPersonalMessage(args) as Promise<{ signature?: string; bytes?: string }>,
+        },
+        existingProfileObjectId:
+          walletInfo?.profileObjects[0]?.objectId || targetYeti.blockchain?.profileObjectId,
+        interactiveWalletSign,
+      });
+
+      const syncRes = await fetch('/api/yeti/evolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ownerAddress: targetYeti.ownerAddress,
+          action: 'sync_blockchain',
+          blockchain: result,
+        }),
+      });
+      if (syncRes.ok) {
+        const syncData = await syncRes.json();
+        if (syncData.yeti) setYeti(syncData.yeti);
+      }
+      return result;
+    },
+    [dAppKit, walletConnection.account?.address, walletInfo?.profileObjects]
+  );
+
+  const handleChangeCharacter = useCallback(
+    async (characterId: CharacterId) => {
+      setSelectedCharacterId(characterId);
+      localStorage.setItem(STORAGE_CHAR_KEY, characterId);
+      if (yeti) {
+        try {
+          const res = await fetch('/api/yeti/evolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ownerAddress: yeti.ownerAddress,
+              action: 'set_character',
+              characterId,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.yeti) setYeti(data.yeti);
+          }
+        } catch {
+          // Local preview remains responsive
+        }
+      }
+    },
+    [yeti]
   );
 
   const handleChangeColorway = useCallback(
@@ -187,25 +310,75 @@ export default function App() {
     [yeti]
   );
 
+  const handleChangeCustomColors = useCallback(
+    async (colors?: CustomCharacterColors) => {
+      setCustomColors(colors);
+      if (colors) {
+        localStorage.setItem(STORAGE_CUSTOM_COLORS_KEY, JSON.stringify(colors));
+      } else {
+        localStorage.removeItem(STORAGE_CUSTOM_COLORS_KEY);
+      }
+      if (yeti) {
+        try {
+          const res = await fetch('/api/yeti/evolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ownerAddress: yeti.ownerAddress,
+              action: 'set_custom_colors',
+              customColors: colors || {},
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.yeti) setYeti(data.yeti);
+          }
+        } catch {
+          // Local preview remains responsive
+        }
+      }
+    },
+    [yeti]
+  );
+
   const handleMintYeti = async (
     yetiName: string,
     authMethod: YetiObject['authMethod'],
-    colorway: YetiColorId
+    colorway: YetiColorId,
+    characterId: CharacterId,
+    outfitId: string,
+    colors?: CustomCharacterColors
   ) => {
     const res = await fetch('/api/yeti/mint', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ yetiName, authMethod, colorway }),
+      body: JSON.stringify({
+        ownerAddress: walletConnection.account?.address,
+        yetiName,
+        authMethod,
+        colorway,
+        characterId,
+        outfit: outfitId,
+        customColors: colors,
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.error || 'Mint failed');
     }
     localStorage.setItem(STORAGE_ADDR_KEY, data.yeti.ownerAddress);
+    localStorage.setItem(STORAGE_CHAR_KEY, data.yeti.characterId || characterId);
+    localStorage.setItem(STORAGE_COLOR_KEY, data.yeti.colorway || colorway);
+    if (data.yeti.customColors) {
+      localStorage.setItem(STORAGE_CUSTOM_COLORS_KEY, JSON.stringify(data.yeti.customColors));
+    }
     setYeti(data.yeti);
+    setSelectedCharacterId(data.yeti.characterId || characterId);
     setSelectedColorway(data.yeti.colorway);
-    showToast(`Minted ${data.yeti.name} on Sui (0 Gas Sponsored)`);
+    setCustomColors(data.yeti.customColors);
+    showToast(`Minted ${data.yeti.name} on Sui & archived to Walrus`);
     loadGlobalState();
+    void persistBlockchainSnapshot(data.yeti, false).catch(() => {});
   };
 
   const handleEvolve = async () => {
@@ -249,7 +422,7 @@ export default function App() {
       throw new Error(data.error || 'Cosmetic transaction failed');
     }
     setYeti(data.yeti);
-    showToast(`Updated ${slot} cosmetic via PTB`);
+    showToast(`Equipped ${slot} item & updated state root`);
   };
 
   const handleClaimQuest = async (questId: string) => {
@@ -271,6 +444,25 @@ export default function App() {
     showToast('Quest reward claimed on Sui!');
   };
 
+  const handleSyncBlockchain = async () => {
+    if (!yeti) return;
+    try {
+      const result = await persistBlockchainSnapshot(yeti, true);
+      if (walletConnection.account?.address) {
+        void fetchSuiTestnetWalletInfo(walletConnection.account.address).then(setWalletInfo);
+      }
+      showToast(
+        result.txDigest
+          ? 'Profile synced on Sui Testnet & Walrus!'
+          : result.walletSignature
+          ? 'Signed state root & archived to Walrus!'
+          : 'Player snapshot anchored on Walrus!'
+      );
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Blockchain sync paused');
+    }
+  };
+
   const handleRecordRun = async (summary: RunSummary) => {
     const res = await fetch('/api/runs/record', {
       method: 'POST',
@@ -278,6 +470,7 @@ export default function App() {
       body: JSON.stringify({
         ownerAddress: yeti?.ownerAddress,
         playerName: yeti ? yeti.name : 'Arctic Guest',
+        characterId: yeti?.characterId || selectedCharacterId,
         score: summary.score,
         wellDrops: summary.wellDrops,
         frostGems: summary.frostGems,
@@ -292,10 +485,13 @@ export default function App() {
     });
     const data = await res.json();
     if (res.ok) {
-      if (data.yeti) setYeti(data.yeti);
+      if (data.yeti) {
+        setYeti(data.yeti);
+        void persistBlockchainSnapshot(data.yeti, false).catch(() => {});
+      }
       if (data.wellImpact) setWellImpact(data.wellImpact);
       if (data.leaderboard) setLeaderboard(data.leaderboard);
-      showToast(`Settled +${summary.wellDrops} Well Drops & +${summary.xpEarned} XP`);
+      showToast(`Settled +${summary.wellDrops} Drops & anchored run hash`);
     }
   };
 
@@ -336,7 +532,7 @@ export default function App() {
             {(
               [
                 { key: 'arena', label: 'Play Arena' },
-                { key: 'yeti', label: 'My Yeti' },
+                { key: 'yeti', label: 'Characters & Chain' },
                 { key: 'leaderboard', label: 'Leaderboard' },
                 { key: 'docs', label: 'Game & Move' },
               ] as const
@@ -372,7 +568,7 @@ export default function App() {
                 ? 'Launch Game'
                 : yeti
                 ? `${yeti.name} · Lv ${yeti.level}`
-                : 'Mint Starter Yeti'}
+                : 'Create Hero'}
             </button>
           </div>
         </div>
@@ -441,7 +637,9 @@ export default function App() {
                   onChangeGameMode={setSelectedGameMode}
                   selectedMapId={selectedMapId}
                   onChangeMapId={setSelectedMapId}
+                  selectedCharacterId={yeti?.characterId || selectedCharacterId}
                   selectedColorway={selectedColorway}
+                  customColors={yeti?.customColors || customColors}
                   onChangeColorway={handleChangeColorway}
                   autoLaunchMode={autoLaunchMode}
                   onAutoLaunchHandled={() => setAutoLaunchMode(null)}
@@ -458,7 +656,9 @@ export default function App() {
                   onChangeGameMode={setSelectedGameMode}
                   selectedMapId={selectedMapId}
                   onChangeMapId={setSelectedMapId}
+                  selectedCharacterId={yeti?.characterId || selectedCharacterId}
                   selectedColorway={selectedColorway}
+                  customColors={yeti?.customColors || customColors}
                   onChangeColorway={handleChangeColorway}
                   wellImpact={wellImpact}
                   onWellImpactUpdate={setWellImpact}
@@ -476,12 +676,19 @@ export default function App() {
           {activeTab === 'yeti' && (
             <MyYetiView
               yeti={yeti}
+              selectedCharacterId={yeti?.characterId || selectedCharacterId}
+              onChangeCharacter={handleChangeCharacter}
               selectedColorway={selectedColorway}
               onChangeColorway={handleChangeColorway}
+              customColors={yeti?.customColors || customColors}
+              onChangeCustomColors={handleChangeCustomColors}
+              walletAddress={walletConnection.account?.address}
+              walletInfo={walletInfo}
               onMintYeti={handleMintYeti}
               onEvolve={handleEvolve}
               onCosmeticAction={handleCosmeticAction}
               onClaimQuest={handleClaimQuest}
+              onSyncBlockchain={handleSyncBlockchain}
               onGoToArena={() => launchArena('launcher')}
             />
           )}

@@ -20,6 +20,8 @@ import {
   Zap,
 } from 'lucide-react';
 import type {
+  CharacterId,
+  CustomCharacterColors,
   GameModeId,
   MapId,
   RunSummary,
@@ -60,6 +62,8 @@ interface StickmanArcadeCanvasProps {
   onChangeMapId: (mapId: MapId) => void;
   selectedColorway: YetiColorId;
   onChangeColorway: (c: YetiColorId) => void;
+  selectedCharacterId?: CharacterId;
+  customColors?: CustomCharacterColors;
   autoLaunchMode: 'launcher' | 'choose_map' | 'tunnel' | null;
   onAutoLaunchHandled: () => void;
   onMintPrompt: () => void;
@@ -877,6 +881,8 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
   onChangeMapId,
   selectedColorway,
   onChangeColorway,
+  selectedCharacterId = 'lofi_yeti',
+  customColors,
   autoLaunchMode,
   onAutoLaunchHandled,
   onMintPrompt,
@@ -884,6 +890,9 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
   onShareRun,
   onReturnHome,
 }) => {
+  const activeCharacterId: CharacterId = yeti?.characterId || selectedCharacterId || 'lofi_yeti';
+  const activeOutfitId = yeti?.equipped.outfit || 'outfit_hoodie';
+  const activeCustomColors = yeti?.customColors || customColors;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -3840,9 +3849,12 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
             actionProgress: p.actionDuration > 0 ? 1 - p.actionTimer / p.actionDuration : 0,
             scale: 1.04,
             isLofiYeti: true,
+            characterId: activeCharacterId,
             colorwayId: selectedColorway,
+            customColors: activeCustomColors,
             hatId: yeti?.equipped.hat || 'hat_goggles',
             scarfId: yeti?.equipped.scarf || 'scarf_lofi',
+            outfitId: activeOutfitId,
             shielded: nowMs < p.shieldUntil,
             raged: nowMs < p.rageUntil,
             hp: p.hp,
@@ -3915,8 +3927,12 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
             pose: 'run',
             animTime: nowMs * 0.001,
             isLofiYeti: true,
+            characterId: activeCharacterId,
             colorwayId: selectedColorway,
+            customColors: activeCustomColors,
             hatId: yeti?.equipped.hat || 'hat_goggles',
+            scarfId: yeti?.equipped.scarf || 'scarf_lofi',
+            outfitId: activeOutfitId,
             hp: 100,
             maxHp: 100,
             label: playerName,
@@ -4129,9 +4145,12 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               actionProgress: p.actionDuration > 0 ? 1 - p.actionTimer / p.actionDuration : 0,
               scale: 1.18,
               isLofiYeti: true,
+              characterId: activeCharacterId,
               colorwayId: selectedColorway,
+              customColors: activeCustomColors,
               hatId: yeti?.equipped.hat || 'hat_goggles',
               scarfId: yeti?.equipped.scarf || 'scarf_lofi',
+              outfitId: activeOutfitId,
               shielded: nowMs < p.shieldUntil,
               raged: nowMs < p.rageUntil,
               finisherReady: p.finisher >= 100,
@@ -4168,8 +4187,12 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
               pose: 'idle',
               animTime: nowMs * 0.001,
               isLofiYeti: true,
+              characterId: activeCharacterId,
               colorwayId: selectedColorway,
+              customColors: activeCustomColors,
               hatId: yeti?.equipped.hat || 'hat_goggles',
+              scarfId: yeti?.equipped.scarf || 'scarf_lofi',
+              outfitId: activeOutfitId,
               hp: 100,
               maxHp: 100,
               label: playerName,
@@ -4221,9 +4244,12 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
             actionProgress: p.actionDuration > 0 ? 1 - p.actionTimer / p.actionDuration : 0,
             scale: 1.18,
             isLofiYeti: true,
+            characterId: activeCharacterId,
             colorwayId: selectedColorway,
+            customColors: activeCustomColors,
             hatId: yeti?.equipped.hat || 'hat_goggles',
             scarfId: yeti?.equipped.scarf || 'scarf_lofi',
+            outfitId: activeOutfitId,
             shielded: nowMs < p.shieldUntil,
             raged: nowMs < p.rageUntil,
             hp: p.hp,
@@ -4327,7 +4353,7 @@ export const StickmanArcadeCanvas: React.FC<StickmanArcadeCanvasProps> = ({
 
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
-  }, [collectEscapeClue, finishMatch, playerName, selectedColorway, selectedGameMode, selectedMapId, yeti?.equipped.hat, yeti?.equipped.scarf]);
+  }, [activeCharacterId, activeCustomColors, activeOutfitId, collectEscapeClue, finishMatch, playerName, selectedColorway, selectedGameMode, selectedMapId, yeti?.equipped.hat, yeti?.equipped.scarf]);
 
   const handleClaim = async () => {
     if (!summary || claimStatus !== 'idle') return;

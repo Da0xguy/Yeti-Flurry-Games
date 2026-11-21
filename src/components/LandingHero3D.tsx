@@ -169,13 +169,53 @@ const NPC_ROSTER: {
   },
   {
     id: 'lofi_hero',
-    faction: 'Playable Protagonist',
+    faction: 'Playable Hero · Character 01',
     name: 'Lofi the Yeti',
-    threat: 'Hero · Squad Commander',
+    threat: 'Hero · Chill Guardian',
     arena: 'All 6 2D & 3D Modes',
-    bio: 'Chill yet unstoppable frost guardian equipped with custom Sui colorways, hats, scarves, and a 10-second Frost Shield capable of deflecting boss charges.',
-    abilities: ['10s Frost Shield Deflect', '5 Temporary Loot Weapons', 'Slow-Mo Gun-Fu & Dash'],
+    bio: 'Chill yet unstoppable frost guardian equipped with custom Sui colorways, wearable hoodies/parkas, hats, and a 10-second Frost Shield.',
+    abilities: ['10s Frost Shield Deflect', 'Wearable Outfits & Colors', 'Slow-Mo Gun-Fu & Dash'],
     accent: '#22d3ee',
+  },
+  {
+    id: 'frost_fox_hero',
+    faction: 'Playable Hero · Character 02',
+    name: 'Kitsune Frost',
+    threat: 'Hero · Agile Scout',
+    arena: 'All 6 2D & 3D Modes',
+    bio: 'Swift Arctic fox fighter with pointed ears, fluffy wagging tail, and winter explorer parka. Built for high-speed evasion and drifts.',
+    abilities: ['Custom Coat & Outfit Slots', 'High-Agility Drifting & Jumps', 'On-Chain Sui Profile'],
+    accent: '#fb923c',
+  },
+  {
+    id: 'cryo_penguin_hero',
+    faction: 'Playable Hero · Character 03',
+    name: 'Emperor Pip',
+    threat: 'Hero · Tanky Brawler',
+    arena: 'All 6 2D & 3D Modes',
+    bio: 'Regal crested penguin clad in a pro racing jersey and crown. Excels at snowball suppression, kart bumps, and Waystone defense.',
+    abilities: ['Emperor Crest & Tuxedo', 'Full Colorway Customization', 'Walrus Match Replay Archive'],
+    accent: '#60a5fa',
+  },
+  {
+    id: 'mecha_bot_hero',
+    faction: 'Playable Hero · Character 04',
+    name: 'Cryo-Mech BMO',
+    threat: 'Hero · Tech Specialist',
+    arena: 'All 6 2D & 3D Modes',
+    bio: 'Modular Cryo-Mech unit with glowing LED visor and neon cyber-jacket armor. Syncs telemetry and combat logs straight to Walrus.',
+    abilities: ['Glowing LED Visor Array', 'Cyber-Jacket & Suit Upgrades', 'Verifiable Sui State Anchor'],
+    accent: '#34d399',
+  },
+  {
+    id: 'glacier_ronin_hero',
+    faction: 'Playable Hero · Character 05',
+    name: 'Shadow Ronin',
+    threat: 'Hero · Blade Striker',
+    arena: 'All 6 2D & 3D Modes',
+    bio: 'Hooded frost swordsman with trailing headband ribbons and orbital astronaut gear. Strikes relentlessly with frost-steel blades.',
+    abilities: ['Flowing Headband Ribbons', 'Orbital Suit & Katana Style', 'Zero-Gas Sponsored Progression'],
+    accent: '#f43f5e',
   },
   {
     id: 'syndicate_2d',
@@ -335,11 +375,14 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
     const env = buildArcticEnvironment(maxAniso, isSoftwareGl, 'glacier_well', 'survival', 0);
     scene.add(env.group);
 
-    // 1. Hero Lofi Yeti + Frost Shield + Weapon + 2 Squad Allies
+    // 1. Hero Character + Frost Shield + Weapon + 2 Squad Allies (Diverse Playable Characters!)
     const heroRig = buildYetiRig({
+      characterId: yeti?.characterId || 'lofi_yeti',
       colorwayId: yeti?.colorway || 'classic_lofi',
+      customColors: yeti?.customColors,
       hatId: yeti?.equipped.hat || 'hat_goggles',
       scarfId: yeti?.equipped.scarf || 'scarf_lofi',
+      outfitId: yeti?.equipped.outfit || 'outfit_hoodie',
       isPlayer: true,
       scale: 1.18,
       weapon: 'sword',
@@ -348,8 +391,8 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
     scene.add(heroRig.root);
 
     const allies = [
-      { rig: buildYetiRig({ colorwayId: 'glacier_mint', hatId: 'hat_beanie', scarfId: 'scarf_aurora', isPlayer: false, weapon: 'blaster' }), offset: 2.1, phase: 0.5 },
-      { rig: buildYetiRig({ colorwayId: 'aurora_violet', hatId: 'hat_crown', scarfId: 'scarf_lofi', isPlayer: false }), offset: -2.2, phase: 2.3 },
+      { rig: buildYetiRig({ characterId: 'frost_fox', colorwayId: 'glacier_mint', hatId: 'hat_beanie', scarfId: 'scarf_aurora', outfitId: 'outfit_parka', isPlayer: false, weapon: 'blaster' }), offset: 2.1, phase: 0.5 },
+      { rig: buildYetiRig({ characterId: 'mecha_bot', colorwayId: 'aurora_violet', hatId: 'hat_visor', scarfId: 'scarf_lofi', outfitId: 'outfit_cyber', isPlayer: false }), offset: -2.2, phase: 2.3 },
     ];
     allies.forEach((a) => scene.add(a.rig.root));
 
@@ -386,9 +429,11 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
 
     // 4. Drifting Snow Buggy on Outer Loop
     const kartRig = buildYetiKartRig({
+      characterId: 'cryo_penguin',
       colorwayId: 'sunset_ember',
-      hatId: 'hat_goggles',
+      hatId: 'hat_crown',
       scarfId: 'scarf_crimson',
+      outfitId: 'outfit_jersey',
       isPlayer: false,
     });
     scene.add(kartRig.root);
@@ -589,7 +634,7 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
       envTex.dispose();
       renderer.dispose();
     };
-  }, [yeti?.colorway, yeti?.equipped.hat, yeti?.equipped.scarf]);
+  }, [yeti?.characterId, yeti?.colorway, yeti?.customColors, yeti?.equipped.hat, yeti?.equipped.scarf, yeti?.equipped.outfit]);
 
   const carouselModes = GAME_MODES;
   const activeWorld = ARENA_MAPS.find((m) => m.id === activeWorldId) || ARENA_MAPS[0];
@@ -658,9 +703,12 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
           >
             <Hero2DActionStage
               shotId={heroShot}
+              characterId={yeti?.characterId}
               colorway={yeti?.colorway}
+              customColors={yeti?.customColors}
               hatId={yeti?.equipped.hat}
               scarfId={yeti?.equipped.scarf}
+              outfitId={yeti?.equipped.outfit}
             />
           </motion.div>
         </AnimatePresence>
@@ -989,9 +1037,12 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
             <div className="relative h-64 sm:h-72 bg-[#061224] border-b border-slate-800">
               <FeatureShowcaseStage
                 featureId={activeFeature.id}
+                characterId={yeti?.characterId}
                 colorway={yeti?.colorway}
+                customColors={yeti?.customColors}
                 hatId={yeti?.equipped.hat}
                 scarfId={yeti?.equipped.scarf}
+                outfitId={yeti?.equipped.outfit}
               />
             </div>
 
@@ -1092,9 +1143,12 @@ export const LandingHero3D: React.FC<LandingHero3DProps> = ({
           <div className="lg:col-span-7 relative overflow-hidden rounded-2xl border border-slate-800 bg-[#061224] min-h-[340px] sm:min-h-[410px]">
             <NpcShowcaseStage
               npcId={activeNpc.id}
+              characterId={yeti?.characterId}
               colorway={yeti?.colorway}
+              customColors={yeti?.customColors}
               hatId={yeti?.equipped.hat}
               scarfId={yeti?.equipped.scarf}
+              outfitId={yeti?.equipped.outfit}
             />
             <div className="absolute bottom-4 left-5 right-5 flex items-center justify-between text-xs text-slate-300 pointer-events-none">
               <span className="font-semibold" style={{ color: activeNpc.accent }}>

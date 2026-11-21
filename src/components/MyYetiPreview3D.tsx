@@ -1,22 +1,29 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import type { YetiColorId, YetiEmoteKind } from '../types';
+import type { CharacterId, CustomCharacterColors, YetiColorId, YetiEmoteKind } from '../types';
+import { getCharacterSpec } from '../data/gameCatalog';
 import { animateYetiWalk, buildYetiRig } from '../three/yetiBuilder';
 
 interface MyYetiPreview3DProps {
+  characterId?: CharacterId;
   colorwayId: YetiColorId;
+  customColors?: CustomCharacterColors;
   hatId: string;
   scarfId: string;
+  outfitId?: string;
 }
 
 export const MyYetiPreview3D: React.FC<MyYetiPreview3DProps> = ({
+  characterId = 'lofi_yeti',
   colorwayId,
+  customColors,
   hatId,
   scarfId,
+  outfitId = 'outfit_hoodie',
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const propsRef = useRef({ colorwayId, hatId, scarfId });
+  const propsRef = useRef({ characterId, colorwayId, customColors, hatId, scarfId, outfitId });
   const dirtyRef = useRef(true);
   const [previewEmote, setPreviewEmote] = useState<YetiEmoteKind>('none');
   const emoteRef = useRef<YetiEmoteKind>('none');
@@ -26,9 +33,9 @@ export const MyYetiPreview3D: React.FC<MyYetiPreview3DProps> = ({
   }, [previewEmote]);
 
   useEffect(() => {
-    propsRef.current = { colorwayId, hatId, scarfId };
+    propsRef.current = { characterId, colorwayId, customColors, hatId, scarfId, outfitId };
     dirtyRef.current = true;
-  }, [colorwayId, hatId, scarfId]);
+  }, [characterId, colorwayId, customColors, hatId, scarfId, outfitId]);
 
   useEffect(() => {
     const container = mountRef.current;
@@ -127,9 +134,12 @@ export const MyYetiPreview3D: React.FC<MyYetiPreview3DProps> = ({
     scene.add(actorHolder);
 
     let rig = buildYetiRig({
+      characterId: propsRef.current.characterId,
       colorwayId: propsRef.current.colorwayId,
+      customColors: propsRef.current.customColors,
       hatId: propsRef.current.hatId,
       scarfId: propsRef.current.scarfId,
+      outfitId: propsRef.current.outfitId,
       isPlayer: true,
     });
     actorHolder.add(rig.root);
@@ -194,9 +204,12 @@ export const MyYetiPreview3D: React.FC<MyYetiPreview3DProps> = ({
       if (dirtyRef.current) {
         actorHolder.remove(rig.root);
         rig = buildYetiRig({
+          characterId: propsRef.current.characterId,
           colorwayId: propsRef.current.colorwayId,
+          customColors: propsRef.current.customColors,
           hatId: propsRef.current.hatId,
           scarfId: propsRef.current.scarfId,
+          outfitId: propsRef.current.outfitId,
           isPlayer: true,
         });
         actorHolder.add(rig.root);
@@ -236,9 +249,14 @@ export const MyYetiPreview3D: React.FC<MyYetiPreview3DProps> = ({
     };
   }, []);
 
+  const charSpec = getCharacterSpec(characterId);
+
   return (
     <div className="relative h-64 w-full overflow-hidden rounded-xl border border-slate-800 bg-[#09192e]">
       <div ref={mountRef} className="h-full w-full cursor-grab active:cursor-grabbing" />
+      <div className="pointer-events-none absolute top-2.5 left-2.5 rounded-md border border-slate-700/80 bg-slate-900/90 px-2.5 py-1 text-[11px] font-semibold text-sky-300">
+        {charSpec.name} · {charSpec.species}
+      </div>
       <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1 rounded-lg border border-slate-700/80 bg-slate-900/90 p-1">
         {(
           [
@@ -262,7 +280,7 @@ export const MyYetiPreview3D: React.FC<MyYetiPreview3DProps> = ({
         ))}
       </div>
       <span className="pointer-events-none absolute bottom-2.5 right-3 text-[11px] text-slate-400">
-        Drag to rotate 3D Yeti
+        Drag to rotate 3D Hero
       </span>
     </div>
   );

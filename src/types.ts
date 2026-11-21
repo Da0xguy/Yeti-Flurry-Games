@@ -2,7 +2,27 @@ export type NavTab = 'home' | 'arena' | 'yeti' | 'leaderboard' | 'docs';
 
 export type YetiStage = 'Frost Cub' | 'Glacier Runner' | 'Blizzard Guardian' | 'Apex Lofi';
 
-export type CosmeticSlot = 'hat' | 'scarf' | 'trail';
+export type CosmeticSlot = 'hat' | 'scarf' | 'outfit' | 'trail';
+
+export type CharacterId =
+  | 'lofi_yeti'
+  | 'frost_fox'
+  | 'cryo_penguin'
+  | 'mecha_bot'
+  | 'glacier_ronin';
+
+export interface PlayableCharacterSpec {
+  id: CharacterId;
+  name: string;
+  title: string;
+  species: string;
+  description: string;
+  defaultHat: string;
+  defaultScarf: string;
+  defaultOutfit: string;
+  defaultColorway: YetiColorId;
+  accentHex: string;
+}
 
 export type MapId = 'glacier_well' | 'volcanic_springs' | 'aurora_summit' | 'orbital_rift';
 
@@ -31,7 +51,11 @@ export type YetiColorId =
   | 'aurora_violet'
   | 'sunset_ember'
   | 'midnight_cyan'
-  | 'golden_frost';
+  | 'golden_frost'
+  | 'crimson_blaze'
+  | 'obsidian_stealth'
+  | 'sakura_frost'
+  | 'toxic_neon';
 
 export interface YetiColorway {
   id: YetiColorId;
@@ -40,6 +64,13 @@ export interface YetiColorway {
   skinHex: string;
   chinHex: string;
   accentHex: string;
+}
+
+export interface CustomCharacterColors {
+  furHex?: string;
+  skinHex?: string;
+  accentHex?: string;
+  outfitHex?: string;
 }
 
 export interface ArenaObstacle {
@@ -102,10 +133,39 @@ export interface ArenaTaskProgress {
   completed: boolean;
 }
 
+export interface BlockchainSyncState {
+  network: 'sui:testnet';
+  walrusBlobId?: string;
+  walrusUrl?: string;
+  profileObjectId?: string;
+  packageId?: string;
+  lastTxDigest?: string;
+  walletSignature?: string;
+  stateRootHash?: string;
+  lastSyncedAt?: string;
+  onChainVerified: boolean;
+}
+
+export interface OnChainRunRecord {
+  id: string;
+  gameMode: GameModeId;
+  mapId: MapId;
+  characterId: CharacterId;
+  score: number;
+  xpEarned?: number;
+  survivalSeconds?: number;
+  wellDrops: number;
+  frostGems: number;
+  txDigest: string;
+  walrusBlobId?: string;
+  timestamp: string;
+}
+
 export interface YetiObject {
   objectId: string;
   ownerAddress: string;
   authMethod: 'zkLogin (Google)' | 'Sui Wallet' | 'Sponsored Guest';
+  characterId?: CharacterId;
   name: string;
   stage: YetiStage;
   level: number;
@@ -116,6 +176,7 @@ export interface YetiObject {
   runsCompleted: number;
   version: number;
   colorway: YetiColorId;
+  customColors?: CustomCharacterColors;
   mapsPlayed: MapId[];
   totalHits: number;
   cratesSmashed: number;
@@ -124,10 +185,13 @@ export interface YetiObject {
   equipped: {
     hat: string;
     scarf: string;
+    outfit?: string;
     trail: string;
   };
   unlockedCosmetics: string[];
   recentPtbs: PtbReceipt[];
+  blockchain?: BlockchainSyncState;
+  recentRuns?: OnChainRunRecord[];
 }
 
 export interface LeaderboardEntry {
@@ -192,9 +256,12 @@ export interface TunnelPlayerSnapshot {
   wellDrops: number;
   carriedDrops: number;
   isBot: boolean;
+  characterId?: CharacterId;
   hat: string;
   scarf: string;
+  outfit?: string;
   colorway: YetiColorId;
+  customColors?: CustomCharacterColors;
   shieldUntil: number;
   boostUntil: number;
   magnetUntil?: number;

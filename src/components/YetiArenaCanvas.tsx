@@ -39,6 +39,8 @@ import {
 } from 'lucide-react';
 import type {
   ArenaTaskProgress,
+  CharacterId,
+  CustomCharacterColors,
   GameModeId,
   MapId,
   RunSummary,
@@ -128,6 +130,8 @@ interface YetiArenaCanvasProps {
   onChangeMapId: (mapId: MapId) => void;
   selectedColorway: YetiColorId;
   onChangeColorway: (colorway: YetiColorId) => void;
+  selectedCharacterId?: CharacterId;
+  customColors?: CustomCharacterColors;
   wellImpact: WellImpactState;
   onWellImpactUpdate: (wi: WellImpactState) => void;
   autoLaunchMode?: 'launcher' | 'choose_map' | 'tunnel' | null;
@@ -185,8 +189,10 @@ interface LocalYeti {
   frostGems: number;
   knockouts: number;
   isBot: boolean;
+  characterId?: CharacterId;
   hat: string;
   scarf: string;
+  outfit?: string;
   trail: string;
   colorway: YetiColorId;
   dashCd: number;
@@ -293,8 +299,10 @@ interface KartRacer {
   checkpointsCleared: number;
   totalProgress: number;
   colorway: YetiColorId;
+  characterId?: CharacterId;
   hat: string;
   scarf: string;
+  outfit?: string;
   finished: boolean;
   finishTime: number;
   dropsCollected: number;
@@ -316,6 +324,7 @@ interface ShooterEnemy {
   fireCd: number;
   orbitAngle: number;
   colorway: YetiColorId;
+  characterId?: CharacterId;
 }
 
 interface QuestMonster {
@@ -494,6 +503,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   onChangeMapId,
   selectedColorway,
   onChangeColorway,
+  selectedCharacterId = 'lofi_yeti',
+  customColors,
   wellImpact,
   onWellImpactUpdate,
   autoLaunchMode,
@@ -597,6 +608,8 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
   const mapIdRef = useRef<MapId>(selectedMapId);
   const mapDirtyRef = useRef(true);
   const colorwayRef = useRef<YetiColorId>(selectedColorway);
+  const characterIdRef = useRef<CharacterId>(yeti?.characterId || selectedCharacterId || 'lofi_yeti');
+  const customColorsRef = useRef<CustomCharacterColors | undefined>(yeti?.customColors || customColors);
   const yetiPropRef = useRef<YetiObject | null>(yeti);
   const wellImpactRef = useRef<WellImpactState>(wellImpact);
   const rigVersionDirtyRef = useRef(true);
@@ -713,8 +726,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
 
   useEffect(() => {
     yetiPropRef.current = yeti;
+    characterIdRef.current = yeti?.characterId || selectedCharacterId || 'lofi_yeti';
+    customColorsRef.current = yeti?.customColors || customColors;
     rigVersionDirtyRef.current = true;
-  }, [yeti]);
+  }, [yeti, selectedCharacterId, customColors]);
 
   useEffect(() => {
     wellImpactRef.current = wellImpact;
@@ -847,7 +862,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       });
     });
 
-    // Add 1-3 Rival Yeti Sharpshooters per wave positioned on map-distinct perches
+    const rivalSpecies: CharacterId[] = ['glacier_ronin', 'frost_fox', 'mecha_bot', 'cryo_penguin'];
     const rivalTotal = waveNum >= 2 ? Math.min(3, 1 + Math.floor(waveNum / 2)) : 1;
     for (let r = 0; r < rivalTotal; r++) {
       const perch = gallery.rivalPoints[r % gallery.rivalPoints.length];
@@ -864,6 +879,7 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         fireCd: 1.05 + r * 0.45,
         orbitAngle: Math.atan2(pos.y - ARENA_CENTER_Y, pos.x - ARENA_CENTER_X),
         colorway: rivalColors[(waveNum + r) % rivalColors.length],
+        characterId: rivalSpecies[(waveNum + r) % rivalSpecies.length],
       });
     }
 
@@ -1111,8 +1127,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         frostGems: 0,
         knockouts: 0,
         isBot: false,
+        characterId: characterIdRef.current,
         hat: currentYeti?.equipped.hat || 'hat_goggles',
         scarf: currentYeti?.equipped.scarf || 'scarf_lofi',
+        outfit: currentYeti?.equipped.outfit || 'outfit_hoodie',
         trail: currentYeti?.equipped.trail || 'trail_powder',
         colorway: colorwayRef.current,
         dashCd: 0,
@@ -1150,9 +1168,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           id: string;
           name: string;
           isBot: boolean;
+          characterId: CharacterId;
           colorway: YetiColorId;
           hat: string;
           scarf: string;
+          outfit: string;
           bias: number;
           lane: number;
           rowBack: number;
@@ -1161,42 +1181,50 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             id: 'player',
             name: currentYeti?.name || playerName || 'Lofi Cub',
             isBot: false,
+            characterId: characterIdRef.current,
             colorway: colorwayRef.current,
             hat: currentYeti?.equipped.hat || 'hat_goggles',
             scarf: currentYeti?.equipped.scarf || 'scarf_lofi',
+            outfit: currentYeti?.equipped.outfit || 'outfit_hoodie',
             bias: 1.0,
             lane: -26,
             rowBack: 22,
           },
           {
             id: 'kart_mira',
-            name: 'Mira Kart',
+            name: 'Mira Fox',
             isBot: true,
+            characterId: 'frost_fox',
             colorway: colorwayRef.current === 'glacier_mint' ? 'midnight_cyan' : 'glacier_mint',
             hat: 'hat_beanie',
             scarf: 'scarf_aurora',
+            outfit: 'outfit_jersey',
             bias: 0.99,
             lane: 26,
             rowBack: 22,
           },
           {
             id: 'kart_taro',
-            name: 'Taro Kart',
+            name: 'Taro Mech',
             isBot: true,
+            characterId: 'mecha_bot',
             colorway: colorwayRef.current === 'sunset_ember' ? 'golden_frost' : 'sunset_ember',
-            hat: 'hat_crown',
+            hat: 'hat_visor',
             scarf: 'scarf_crimson',
+            outfit: 'outfit_cyber',
             bias: 0.95,
             lane: -26,
             rowBack: 64,
           },
           {
             id: 'kart_pip',
-            name: 'Pip Kart',
+            name: 'Pip Penguin',
             isBot: true,
+            characterId: 'cryo_penguin',
             colorway: colorwayRef.current === 'aurora_violet' ? 'classic_lofi' : 'aurora_violet',
-            hat: 'hat_goggles',
+            hat: 'hat_crown',
             scarf: 'scarf_lofi',
+            outfit: 'outfit_astronaut',
             bias: 0.91,
             lane: 26,
             rowBack: 64,
@@ -1229,9 +1257,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           nextCheckpoint: 1,
           checkpointsCleared: 0,
           totalProgress: 0,
+          characterId: rs.characterId,
           colorway: rs.colorway,
           hat: rs.hat,
           scarf: rs.scarf,
+          outfit: rs.outfit,
           finished: false,
           finishTime: 0,
           dropsCollected: 0,
@@ -1341,16 +1371,18 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         const allySpecs: {
           id: string;
           name: string;
+          characterId: CharacterId;
           hat: string;
           scarf: string;
+          outfit: string;
           colorway: YetiColorId;
           offX: number;
           offY: number;
         }[] = [
-          { id: 'ally_mira', name: 'Mira', hat: 'hat_beanie', scarf: 'scarf_aurora', colorway: 'glacier_mint', offX: -54, offY: 68 },
-          { id: 'ally_taro', name: 'Taro', hat: 'hat_crown', scarf: 'scarf_crimson', colorway: 'sunset_ember', offX: 54, offY: 68 },
-          { id: 'ally_pip', name: 'Pip', hat: 'hat_goggles', scarf: 'scarf_lofi', colorway: 'aurora_violet', offX: -62, offY: 132 },
-          { id: 'ally_kael', name: 'Kael', hat: 'hat_beanie', scarf: 'scarf_aurora', colorway: 'golden_frost', offX: 62, offY: 132 },
+          { id: 'ally_mira', name: 'Mira Fox', characterId: 'frost_fox', hat: 'hat_beanie', scarf: 'scarf_aurora', outfit: 'outfit_parka', colorway: 'glacier_mint', offX: -54, offY: 68 },
+          { id: 'ally_taro', name: 'Taro Ronin', characterId: 'glacier_ronin', hat: 'hat_visor', scarf: 'scarf_crimson', outfit: 'outfit_cyber', colorway: 'sunset_ember', offX: 54, offY: 68 },
+          { id: 'ally_pip', name: 'Pip Penguin', characterId: 'cryo_penguin', hat: 'hat_crown', scarf: 'scarf_lofi', outfit: 'outfit_jersey', colorway: 'aurora_violet', offX: -62, offY: 132 },
+          { id: 'ally_kael', name: 'Kael Mech', characterId: 'mecha_bot', hat: 'hat_goggles', scarf: 'scarf_obsidian', outfit: 'outfit_astronaut', colorway: 'golden_frost', offX: 62, offY: 132 },
         ];
 
         const allies: LocalYeti[] = allySpecs.map((b) => {
@@ -1375,8 +1407,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
             frostGems: 0,
             knockouts: 0,
             isBot: true,
+            characterId: b.characterId,
             hat: b.hat,
             scarf: b.scarf,
+            outfit: b.outfit,
             trail: 'trail_powder',
             colorway: b.colorway === colorwayRef.current ? 'midnight_cyan' : b.colorway,
             dashCd: 0,
@@ -1477,8 +1511,10 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
       mode,
       playerId: pid,
       name: yeti?.name || playerName || 'Lofi Explorer',
+      characterId: characterIdRef.current,
       hat: yeti?.equipped.hat || 'hat_goggles',
       scarf: yeti?.equipped.scarf || 'scarf_lofi',
+      outfit: yeti?.equipped.outfit || 'outfit_hoodie',
       colorway: colorwayRef.current,
     });
 
@@ -5039,8 +5075,18 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 p.id === tunnelPlayerIdRef.current && yetiPropRef.current
                   ? yetiPropRef.current.equipped.scarf
                   : p.scarf,
+              outfit:
+                p.id === tunnelPlayerIdRef.current && yetiPropRef.current
+                  ? yetiPropRef.current.equipped.outfit || 'outfit_hoodie'
+                  : p.outfit || 'outfit_hoodie',
+              characterId:
+                p.id === tunnelPlayerIdRef.current
+                  ? characterIdRef.current
+                  : p.characterId || 'lofi_yeti',
               colorway:
                 p.id === tunnelPlayerIdRef.current ? colorwayRef.current : p.colorway || 'glacier_mint',
+              customColors:
+                p.id === tunnelPlayerIdRef.current ? customColorsRef.current : p.customColors,
               shieldUntil: p.shieldUntil,
               boostUntil: p.boostUntil,
               dashing: p.dashing,
@@ -5067,7 +5113,14 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
                 e.id === 'player' && yetiPropRef.current
                   ? yetiPropRef.current.equipped.scarf
                   : e.scarf,
+              outfit:
+                e.id === 'player' && yetiPropRef.current
+                  ? yetiPropRef.current.equipped.outfit || 'outfit_hoodie'
+                  : e.outfit || 'outfit_hoodie',
+              characterId:
+                e.id === 'player' ? characterIdRef.current : e.characterId || 'lofi_yeti',
               colorway: e.id === 'player' ? colorwayRef.current : e.colorway,
+              customColors: e.id === 'player' ? customColorsRef.current : undefined,
               shieldUntil: e.shieldUntil,
               boostUntil: e.boostUntil,
               dashing: e.dashTime > 0,
@@ -5082,14 +5135,18 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         const seenActorIds = new Set<string>();
         for (const act of activeActors) {
           seenActorIds.add(act.id);
-          const rigKey = `${act.colorway}|${act.hat}|${act.scarf}|${act.isMe}|${gm}`;
+          const customKey = act.customColors ? JSON.stringify(act.customColors) : '';
+          const rigKey = `${act.characterId}|${act.colorway}|${customKey}|${act.hat}|${act.scarf}|${act.outfit}|${act.isMe}|${gm}`;
           let rig = yetiRigs.get(act.id);
           if (!rig || rig.root.userData.rigKey !== rigKey) {
             if (rig) actorsGroup.remove(rig.root);
             rig = buildYetiRig({
+              characterId: act.characterId,
               colorwayId: act.colorway,
+              customColors: act.customColors,
               hatId: act.hat,
               scarfId: act.scarf,
+              outfitId: act.outfit,
               isPlayer: act.isMe,
               weapon: gm === 'shooting' ? 'blaster' : 'sword',
             });
@@ -5183,14 +5240,22 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
         const seenKartIds = new Set<string>();
         for (const k of s.karts) {
           seenKartIds.add(k.id);
-          const kKey = `${k.colorway}|${k.hat}|${k.scarf}|${!k.isBot}`;
+          const kChar = !k.isBot ? characterIdRef.current : k.characterId || 'lofi_yeti';
+          const kCustom = !k.isBot ? customColorsRef.current : undefined;
+          const kOutfit = !k.isBot
+            ? yetiPropRef.current?.equipped.outfit || 'outfit_hoodie'
+            : k.outfit || 'outfit_jersey';
+          const kKey = `${kChar}|${k.colorway}|${kCustom ? JSON.stringify(kCustom) : ''}|${k.hat}|${k.scarf}|${kOutfit}|${!k.isBot}`;
           let krig = kartRigs.get(k.id);
           if (!krig || krig.root.userData.kKey !== kKey) {
             if (krig) kartsGroup.remove(krig.root);
             krig = buildYetiKartRig({
+              characterId: kChar,
               colorwayId: k.colorway,
+              customColors: kCustom,
               hatId: k.hat,
               scarfId: k.scarf,
+              outfitId: kOutfit,
               isPlayer: !k.isBot,
             });
             krig.root.userData.kKey = kKey;
@@ -5240,9 +5305,11 @@ export const YetiArenaCanvas: React.FC<YetiArenaCanvasProps> = ({
           if (!sm) {
             if (en.kind === 'yeti_rival' || en.kind === 'boss_yeti') {
               sm = buildYetiRig({
+                characterId: en.characterId || (en.kind === 'boss_yeti' ? 'glacier_ronin' : 'frost_fox'),
                 colorwayId: en.colorway,
-                hatId: 'hat_goggles',
+                hatId: en.kind === 'boss_yeti' ? 'hat_crown' : 'hat_visor',
                 scarfId: 'scarf_crimson',
+                outfitId: en.kind === 'boss_yeti' ? 'outfit_cyber' : 'outfit_parka',
                 isPlayer: false,
                 scale: en.kind === 'boss_yeti' ? 1.45 : 1,
                 weapon: en.kind === 'boss_yeti' ? 'sword' : 'blaster',

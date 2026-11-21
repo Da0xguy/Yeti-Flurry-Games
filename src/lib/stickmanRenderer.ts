@@ -1,5 +1,6 @@
-import type { YetiColorId } from '../types';
-import { getYetiColorway } from '../data/gameCatalog';
+import type { CharacterId, CustomCharacterColors, YetiColorId } from '../types';
+import { getYetiColorway, resolveCharacterPalette } from '../data/gameCatalog';
+import { COSMETICS_CATALOG } from '../data/moveContracts';
 
 export type StickmanPose =
   | 'idle'
@@ -28,9 +29,12 @@ export interface StickmanDrawOptions {
   actionProgress?: number;
   scale?: number;
   isLofiYeti?: boolean;
+  characterId?: CharacterId;
   colorwayId?: YetiColorId;
+  customColors?: CustomCharacterColors;
   hatId?: string;
   scarfId?: string;
+  outfitId?: string;
   customStroke?: string;
   customAccent?: string;
   hasBelt?: boolean;
@@ -335,8 +339,12 @@ export function drawStickmanCharacter(
     actionProgress = 0,
     scale = 1,
     isLofiYeti = false,
+    characterId = 'lofi_yeti',
     colorwayId = 'classic_lofi',
+    customColors,
     hatId = 'hat_goggles',
+    scarfId = 'scarf_lofi',
+    outfitId = 'outfit_hoodie',
     customStroke = '#f97316',
     customAccent = '#fbbf24',
     hasBelt = false,
@@ -353,14 +361,21 @@ export function drawStickmanCharacter(
   } = opts;
 
   const colorway = getYetiColorway(colorwayId);
-  // Classic normal stickman body below Lofi's iconic head!
+  const resolvedPalette = resolveCharacterPalette(colorwayId, customColors);
+  const outfitMeta = COSMETICS_CATALOG.find((c) => c.id === outfitId);
+  const outfitColor = customColors?.outfitHex || outfitMeta?.colorHex || resolvedPalette.accentHex;
+  const scarfMeta = COSMETICS_CATALOG.find((c) => c.id === scarfId);
+  const scarfColor = scarfMeta?.colorHex || resolvedPalette.accentHex;
+
   const bodyStroke = flashHit
     ? '#ffffff'
     : isLofiYeti
-    ? '#f8fafc'
+    ? resolvedPalette.furHex
     : customStroke;
-  const accentColor = isLofiYeti ? '#f8fafc' : customAccent;
-  const lofiFace = isLofiYeti ? getLofiFaceSprite() : null;
+  const accentColor = isLofiYeti ? resolvedPalette.accentHex : customAccent;
+  const lofiFace = isLofiYeti && characterId === 'lofi_yeti' && !customColors?.furHex && !customColors?.skinHex
+    ? getLofiFaceSprite()
+    : null;
 
   ctx.save();
   ctx.translate(x, y);
@@ -760,7 +775,42 @@ export function drawStickmanCharacter(
     ctx.restore();
   }
 
-  // Torso Spine / Tapered Tactical Armor Jacket
+  // Playable Character Dorsal Gear (Fox Tail / Astronaut Pack)
+  if (isLofiYeti && characterId === 'frost_fox') {
+    const wag = Math.sin(animTime * 7) * 5;
+    ctx.save();
+    ctx.fillStyle = resolvedPalette.furHex;
+    ctx.strokeStyle = '#071324';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(hipX - 4, hipY - 2);
+    ctx.quadraticCurveTo(hipX - 24, hipY - 12 + wag, hipX - 32, hipY + 4 + wag);
+    ctx.quadraticCurveTo(hipX - 18, hipY + 14, hipX - 3, hipY + 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(hipX - 29, hipY + 4 + wag, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else if (isLofiYeti && outfitId === 'outfit_astronaut') {
+    ctx.save();
+    ctx.translate(shoulderX - 8, shoulderY + 4);
+    ctx.rotate(torsoLean);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.strokeStyle = '#071324';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(-10, -2, 11, 22, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(-7, 4, 4, 9);
+    ctx.restore();
+  }
+
+  // Torso Spine OR Dressed Wearable Outfit
   if (isLofiYeti) {
     ctx.lineCap = 'round';
     ctx.strokeStyle = '#071324';
@@ -776,6 +826,101 @@ export function drawStickmanCharacter(
     ctx.moveTo(hipX, hipY);
     ctx.lineTo(neckX, neckY);
     ctx.stroke();
+
+    // Wearable Clothes Overlay when outfit != outfit_none
+    if (outfitId && outfitId !== 'outfit_none') {
+      ctx.save();
+      ctx.translate(hipX, hipY);
+      ctx.rotate(torsoLean);
+      ctx.fillStyle = flashHit ? '#ffffff' : outfitColor;
+      ctx.strokeStyle = '#071324';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(-8.5, 2);
+      ctx.lineTo(-12.5, -spineLen + 1);
+      ctx.lineTo(0, -spineLen - 3);
+      ctx.lineTo(12.5, -spineLen + 1);
+      ctx.lineTo(8.5, 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      if (outfitId === 'outfit_hoodie') {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+        ctx.beginPath();
+        ctx.roundRect(-6.5, -10, 13, 8, 2);
+        ctx.fill();
+        ctx.strokeStyle = '#f8fafc';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(-3, -spineLen + 3);
+        ctx.lineTo(-3, -spineLen + 13);
+        ctx.moveTo(3, -spineLen + 3);
+        ctx.lineTo(3, -spineLen + 13);
+        ctx.stroke();
+      } else if (outfitId === 'outfit_parka') {
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(-12, -spineLen - 1, 24, 6);
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -spineLen + 4);
+        ctx.lineTo(0, 0);
+        ctx.stroke();
+      } else if (outfitId === 'outfit_jersey') {
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(-10.5, -spineLen * 0.56, 21, 5);
+        ctx.fillStyle = accentColor;
+        ctx.fillRect(-10, -spineLen * 0.42, 20, 3);
+      } else if (outfitId === 'outfit_cyber') {
+        ctx.fillStyle = '#09111f';
+        ctx.fillRect(-8, -spineLen + 5, 16, 18);
+        ctx.fillStyle = accentColor;
+        ctx.beginPath();
+        ctx.arc(0, -spineLen * 0.58, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (outfitId === 'outfit_astronaut') {
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(-6, -spineLen + 7, 12, 11);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(-4, -spineLen + 9, 8, 4);
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(-4, -spineLen + 14.5, 3, 2);
+      }
+      ctx.restore();
+    } else if (characterId === 'cryo_penguin') {
+      // Penguin natural white belly patch
+      ctx.save();
+      ctx.translate(hipX, hipY);
+      ctx.rotate(torsoLean);
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      ctx.ellipse(2, -spineLen * 0.46, 6.5, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Wearable Scarf around neck
+    if (scarfId && scarfId !== 'scarf_none') {
+      const scarfWave = Math.sin(animTime * 8.5) * 4;
+      ctx.save();
+      ctx.fillStyle = scarfColor;
+      ctx.strokeStyle = '#071324';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.roundRect(neckX - 9, neckY - 3, 18, 6.5, 3);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(neckX - 6, neckY + 2);
+      ctx.quadraticCurveTo(neckX - 18, neckY + 6 + scarfWave, neckX - 24, neckY + 14 + scarfWave);
+      ctx.lineTo(neckX - 16, neckY + 17 + scarfWave);
+      ctx.lineTo(neckX - 3, neckY + 3);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
   } else {
     // Sleek Tapered Tactical Operative / Boss Armored Torso
     ctx.save();
@@ -950,7 +1095,129 @@ export function drawStickmanCharacter(
   ctx.rotate(torsoLean * 0.35);
 
   if (isLofiYeti) {
-    if (lofiFace) {
+    if (characterId === 'frost_fox') {
+      // Fox Ears + Fur Head + Pointed Snout
+      ctx.fillStyle = resolvedPalette.furHex;
+      ctx.strokeStyle = '#071324';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(-12, -10);
+      ctx.lineTo(-16, -30);
+      ctx.lineTo(-3, -16);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(3, -16);
+      ctx.lineTo(13, -30);
+      ctx.lineTo(14, -9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(0, -1, 17, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // White Cheek & Snout
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      ctx.ellipse(6, 4, 12, 8.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(16, 2, 2.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = resolvedPalette.accentHex;
+      ctx.fillRect(-3, -6, 4, 3);
+      ctx.fillRect(6, -6, 4, 3);
+    } else if (characterId === 'cryo_penguin') {
+      // Penguin Rounded Head + White Face Mask + Golden Beak
+      ctx.fillStyle = resolvedPalette.furHex;
+      ctx.strokeStyle = '#071324';
+      ctx.lineWidth = 2.8;
+      ctx.beginPath();
+      ctx.arc(0, -1, 17.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      ctx.ellipse(4, 1, 12, 11, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(1, -3, 2.3, 0, Math.PI * 2);
+      ctx.arc(9, -3, 2.3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#f59e0b';
+      ctx.strokeStyle = '#071324';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(9, 0);
+      ctx.lineTo(22, 3.5);
+      ctx.lineTo(9, 7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (characterId === 'mecha_bot') {
+      // Cyber Mech Box Head + Antenna + LED Visor
+      ctx.fillStyle = resolvedPalette.furHex;
+      ctx.strokeStyle = '#071324';
+      ctx.lineWidth = 2.8;
+      ctx.beginPath();
+      ctx.roundRect(-16, -17, 32, 31, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(0, -17);
+      ctx.lineTo(0, -27);
+      ctx.stroke();
+      ctx.fillStyle = resolvedPalette.accentHex;
+      ctx.beginPath();
+      ctx.arc(0, -28, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#09111f';
+      ctx.beginPath();
+      ctx.roundRect(-5, -8, 19, 10, 3);
+      ctx.fill();
+      ctx.fillStyle = resolvedPalette.accentHex;
+      ctx.fillRect(-2, -4.5, 13, 3);
+    } else if (characterId === 'glacier_ronin') {
+      // Shadow Ronin Hood + Glowing Eyes + Headband Ribbons
+      ctx.fillStyle = resolvedPalette.furHex;
+      ctx.strokeStyle = '#071324';
+      ctx.lineWidth = 2.8;
+      ctx.beginPath();
+      ctx.arc(0, -1, 17, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#09111f';
+      ctx.beginPath();
+      ctx.roundRect(-3, -7, 17, 11, 4);
+      ctx.fill();
+
+      ctx.fillStyle = resolvedPalette.accentHex;
+      ctx.fillRect(-15, -10, 30, 4.2);
+      ctx.beginPath();
+      ctx.moveTo(-15, -8);
+      ctx.lineTo(-26 - Math.sin(animTime * 9) * 3, -12);
+      ctx.lineTo(-23 - Math.sin(animTime * 9) * 3, -4);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(2, -3.5, 4.2, 2.2);
+      ctx.fillRect(9.5, -3.5, 4.2, 2.2);
+    } else if (lofiFace) {
       // Composite original Lofi the Yeti X mascot face cleanly onto normal stickman neck
       const headSize = 48;
       if (flashHit) {
@@ -959,8 +1226,8 @@ export function drawStickmanCharacter(
       ctx.drawImage(lofiFace, -headSize / 2, -headSize / 2 - 2, headSize, headSize);
       ctx.filter = 'none';
     } else {
-      // Instant vector fallback matching @lofitheyeti chill face until image finishes decoding
-      ctx.fillStyle = '#f8fafc';
+      // Dynamic Colorway/Custom-Colored Yeti Head matching @lofitheyeti chill face
+      ctx.fillStyle = resolvedPalette.furHex;
       ctx.strokeStyle = '#071324';
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -968,34 +1235,34 @@ export function drawStickmanCharacter(
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = colorway.skinHex;
+      ctx.fillStyle = resolvedPalette.skinHex || colorway.skinHex;
       ctx.beginPath();
-      ctx.ellipse(1.5, 0.5, 13, 11.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(2, 0.5, 13, 11.5, 0, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.fillStyle = '#0f172a';
-      ctx.fillRect(-5, -4, 4, 3);
+      ctx.fillRect(-4, -4, 4, 3);
       ctx.fillRect(5, -4, 4, 3);
       ctx.strokeStyle = '#0f172a';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(2, 3, 4.5, 0.15, Math.PI - 0.15);
+      ctx.arc(2.5, 3, 4.5, 0.15, Math.PI - 0.15);
       ctx.stroke();
     }
 
-    // Subtle Crown / Halo overlay if equipped
+    // Hat Overlays for all Playable Characters
     if (hatId === 'hat_crown') {
       ctx.fillStyle = '#fbbf24';
       ctx.strokeStyle = '#78350f';
       ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.moveTo(-9, -20);
-      ctx.lineTo(-9, -29);
-      ctx.lineTo(-3, -23);
-      ctx.lineTo(1, -31);
-      ctx.lineTo(5, -23);
-      ctx.lineTo(10, -29);
-      ctx.lineTo(10, -20);
+      ctx.moveTo(-9, -18);
+      ctx.lineTo(-9, -28);
+      ctx.lineTo(-3, -22);
+      ctx.lineTo(1, -30);
+      ctx.lineTo(5, -22);
+      ctx.lineTo(10, -28);
+      ctx.lineTo(10, -18);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
@@ -1004,6 +1271,37 @@ export function drawStickmanCharacter(
       ctx.lineWidth = 2.4;
       ctx.beginPath();
       ctx.ellipse(0, -26, 12, 3.2, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (hatId === 'hat_beanie') {
+      ctx.fillStyle = accentColor;
+      ctx.strokeStyle = '#071324';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -11, 16, Math.PI, 0);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      ctx.arc(0, -27, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else if (hatId === 'hat_ushanka') {
+      ctx.fillStyle = '#78350f';
+      ctx.strokeStyle = '#071324';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(-16, -24, 32, 13, 5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#fef3c7';
+      ctx.fillRect(-13, -19, 26, 6);
+    } else if (hatId === 'hat_visor') {
+      ctx.fillStyle = '#22d3ee';
+      ctx.strokeStyle = '#071324';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.roundRect(-2, -9, 19, 7, 3);
+      ctx.fill();
       ctx.stroke();
     }
   } else if (imposterVisor) {

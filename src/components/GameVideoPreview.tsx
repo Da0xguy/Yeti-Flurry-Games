@@ -207,21 +207,27 @@ class Shared3DPreviewManager {
       const curve = new THREE.CatmullRomCurve3(curvePts, true, 'catmullrom', 0.5);
 
       const playerKart: YetiKartRigParts = buildYetiKartRig({
+        characterId: 'lofi_yeti',
         colorwayId: this.colorway,
         hatId: this.hatId,
         scarfId: this.scarfId,
+        outfitId: 'outfit_hoodie',
         isPlayer: true,
       });
       const rivalKartA: YetiKartRigParts = buildYetiKartRig({
+        characterId: 'frost_fox',
         colorwayId: 'sunset_ember',
         hatId: 'hat_crown',
         scarfId: 'scarf_crimson',
+        outfitId: 'outfit_jersey',
         isPlayer: false,
       });
       const rivalKartB: YetiKartRigParts = buildYetiKartRig({
+        characterId: 'mecha_bot',
         colorwayId: 'glacier_mint',
-        hatId: 'hat_beanie',
+        hatId: 'hat_visor',
         scarfId: 'scarf_aurora',
+        outfitId: 'outfit_cyber',
         isPlayer: false,
       });
       scene.add(playerKart.root, rivalKartA.root, rivalKartB.root);
@@ -376,9 +382,11 @@ class Shared3DPreviewManager {
     } else {
       // 'survival' in Volcanic Spring (contrasts nicely with Glacier Well hero!)
       const heroRig: YetiRigParts = buildYetiRig({
+        characterId: 'lofi_yeti',
         colorwayId: this.colorway,
         hatId: this.hatId,
         scarfId: this.scarfId,
+        outfitId: 'outfit_hoodie',
         isPlayer: true,
         scale: 1.16,
       });
@@ -386,8 +394,8 @@ class Shared3DPreviewManager {
       scene.add(heroRig.root);
 
       const rivals = [
-        { rig: buildYetiRig({ colorwayId: 'glacier_mint', hatId: 'hat_goggles', scarfId: 'scarf_aurora', isPlayer: false }), radius: 6.2, speed: 0.72, phase: 0.4 },
-        { rig: buildYetiRig({ colorwayId: 'aurora_violet', hatId: 'hat_crown', scarfId: 'scarf_lofi', isPlayer: false }), radius: 7.4, speed: 0.58, phase: 2.9 },
+        { rig: buildYetiRig({ characterId: 'frost_fox', colorwayId: 'glacier_mint', hatId: 'hat_goggles', scarfId: 'scarf_aurora', outfitId: 'outfit_parka', isPlayer: false }), radius: 6.2, speed: 0.72, phase: 0.4 },
+        { rig: buildYetiRig({ characterId: 'cryo_penguin', colorwayId: 'aurora_violet', hatId: 'hat_crown', scarfId: 'scarf_lofi', outfitId: 'outfit_astronaut', isPlayer: false }), radius: 7.4, speed: 0.58, phase: 2.9 },
       ];
       rivals.forEach((rv) => scene.add(rv.rig.root));
 
